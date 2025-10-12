@@ -5,6 +5,28 @@ All notable changes to Smart Image Matcher will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.4] - 12/10/2025
+
+### Fixed
+- **Improved Special Character Handling**: Enhanced keyword extraction to properly handle separators
+- Slashes, commas, pipes, colons, semicolons, parentheses, and brackets now replaced with spaces
+- Prevents word merging: "Baltimore Oriole (Female/immature)" now correctly extracts as ['baltimore', 'oriole', 'female', 'immature']
+- Previously would merge to "femaleimmature" - now properly separates all words
+
+### Improved
+- Better matching for headings with:
+  - Species variations: "Baltimore Oriole (Female/immature)" or "Robin (Male/Female)"
+  - Ranges: "Morning/Evening Routine" or "Spring/Summer Collection"
+  - Alternatives: "Red/Orange Flowers" or "Large/Small Sizes"
+  - Lists: "Birds: Cardinals, Robins, Blue Jays"
+- More accurate keyword extraction from complex heading text
+- Handles parenthetical information without losing keywords
+
+### Technical
+- Updated `extract_keywords()` method in `class-sim-matcher.php`
+- Separators replaced with spaces before special character removal
+- Handles: `/`, `,`, `|`, `;`, `:`, `(`, `)`, `[`, `]`
+
 ## [1.3.3] - 12/10/2025
 
 ### Added

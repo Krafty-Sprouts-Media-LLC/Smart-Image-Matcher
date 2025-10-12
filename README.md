@@ -2,7 +2,7 @@
 
 **Developer:** Krafty Sprouts Media, LLC  
 **Website:** https://kraftysprouts.com  
-**Version:** 1.3.3  
+**Version:** 1.3.4  
 **Last Updated:** 12/10/2025
 
 ## Overview

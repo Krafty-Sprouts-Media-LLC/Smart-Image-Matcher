@@ -3,7 +3,7 @@
  * Filename: class-sim-matcher.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.0.7
+ * Version: 1.0.8
  * Last Modified: 12/10/2025
  * Description: Matching engine for keyword-based and AI-powered image matching
  * 
@@ -177,8 +177,14 @@ class SIM_Matcher {
     public static function extract_keywords($text) {
         $text = strtolower($text);
         
+        // Replace common separators with spaces BEFORE removing special chars
+        // This prevents words from merging (e.g., "female/immature" -> "female immature" not "femaleimmature")
+        $text = str_replace(array('/', ',', '|', ';', ':', '(', ')', '[', ']'), ' ', $text);
+        
+        // Now remove remaining special characters (keep only letters, numbers, spaces, hyphens)
         $text = preg_replace('/[^a-z0-9\s-]/', '', $text);
         
+        // Split into words
         $words = preg_split('/\s+/', $text);
         
         $stop_words = array(
