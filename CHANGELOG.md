@@ -5,6 +5,19 @@ All notable changes to Smart Image Matcher will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.2] - 12/10/2025
+
+### Changed
+- **Image Display Enhancement**: Modal now shows BOTH image title and filename
+- Title displayed first (if available), filename shown below for reference
+- Provides complete information for users to verify matches
+- Better transparency - users can see both descriptive title and technical filename
+
+### Improved
+- Enhanced UX with complete image metadata visibility
+- Users can now cross-reference both title and filename with their headings
+- More informed decision-making when selecting images to insert
+
 ## [1.3.1] - 12/10/2025
 
 ### Added
