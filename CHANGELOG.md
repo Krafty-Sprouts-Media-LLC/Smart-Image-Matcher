@@ -5,6 +5,28 @@ All notable changes to Smart Image Matcher will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.4] - 12/10/2025
+
+### Fixed
+- **CRITICAL**: Fixed scoring algorithm to properly prioritize exact matches
+- Images with exact keyword matches now score higher than partial matches
+- Added phrase matching bonus for exact heading text in filename/title
+- Added penalty for overly verbose filenames (dilution factor)
+- Fixed issue where "types-of-black-widow-spiders.jpg" scored higher than "western-black-widow.jpg" for heading "Western Black Widow"
+
+### Changed
+- Completely rewrote `calculate_match_score()` algorithm for better accuracy
+- Now uses word-by-word matching with completion percentage
+- Exact phrase matches get 100% score for filename, 98% for title
+- Verbose filenames (3+ extra words) get 15% penalty
+- Weighted scoring system: filename (1.0), title (0.9), alt (0.85), caption (0.3)
+
+### Improved
+- Better handling of multi-word headings
+- More accurate relevance scoring
+- Prioritizes specificity over generality
+- Better differentiation between similar images
+
 ## [1.0.3] - 12/10/2025
 
 ### Fixed

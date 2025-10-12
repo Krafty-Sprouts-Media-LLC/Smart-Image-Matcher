@@ -4,7 +4,7 @@ Tags: images, media, automation, ai, matching
 Requires at least: 6.0
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.0.3
+Stable tag: 1.0.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -47,6 +47,12 @@ No, the keyword matching mode works without any API key. The AI mode requires a 
 Yes, Smart Image Matcher is compatible with all major WordPress caching plugins including WP Rocket, W3 Total Cache, WP Super Cache, and more.
 
 == Changelog ==
+
+= 1.0.4 =
+* Fixed: Critical scoring algorithm bug - exact matches now properly prioritized
+* Fixed: "western-black-widow.jpg" now scores higher than "types-of-black-widow.jpg" for "Western Black Widow" heading
+* Improved: Phrase matching with bonus for exact heading text in filename/title
+* Improved: Penalty for overly verbose/generic filenames
 
 = 1.0.3 =
 * Fixed: Added button to WordPress Admin Bar (top black bar) - now ALWAYS visible

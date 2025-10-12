@@ -3,7 +3,7 @@
  * Filename: class-sim-matcher.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.0.1
+ * Version: 1.0.4
  * Last Modified: 12/10/2025
  * Description: Matching engine for keyword-based and AI-powered image matching
  * 
@@ -195,48 +195,133 @@ class SIM_Matcher {
     }
     
     public static function calculate_match_score($heading_keywords, $image) {
-        $score = 0;
-        
         $filename = strtolower(pathinfo($image['filename'], PATHINFO_FILENAME));
         $filename = str_replace(array('-', '_'), ' ', $filename);
         $filename_words = preg_split('/\s+/', $filename);
         
         $title = strtolower($image['title']);
+        $title_words = preg_split('/\s+/', preg_replace('/[^a-z0-9\s]/', '', $title));
+        
         $alt = strtolower($image['alt']);
+        $alt_words = preg_split('/\s+/', preg_replace('/[^a-z0-9\s]/', '', $alt));
+        
         $caption = strtolower($image['caption']);
         
-        $exact_match = true;
-        foreach ($heading_keywords as $keyword) {
-            if (!in_array($keyword, $filename_words)) {
-                $exact_match = false;
-                break;
-            }
-        }
+        $heading_text = strtolower(implode(' ', $heading_keywords));
         
-        if ($exact_match && !empty($heading_keywords)) {
-            $score += 100;
-            return min($score, 100);
-        }
+        $scores = array();
         
+        // Score 1: Filename exact match check
+        $filename_matches = 0;
         foreach ($heading_keywords as $keyword) {
             if (in_array($keyword, $filename_words)) {
-                $score += 100 / count($heading_keywords);
+                $filename_matches++;
+            }
+        }
+        if ($filename_matches > 0) {
+            $filename_score = ($filename_matches / count($heading_keywords)) * 100;
+            
+            // Bonus for exact phrase match in filename
+            if (strpos($filename, $heading_text) !== false) {
+                $filename_score = 100;
             }
             
-            if (strpos($title, $keyword) !== false) {
-                $score += 90 / count($heading_keywords);
+            // Penalty for extra words (dilution)
+            $extra_words = count($filename_words) - count($heading_keywords);
+            if ($extra_words > 3) {
+                $filename_score *= 0.85; // 15% penalty for verbose filenames
             }
             
-            if (strpos($alt, $keyword) !== false) {
-                $score += 85 / count($heading_keywords);
+            $scores[] = array('field' => 'filename', 'score' => $filename_score, 'weight' => 1.0);
+        }
+        
+        // Score 2: Title exact match check
+        $title_matches = 0;
+        foreach ($heading_keywords as $keyword) {
+            if (in_array($keyword, $title_words)) {
+                $title_matches++;
+            }
+        }
+        if ($title_matches > 0) {
+            $title_score = ($title_matches / count($heading_keywords)) * 90;
+            
+            // Bonus for exact phrase match in title
+            if (strpos($title, $heading_text) !== false) {
+                $title_score = 90;
             }
             
+            // Penalty for extra words
+            $extra_words = count($title_words) - count($heading_keywords);
+            if ($extra_words > 3) {
+                $title_score *= 0.85;
+            }
+            
+            $scores[] = array('field' => 'title', 'score' => $title_score, 'weight' => 0.9);
+        }
+        
+        // Score 3: Alt text exact match check
+        $alt_matches = 0;
+        foreach ($heading_keywords as $keyword) {
+            if (in_array($keyword, $alt_words)) {
+                $alt_matches++;
+            }
+        }
+        if ($alt_matches > 0) {
+            $alt_score = ($alt_matches / count($heading_keywords)) * 85;
+            
+            // Bonus for exact phrase match in alt
+            if (strpos($alt, $heading_text) !== false) {
+                $alt_score = 85;
+            }
+            
+            $scores[] = array('field' => 'alt', 'score' => $alt_score, 'weight' => 0.85);
+        }
+        
+        // Score 4: Caption substring match
+        $caption_matches = 0;
+        foreach ($heading_keywords as $keyword) {
             if (strpos($caption, $keyword) !== false) {
-                $score += 30 / count($heading_keywords);
+                $caption_matches++;
+            }
+        }
+        if ($caption_matches > 0) {
+            $caption_score = ($caption_matches / count($heading_keywords)) * 30;
+            $scores[] = array('field' => 'caption', 'score' => $caption_score, 'weight' => 0.3);
+        }
+        
+        // Calculate final score: Use highest weighted score
+        if (empty($scores)) {
+            return 0;
+        }
+        
+        $final_score = 0;
+        foreach ($scores as $s) {
+            $weighted = $s['score'] * $s['weight'];
+            if ($weighted > $final_score) {
+                $final_score = $weighted;
             }
         }
         
-        return min(round($score), 100);
+        // Bonus: If ALL keywords match in ANY field, boost to near-perfect
+        if ($filename_matches == count($heading_keywords)) {
+            $final_score = max($final_score, 95);
+            
+            // Perfect match: exact phrase in filename
+            if (strpos($filename, $heading_text) !== false) {
+                $final_score = 100;
+            }
+        }
+        
+        if ($title_matches == count($heading_keywords)) {
+            $final_score = max($final_score, 92);
+            
+            // Perfect match: exact phrase in title
+            if (strpos($title, $heading_text) !== false) {
+                $final_score = max($final_score, 98);
+            }
+        }
+        
+        return min(round($final_score), 100);
     }
     
     public static function calculate_keyword_overlap($keywords1, $keywords2) {
