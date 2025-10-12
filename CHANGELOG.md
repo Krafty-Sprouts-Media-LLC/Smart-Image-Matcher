@@ -5,6 +5,26 @@ All notable changes to Smart Image Matcher will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.7] - 12/10/2025
+
+### Fixed
+- **CRITICAL**: Added comprehensive error logging to debug insertion failures
+- Added verification checks for post and image existence before insertion
+- Enhanced error messages to identify specific failure points
+- Logs now track content length before/after insertion
+
+### Added
+- Detailed error_log() calls throughout insertion process
+- Post existence verification
+- Image attachment type verification
+- Content length verification after update
+- Warning if content doesn't increase after insertion
+
+### Debugging
+- Check wp-content/debug.log for detailed insertion logs
+- All operations now logged with "SIM:" prefix
+- Helps identify why images aren't being inserted
+
 ## [1.0.6] - 12/10/2025
 
 ### Changed

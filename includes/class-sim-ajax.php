@@ -3,9 +3,10 @@
  * Filename: class-sim-ajax.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.0.0
+ * Version: 1.0.7
  * Last Modified: 12/10/2025
  * Description: AJAX handlers for editor modal and bulk processing
+ * Includes comprehensive error logging for debugging insertion issues
  */
 
 if (!defined('ABSPATH')) {
@@ -81,15 +82,35 @@ class SIM_AJAX {
         $image_id = isset($_POST['image_id']) ? intval($_POST['image_id']) : 0;
         $heading_position = isset($_POST['heading_position']) ? intval($_POST['heading_position']) : 0;
         
+        error_log('SIM: Insert image request - Post ID: ' . $post_id . ', Image ID: ' . $image_id . ', Position: ' . $heading_position);
+        
         if (!$post_id || !$image_id) {
+            error_log('SIM: Invalid parameters - Post ID or Image ID missing');
             wp_send_json_error(array('message' => __('Invalid parameters', 'smart-image-matcher')));
+        }
+        
+        // Verify post exists
+        $post = get_post($post_id);
+        if (!$post) {
+            error_log('SIM: Post not found - ID: ' . $post_id);
+            wp_send_json_error(array('message' => __('Post not found', 'smart-image-matcher')));
+        }
+        
+        // Verify image exists
+        $image = get_post($image_id);
+        if (!$image || $image->post_type !== 'attachment') {
+            error_log('SIM: Image not found - ID: ' . $image_id);
+            wp_send_json_error(array('message' => __('Image not found', 'smart-image-matcher')));
         }
         
         $result = self::insert_image_after_heading($post_id, $image_id, $heading_position);
         
         if (is_wp_error($result)) {
+            error_log('SIM: Insert failed - ' . $result->get_error_message());
             wp_send_json_error(array('message' => $result->get_error_message()));
         }
+        
+        error_log('SIM: Image inserted successfully');
         
         global $wpdb;
         $matches_table = $wpdb->prefix . 'sim_matches';
@@ -111,6 +132,7 @@ class SIM_AJAX {
         wp_send_json_success(array(
             'message' => __('Image inserted successfully', 'smart-image-matcher'),
             'post_id' => $post_id,
+            'inserted' => true,
         ));
     }
     
@@ -196,33 +218,60 @@ class SIM_AJAX {
         $post = get_post($post_id);
         
         if (!$post) {
+            error_log('SIM: insert_image_after_heading - Post not found: ' . $post_id);
             return new WP_Error('invalid_post', __('Invalid post ID', 'smart-image-matcher'));
         }
         
         $content = $post->post_content;
+        error_log('SIM: Original content length: ' . strlen($content));
         
+        // Match headings in the content
         preg_match_all('/<h[2-6][^>]*>.*?<\/h[2-6]>/is', $content, $matches, PREG_OFFSET_CAPTURE);
+        
+        error_log('SIM: Found ' . count($matches[0]) . ' headings');
+        error_log('SIM: Looking for heading at position: ' . $heading_position);
         
         $heading_end = null;
         foreach ($matches[0] as $match) {
+            error_log('SIM: Checking heading at position: ' . $match[1]);
             if ($match[1] == $heading_position) {
                 $heading_end = $match[1] + strlen($match[0]);
+                error_log('SIM: Found matching heading! End position: ' . $heading_end);
                 break;
             }
         }
         
         if ($heading_end === null) {
-            return new WP_Error('heading_not_found', __('Heading not found', 'smart-image-matcher'));
+            error_log('SIM: Heading not found at position ' . $heading_position);
+            return new WP_Error('heading_not_found', __('Heading not found at specified position. Content may have changed.', 'smart-image-matcher'));
         }
         
         $image_block = self::create_image_block($image_id);
+        error_log('SIM: Image block created, length: ' . strlen($image_block));
         
         $new_content = substr($content, 0, $heading_end) . "\n\n" . $image_block . "\n\n" . substr($content, $heading_end);
+        error_log('SIM: New content length: ' . strlen($new_content));
         
-        wp_update_post(array(
+        $update_result = wp_update_post(array(
             'ID' => $post_id,
             'post_content' => $new_content,
-        ));
+        ), true);
+        
+        if (is_wp_error($update_result)) {
+            error_log('SIM: wp_update_post failed: ' . $update_result->get_error_message());
+            return $update_result;
+        }
+        
+        error_log('SIM: wp_update_post succeeded, post ID: ' . $update_result);
+        
+        // Verify the update
+        $updated_post = get_post($post_id);
+        $updated_length = strlen($updated_post->post_content);
+        error_log('SIM: Verified updated content length: ' . $updated_length);
+        
+        if ($updated_length <= strlen($content)) {
+            error_log('SIM: WARNING - Content length did not increase!');
+        }
         
         return true;
     }
