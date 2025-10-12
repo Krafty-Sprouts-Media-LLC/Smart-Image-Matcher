@@ -5,6 +5,28 @@ All notable changes to Smart Image Matcher will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 12/10/2025
+
+### Added
+- **Image Title Display**: Modal now shows image title instead of filename for better comparison with heading text
+- **Duplicate Detection**: Prevents re-insertion of images that already exist near the same heading
+- Checks for existing images within 1000 characters (500 before, 1500 after heading position)
+- Clear error logging when duplicate images are detected
+- Falls back to showing filename if image title is empty
+
+### Improved
+- Better UX: Users can now easily compare image titles with their heading text
+- Prevents accidental duplicate insertions when running the process multiple times
+- More accurate image identification in modal (title is more descriptive than filename)
+- Enhanced duplicate checking algorithm that considers position proximity
+
+### Technical
+- Added `title` field to match results in `SIM_Matcher::find_keyword_matches()`
+- Updated JavaScript to display title with fallback to filename
+- Implemented `image_exists_in_content()` helper method for duplicate detection
+- Returns WP_Error with 'duplicate_image' code when duplicate detected
+- Position-aware duplicate checking (not just global image presence)
+
 ## [1.3.0] - 12/10/2025
 
 ### Removed

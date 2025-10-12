@@ -3,7 +3,7 @@
  * Filename: class-sim-ajax.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.3.0
+ * Version: 1.3.1
  * Last Modified: 12/10/2025
  * Description: AJAX handlers for editor modal and bulk processing
  * Includes comprehensive error logging for debugging insertion issues
@@ -208,6 +208,12 @@ class SIM_AJAX {
         $content = $post->post_content;
         error_log('SIM: Original content length: ' . strlen($content));
         
+        // Check for duplicate - if image already exists in content, skip insertion
+        if (self::image_exists_in_content($content, $image_id, $heading_position)) {
+            error_log('SIM: Image ID ' . $image_id . ' already exists in content near position ' . $heading_position . ' - skipping duplicate');
+            return new WP_Error('duplicate_image', __('Image already exists in this location', 'smart-image-matcher'));
+        }
+        
         // Parse blocks if this is Gutenberg content
         $has_blocks = has_blocks($content);
         error_log('SIM: Content has Gutenberg blocks: ' . ($has_blocks ? 'YES' : 'NO'));
@@ -385,6 +391,32 @@ class SIM_AJAX {
         error_log('SIM: Created Gutenberg block without width/height');
         
         return $block;
+    }
+    
+    private static function image_exists_in_content($content, $image_id, $heading_position) {
+        // Check if image ID already exists in content
+        $image_class = 'wp-image-' . $image_id;
+        
+        // Quick check: if image class doesn't exist anywhere, it's not a duplicate
+        if (strpos($content, $image_class) === false) {
+            return false;
+        }
+        
+        // Image exists somewhere - now check if it's near this heading position
+        // Define "near" as within 1000 characters (before or after the heading)
+        $search_start = max(0, $heading_position - 500);
+        $search_end = min(strlen($content), $heading_position + 1500);
+        $search_length = $search_end - $search_start;
+        
+        $content_section = substr($content, $search_start, $search_length);
+        
+        // Check if image exists in this section
+        if (strpos($content_section, $image_class) !== false) {
+            error_log('SIM: Found image ' . $image_id . ' near heading at position ' . $heading_position);
+            return true;
+        }
+        
+        return false;
     }
 }
 

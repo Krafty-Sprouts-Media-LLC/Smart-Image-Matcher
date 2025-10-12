@@ -2,7 +2,7 @@
  * Filename: sim-editor.js
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.3.0
+ * Version: 1.3.1
  * Last Modified: 12/10/2025
  * 
  * Simplified UX: No undo, just insert and reload with clear notices
@@ -137,7 +137,12 @@
         html += '<div class="sim-confidence-score ' + confidenceClass + '">';
         html += simEditor.strings.confidence + ': ' + match.confidence_score + '%';
         html += '</div>';
-        html += '<div class="sim-filename">Filename: ' + escapeHtml(match.filename) + '</div>';
+        
+        if (match.title) {
+            html += '<div class="sim-filename"><strong>Image Title:</strong> ' + escapeHtml(match.title) + '</div>';
+        } else {
+            html += '<div class="sim-filename"><strong>Filename:</strong> ' + escapeHtml(match.filename) + '</div>';
+        }
         
         if (match.ai_reasoning) {
             html += '<div class="sim-ai-reasoning">' + escapeHtml(match.ai_reasoning) + '</div>';
