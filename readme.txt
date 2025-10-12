@@ -4,7 +4,7 @@ Tags: images, media, automation, ai, matching
 Requires at least: 6.0
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.0.4
+Stable tag: 1.0.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -47,6 +47,12 @@ No, the keyword matching mode works without any API key. The AI mode requires a 
 Yes, Smart Image Matcher is compatible with all major WordPress caching plugins including WP Rocket, W3 Total Cache, WP Super Cache, and more.
 
 == Changelog ==
+
+= 1.0.5 =
+* Fixed: Page now auto-reloads after image insertions to show changes immediately
+* Fixed: Modal no longer stays open indefinitely - auto-closes or reloads
+* Added: 10-second countdown with auto-reload after bulk insertion
+* Added: "Reload Now" and "Cancel Auto-Reload" buttons for user control
 
 = 1.0.4 =
 * Fixed: Critical scoring algorithm bug - exact matches now properly prioritized

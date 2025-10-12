@@ -5,6 +5,27 @@ All notable changes to Smart Image Matcher will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.5] - 12/10/2025
+
+### Fixed
+- **CRITICAL**: Added auto-reload after image insertions - page now refreshes to show inserted images
+- Fixed modal staying open indefinitely after timer expires
+- Single image insertion now reloads page after 2 seconds
+- Bulk insertion shows 10-second countdown with auto-reload
+
+### Added
+- "Reload Now" button for immediate page refresh
+- "Cancel Auto-Reload" button for users who want to stay
+- Undo still available during countdown period
+- Console logging for debugging insertion issues
+- Clear user feedback about reload behavior
+
+### Improved
+- Better UX - user doesn't have to manually reload
+- Dual timer display (undo + reload countdown)
+- Option to close without reloading if needed
+- Undo also reloads page after 2 seconds
+
 ## [1.0.4] - 12/10/2025
 
 ### Fixed
