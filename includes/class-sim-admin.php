@@ -3,7 +3,7 @@
  * Filename: class-sim-admin.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.0.2
+ * Version: 1.0.3
  * Last Modified: 12/10/2025
  * Description: Admin interface for post editor button and bulk processing page
  * Supports both Classic Editor and Gutenberg Block Editor
@@ -185,12 +185,15 @@ class SIM_Admin {
                             <div style="margin-top: 10px; font-size: 13px; line-height: 1.6;">
                                 <p style="margin: 8px 0 8px 0;"><strong><?php esc_html_e('How to improve your matches:', 'smart-image-matcher'); ?></strong></p>
                                 <ul style="margin: 8px 0 8px 20px; list-style: disc;">
-                                    <li><?php esc_html_e('Use descriptive filenames with hyphens (e.g., "western-black-widow.jpg")', 'smart-image-matcher'); ?></li>
+                                    <li><?php esc_html_e('Use descriptive filenames with word separators (dashes, underscores, or spaces)', 'smart-image-matcher'); ?></li>
                                     <li><?php esc_html_e('Set meaningful image titles in Media Library', 'smart-image-matcher'); ?></li>
                                     <li><?php esc_html_e('Add relevant alt text for SEO and accessibility', 'smart-image-matcher'); ?></li>
                                     <li><?php esc_html_e('Match keywords from your headings in image metadata', 'smart-image-matcher'); ?></li>
                                     <li><?php esc_html_e('Avoid generic names like "IMG_001.jpg" or "screenshot.png"', 'smart-image-matcher'); ?></li>
                                 </ul>
+                                <p style="margin: 8px 0 0 20px; font-size: 11px; color: #666; font-style: italic;">
+                                    <?php esc_html_e('Tip: Dashes are SEO-recommended but any separator works!', 'smart-image-matcher'); ?>
+                                </p>
                                 <p style="margin: 8px 0 0 0; font-size: 12px; color: #666;">
                                     <strong><?php esc_html_e('Priority:', 'smart-image-matcher'); ?></strong> 
                                     <?php esc_html_e('Filename (100 pts) → Title (90 pts) → Alt Text (85 pts)', 'smart-image-matcher'); ?>

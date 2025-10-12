@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tips explain how to name images for better matching results
 - Shows scoring priority: Filename (100) → Title (90) → Alt Text (85)
 - Guidelines include:
-  - Use descriptive filenames with hyphens
+  - Use descriptive filenames with word separators (dashes, underscores, or spaces)
   - Set meaningful image titles in Media Library
   - Add relevant alt text for SEO and accessibility
   - Match keywords from headings in image metadata
@@ -25,6 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Contextual help available right in the workflow
 - Persistent reference guide on settings page
 - Encourages SEO-friendly image practices
+
+### Clarified
+- **Flexible Naming Support**: Clarified that dashes, underscores, and spaces all work
+- Dashes are SEO-recommended but NOT required
+- Plugin handles all naming conventions equally
+- Added note: "Dashes are SEO-recommended but any separator works!"
 
 ## [1.3.2] - 12/10/2025
 
