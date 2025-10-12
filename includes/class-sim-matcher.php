@@ -3,15 +3,15 @@
  * Filename: class-sim-matcher.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.0.4
+ * Version: 1.0.6
  * Last Modified: 12/10/2025
  * Description: Matching engine for keyword-based and AI-powered image matching
  * 
  * Scoring Priority:
- * 1. Filename - 100 points (e.g., "black-swallowtail-caterpillar.jpg")
- * 2. Title - 90 points (WordPress image title field)
- * 3. Alt Text - 85 points (SEO critical, almost always filled)
- * 4. Caption - 30 points (often empty)
+ * 1. Filename - 100 points (PRIMARY - always exists)
+ * 2. Title - 90 points (+10 bonus if intentionally set/different from filename)
+ * 3. Alt Text - 85 points (SEO critical)
+ * Note: Caption removed (rarely used, inconsistent)
  */
 
 if (!defined('ABSPATH')) {
@@ -205,13 +205,16 @@ class SIM_Matcher {
         $alt = strtolower($image['alt']);
         $alt_words = preg_split('/\s+/', preg_replace('/[^a-z0-9\s]/', '', $alt));
         
-        $caption = strtolower($image['caption']);
-        
         $heading_text = strtolower(implode(' ', $heading_keywords));
+        
+        // Check if title is intentionally set (different from filename)
+        $filename_normalized = strtolower(preg_replace('/[^a-z0-9\s]/', '', $filename));
+        $title_normalized = strtolower(preg_replace('/[^a-z0-9\s]/', '', $title));
+        $title_is_intentional = !empty($title) && ($title_normalized !== $filename_normalized);
         
         $scores = array();
         
-        // Score 1: Filename exact match check
+        // Score 1: Filename matching (PRIMARY - 100 points)
         $filename_matches = 0;
         foreach ($heading_keywords as $keyword) {
             if (in_array($keyword, $filename_words)) {
@@ -235,19 +238,24 @@ class SIM_Matcher {
             $scores[] = array('field' => 'filename', 'score' => $filename_score, 'weight' => 1.0);
         }
         
-        // Score 2: Title exact match check
+        // Score 2: Title matching (90 points + intentional bonus)
         $title_matches = 0;
         foreach ($heading_keywords as $keyword) {
             if (in_array($keyword, $title_words)) {
                 $title_matches++;
             }
         }
-        if ($title_matches > 0) {
+        if ($title_matches > 0 && !empty($title)) {
             $title_score = ($title_matches / count($heading_keywords)) * 90;
             
             // Bonus for exact phrase match in title
             if (strpos($title, $heading_text) !== false) {
                 $title_score = 90;
+            }
+            
+            // BONUS: If title is intentionally set (different from filename), add +10 points
+            if ($title_is_intentional) {
+                $title_score = min($title_score + 10, 100);
             }
             
             // Penalty for extra words
@@ -259,14 +267,14 @@ class SIM_Matcher {
             $scores[] = array('field' => 'title', 'score' => $title_score, 'weight' => 0.9);
         }
         
-        // Score 3: Alt text exact match check
+        // Score 3: Alt text matching (85 points)
         $alt_matches = 0;
         foreach ($heading_keywords as $keyword) {
             if (in_array($keyword, $alt_words)) {
                 $alt_matches++;
             }
         }
-        if ($alt_matches > 0) {
+        if ($alt_matches > 0 && !empty($alt)) {
             $alt_score = ($alt_matches / count($heading_keywords)) * 85;
             
             // Bonus for exact phrase match in alt
@@ -275,18 +283,6 @@ class SIM_Matcher {
             }
             
             $scores[] = array('field' => 'alt', 'score' => $alt_score, 'weight' => 0.85);
-        }
-        
-        // Score 4: Caption substring match
-        $caption_matches = 0;
-        foreach ($heading_keywords as $keyword) {
-            if (strpos($caption, $keyword) !== false) {
-                $caption_matches++;
-            }
-        }
-        if ($caption_matches > 0) {
-            $caption_score = ($caption_matches / count($heading_keywords)) * 30;
-            $scores[] = array('field' => 'caption', 'score' => $caption_score, 'weight' => 0.3);
         }
         
         // Calculate final score: Use highest weighted score
@@ -318,6 +314,11 @@ class SIM_Matcher {
             // Perfect match: exact phrase in title
             if (strpos($title, $heading_text) !== false) {
                 $final_score = max($final_score, 98);
+            }
+            
+            // Additional boost if title is intentionally set
+            if ($title_is_intentional && $title_matches == count($heading_keywords)) {
+                $final_score = min($final_score + 5, 100);
             }
         }
         

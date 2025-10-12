@@ -5,6 +5,26 @@ All notable changes to Smart Image Matcher will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.6] - 12/10/2025
+
+### Changed
+- **Enhanced scoring algorithm** with intentional title bonus (+10 points)
+- Titles that are manually set (different from filename) now get priority boost
+- Removed caption scoring (rarely used, inconsistent data)
+- Simplified to 3-field scoring: Filename (100), Title (90+10), Alt (85)
+
+### Improved
+- Better detection of intentionally-set titles vs auto-generated
+- Rewards users who take time to properly title their images
+- More accurate scoring for well-maintained media libraries
+- Cleaner algorithm without unused caption field
+
+### Technical
+- Added `$title_is_intentional` detection
+- Compares normalized title vs normalized filename
+- +10 bonus when title is manually set AND matches
+- +5 additional bonus for perfect title matches with all keywords
+
 ## [1.0.5] - 12/10/2025
 
 ### Fixed
