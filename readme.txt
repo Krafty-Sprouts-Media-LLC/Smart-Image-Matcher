@@ -4,7 +4,7 @@ Tags: images, media, automation, ai, matching
 Requires at least: 6.0
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.0.2
+Stable tag: 1.0.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -47,6 +47,11 @@ No, the keyword matching mode works without any API key. The AI mode requires a 
 Yes, Smart Image Matcher is compatible with all major WordPress caching plugins including WP Rocket, W3 Total Cache, WP Super Cache, and more.
 
 == Changelog ==
+
+= 1.0.3 =
+* Fixed: Added button to WordPress Admin Bar (top black bar) - now ALWAYS visible
+* Fixed: Enhanced Gutenberg detection with retry logic and multiple selectors
+* Added: Admin Bar integration for 100% reliability across all editors
 
 = 1.0.2 =
 * Fixed: Critical fix for Gutenberg Block Editor support - button now appears in toolbar

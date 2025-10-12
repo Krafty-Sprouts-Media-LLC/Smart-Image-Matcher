@@ -5,6 +5,20 @@ All notable changes to Smart Image Matcher will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.3] - 12/10/2025
+
+### Fixed
+- **CRITICAL**: Added button to WordPress Admin Bar (top black bar) for 100% reliability
+- Enhanced Gutenberg toolbar detection with multiple selectors and retry logic
+- Added console logging for debugging Gutenberg integration
+- Improved button positioning and styling
+
+### Added
+- Admin Bar button integration (always visible, works in all editors)
+- Retry mechanism for Gutenberg toolbar detection (10 attempts)
+- Multiple Gutenberg selector support for different WordPress versions
+- CSS styling for Admin Bar button
+
 ## [1.0.2] - 12/10/2025
 
 ### Fixed
