@@ -3,10 +3,11 @@
  * Filename: class-sim-admin.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.0.1
+ * Version: 1.0.2
  * Last Modified: 12/10/2025
  * Description: Admin interface for post editor button and bulk processing page
  * Supports both Classic Editor and Gutenberg Block Editor
+ * Includes image naming tips in modal and settings page
  */
 
 if (!defined('ABSPATH')) {
@@ -174,6 +175,29 @@ class SIM_Admin {
                     </div>
                     <div class="sim-results-state" style="display: none;">
                         <div class="sim-results-summary"></div>
+                        
+                        <!-- Image Naming Tips (Collapsible) -->
+                        <details class="sim-tips-section" style="margin: 15px 0; padding: 12px; background: #f0f6fc; border: 1px solid #c3dafe; border-radius: 4px;">
+                            <summary style="cursor: pointer; font-weight: 600; color: #0366d6; user-select: none;">
+                                <span class="dashicons dashicons-lightbulb" style="vertical-align: middle;"></span>
+                                <?php esc_html_e('💡 Tips for Better Matching', 'smart-image-matcher'); ?>
+                            </summary>
+                            <div style="margin-top: 10px; font-size: 13px; line-height: 1.6;">
+                                <p style="margin: 8px 0 8px 0;"><strong><?php esc_html_e('How to improve your matches:', 'smart-image-matcher'); ?></strong></p>
+                                <ul style="margin: 8px 0 8px 20px; list-style: disc;">
+                                    <li><?php esc_html_e('Use descriptive filenames with hyphens (e.g., "western-black-widow.jpg")', 'smart-image-matcher'); ?></li>
+                                    <li><?php esc_html_e('Set meaningful image titles in Media Library', 'smart-image-matcher'); ?></li>
+                                    <li><?php esc_html_e('Add relevant alt text for SEO and accessibility', 'smart-image-matcher'); ?></li>
+                                    <li><?php esc_html_e('Match keywords from your headings in image metadata', 'smart-image-matcher'); ?></li>
+                                    <li><?php esc_html_e('Avoid generic names like "IMG_001.jpg" or "screenshot.png"', 'smart-image-matcher'); ?></li>
+                                </ul>
+                                <p style="margin: 8px 0 0 0; font-size: 12px; color: #666;">
+                                    <strong><?php esc_html_e('Priority:', 'smart-image-matcher'); ?></strong> 
+                                    <?php esc_html_e('Filename (100 pts) → Title (90 pts) → Alt Text (85 pts)', 'smart-image-matcher'); ?>
+                                </p>
+                            </div>
+                        </details>
+                        
                         <div class="sim-matches-container"></div>
                     </div>
                     <div class="sim-error-state" style="display: none;">

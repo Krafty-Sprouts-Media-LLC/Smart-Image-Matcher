@@ -3,9 +3,9 @@
  * Filename: settings-page.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.0.0
+ * Version: 1.0.1
  * Last Modified: 12/10/2025
- * Description: Settings page view
+ * Description: Settings page view with image naming best practices
  */
 
 if (!defined('ABSPATH')) {
@@ -30,6 +30,26 @@ $delete_on_uninstall = get_option('sim_delete_on_uninstall', true);
     <h1><?php esc_html_e('Smart Image Matcher Settings', 'smart-image-matcher'); ?></h1>
     
     <?php settings_errors('sim_settings'); ?>
+    
+    <!-- Image Naming Best Practices -->
+    <div class="notice notice-info" style="margin: 20px 0; padding: 15px;">
+        <h3 style="margin-top: 0;">
+            <span class="dashicons dashicons-lightbulb" style="color: #2271b1;"></span>
+            <?php esc_html_e('Image Naming Best Practices', 'smart-image-matcher'); ?>
+        </h3>
+        <p><?php esc_html_e('For best matching results, follow these guidelines when naming and organizing your images:', 'smart-image-matcher'); ?></p>
+        <ul style="margin-left: 20px;">
+            <li><strong><?php esc_html_e('Descriptive Filenames:', 'smart-image-matcher'); ?></strong> <?php esc_html_e('Use hyphens to separate words (e.g., "western-black-widow-spider.jpg" not "IMG_1234.jpg")', 'smart-image-matcher'); ?></li>
+            <li><strong><?php esc_html_e('Meaningful Titles:', 'smart-image-matcher'); ?></strong> <?php esc_html_e('Set custom image titles in Media Library that match your content headings', 'smart-image-matcher'); ?></li>
+            <li><strong><?php esc_html_e('SEO-Friendly Alt Text:', 'smart-image-matcher'); ?></strong> <?php esc_html_e('Add descriptive alt text that describes the image content', 'smart-image-matcher'); ?></li>
+            <li><strong><?php esc_html_e('Match Your Headings:', 'smart-image-matcher'); ?></strong> <?php esc_html_e('Use keywords from your post headings in image metadata', 'smart-image-matcher'); ?></li>
+            <li><strong><?php esc_html_e('Avoid Generic Names:', 'smart-image-matcher'); ?></strong> <?php esc_html_e('Replace auto-generated names like "IMG_001.jpg" or "screenshot.png" with specific descriptions', 'smart-image-matcher'); ?></li>
+        </ul>
+        <p style="margin-bottom: 0;">
+            <strong><?php esc_html_e('Scoring Priority:', 'smart-image-matcher'); ?></strong> 
+            <?php esc_html_e('Filename (100 points) → Title (90 points + bonus) → Alt Text (85 points)', 'smart-image-matcher'); ?>
+        </p>
+    </div>
     
     <form method="post" action="">
         <?php wp_nonce_field('sim_settings_nonce'); ?>

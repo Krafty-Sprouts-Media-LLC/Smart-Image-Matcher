@@ -5,6 +5,27 @@ All notable changes to Smart Image Matcher will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.3] - 12/10/2025
+
+### Added
+- **Image Naming Best Practices Guide**: Added helpful tips section on settings page
+- **Collapsible Tips in Modal**: Added expandable tips section in the matching modal
+- Tips explain how to name images for better matching results
+- Shows scoring priority: Filename (100) → Title (90) → Alt Text (85)
+- Guidelines include:
+  - Use descriptive filenames with hyphens
+  - Set meaningful image titles in Media Library
+  - Add relevant alt text for SEO and accessibility
+  - Match keywords from headings in image metadata
+  - Avoid generic names like "IMG_001.jpg"
+
+### Improved
+- Better user education on image organization
+- Helps users understand the matching algorithm
+- Contextual help available right in the workflow
+- Persistent reference guide on settings page
+- Encourages SEO-friendly image practices
+
 ## [1.3.2] - 12/10/2025
 
 ### Changed
