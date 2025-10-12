@@ -4,7 +4,7 @@ Tags: images, media, automation, ai, matching
 Requires at least: 6.0
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.0.7
+Stable tag: 1.3.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -47,6 +47,36 @@ No, the keyword matching mode works without any API key. The AI mode requires a 
 Yes, Smart Image Matcher is compatible with all major WordPress caching plugins including WP Rocket, W3 Total Cache, WP Super Cache, and more.
 
 == Changelog ==
+
+= 1.3.0 =
+* Major simplification: Removed undo functionality and countdown timers
+* Added: Warning notice reminding users to review matches before inserting
+* Added: Clear in-modal notices - "Page will reload to show changes"
+* Changed: Both insert buttons show progress then reload automatically
+* Improved: No browser prompts, all messages shown in modal
+* Removed: 100+ lines of timer/undo code
+
+= 1.1.1 =
+* Fixed: CRITICAL - Gutenberg validation by removing width/height from img tag
+* Fixed: Gutenberg expects exactly 3 img attributes (src, alt, class) - not 5
+* Fixed: Let Gutenberg's sizeSlug handle dimensions automatically
+* Changed: Clean block format matching Gutenberg schema exactly
+
+= 1.1.0 =
+* Fixed: CRITICAL - Proper Gutenberg support using WordPress Block Editor API
+* Fixed: Uses parse_blocks() and serialize_blocks() for Gutenberg content
+* Fixed: Separate code paths for Gutenberg vs Classic Editor  
+* Changed: 100% WordPress native functions - no manual HTML/block building
+
+= 1.0.9 =
+* Added: Enhanced diagnostics showing if image exists in DB after save
+* Improved: Browser console shows content length changes and verification results
+* Added: Warning alert if image not found in database after insertion
+
+= 1.0.8 =
+* Fixed: CRITICAL - Gutenberg auto-save conflict preventing insertions
+* Fixed: Images now properly save and appear after page reload
+* Improved: Force cache flush and auto-save deletion for Gutenberg compatibility
 
 = 1.0.7 =
 * Fixed: Added comprehensive error logging to debug insertion issues

@@ -5,6 +5,112 @@ All notable changes to Smart Image Matcher will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 12/10/2025
+
+### Removed
+- **MAJOR SIMPLIFICATION**: Removed undo functionality (unnecessary complexity)
+- Removed 10-second countdown timers
+- Removed "Reload Now" and "Cancel Auto-Reload" buttons
+- Removed backup/restore transient storage
+- Removed undo AJAX handler and action hook
+
+### Changed
+- Individual insert: Shows "Inserting..." notice → Success → Reload (0.8s)
+- Bulk insert: Shows "Inserting X images..." notice → Success → Reload (1s)
+- Clear modal notices (not browser prompts) - "Page will reload to show changes"
+- Simplified UX - just insert and reload, no waiting or decisions
+
+### Added
+- **Warning notice**: "⚠️ Please Review" reminder to check matches before inserting
+- Prompts users to verify images are relevant and uncheck incorrect matches
+- In-modal notices showing insertion progress
+- "Page will reload to show changes" message for both insert types
+- Success confirmation before reload
+- Progress indicators during insertion
+
+### Improved
+- Removed 100+ lines of unnecessary timer/undo code
+- Faster workflow - clear visual feedback at each step
+- Users can use WordPress revisions if they need to undo
+- Simpler codebase, easier to maintain
+- No browser alert() prompts - all messages in modal
+
+## [1.1.1] - 12/10/2025
+
+### Fixed
+- **CRITICAL**: Fixed Gutenberg validation by REMOVING width/height from img tag
+- Gutenberg expects exactly 3 attributes: src, alt, class (NOT width/height)
+- Block comment attributes: ONLY id, sizeSlug, linkDestination
+- Gutenberg automatically handles dimensions via "sizeSlug":"large"
+
+### Changed
+- Removed width/height from img tag (Gutenberg adds them automatically)
+- Removed width/height from block attrs
+- Clean img tag: `<img src="..." alt="..." class="wp-image-X"/>`
+- Let Gutenberg's sizeSlug handle all responsive sizing
+
+### Technical
+- Gutenberg validation expects exact attribute match
+- sizeSlug="large" tells Gutenberg to handle dimensions
+- WordPress adds width/height when rendering on frontend
+- Block comment must NOT include dimensions for validation to pass
+
+## [1.1.0] - 12/10/2025
+
+### Fixed
+- **CRITICAL**: Proper Gutenberg support using WordPress block parser functions
+- Detects Gutenberg vs Classic Editor using `has_blocks()`
+- Uses `parse_blocks()` and `serialize_blocks()` for Gutenberg content
+- Uses HTML insertion for Classic Editor
+- Block validation errors eliminated by using WordPress block API
+
+### Changed
+- Complete rewrite to use WordPress native functions exclusively
+- Gutenberg: `parse_blocks()`, `serialize_blocks()`, `render_block()`
+- Classic Editor: HTML insertion with `wp_get_attachment_image()`
+- Removed all manual block/HTML building
+- Separate code paths for Gutenberg vs Classic Editor
+
+### Technical
+- Uses WordPress Block Editor API (parse_blocks, serialize_blocks)
+- Creates proper Gutenberg block arrays with blockName, attrs, innerHTML
+- WordPress handles all HTML generation via `wp_get_attachment_image()`
+- Automatic responsive images, srcset, and all required attributes
+- Falls back to HTML insertion if Gutenberg heading not found
+
+## [1.0.9] - 12/10/2025
+
+### Added
+- **Enhanced diagnostics** - AJAX response now includes verification data
+- Returns debug info showing if image actually exists in database after save
+- Console logs show content length before/after
+- Browser alert if image not found in DB after insertion
+- Helps identify if Gutenberg or another system is interfering
+
+### Improved
+- Better debugging output in browser console
+- Real-time verification that insertion succeeded
+- Clear warning if database verification fails
+
+## [1.0.8] - 12/10/2025
+
+### Fixed
+- **CRITICAL**: Fixed Gutenberg auto-save conflict preventing image insertions
+- Temporarily disable revision hook during insertion to prevent conflicts
+- Delete Gutenberg auto-save drafts after insertion
+- Force cache flush to ensure Gutenberg loads updated content
+- Added cache clearing for post_meta to prevent stale data
+
+### Changed
+- Enhanced cache clearing to include wp_cache_delete for posts and post_meta
+- Force wp_cache_flush() after insertions
+- Remove and re-add wp_save_post_revision hook during update
+
+### Technical
+- Gutenberg auto-save was overwriting manual insertions
+- Now deletes auto-save revisions after successful insertion
+- Forces complete cache clear to ensure reload shows new content
+
 ## [1.0.7] - 12/10/2025
 
 ### Fixed

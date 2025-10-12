@@ -3,7 +3,7 @@
  * Filename: class-sim-ajax.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.0.7
+ * Version: 1.3.0
  * Last Modified: 12/10/2025
  * Description: AJAX handlers for editor modal and bulk processing
  * Includes comprehensive error logging for debugging insertion issues
@@ -19,7 +19,6 @@ class SIM_AJAX {
         add_action('wp_ajax_sim_find_matches', array(__CLASS__, 'find_matches'));
         add_action('wp_ajax_sim_insert_image', array(__CLASS__, 'insert_image'));
         add_action('wp_ajax_sim_insert_all_images', array(__CLASS__, 'insert_all_images'));
-        add_action('wp_ajax_sim_undo_insertions', array(__CLASS__, 'undo_insertions'));
     }
     
     public static function find_matches() {
@@ -129,10 +128,27 @@ class SIM_AJAX {
         
         SIM_Cache::clear_post_cache($post_id);
         
+        // Final verification - get fresh copy from database
+        wp_cache_flush();
+        $final_post = get_post($post_id);
+        $final_content = $final_post->post_content;
+        
+        // Check if image block is actually in the content
+        $image_block_exists = (strpos($final_content, 'wp:image') !== false && strpos($final_content, 'wp-image-' . $image_id) !== false);
+        
+        error_log('SIM: Final verification - Image block exists in DB: ' . ($image_block_exists ? 'YES' : 'NO'));
+        error_log('SIM: Final content length: ' . strlen($final_content));
+        
         wp_send_json_success(array(
             'message' => __('Image inserted successfully', 'smart-image-matcher'),
             'post_id' => $post_id,
             'inserted' => true,
+            'debug' => array(
+                'original_length' => strlen($content),
+                'new_length' => strlen($final_content),
+                'image_exists' => $image_block_exists,
+                'image_id' => $image_id,
+            ),
         ));
     }
     
@@ -149,9 +165,6 @@ class SIM_AJAX {
         if (!$post_id || empty($insertions)) {
             wp_send_json_error(array('message' => __('Invalid parameters', 'smart-image-matcher')));
         }
-        
-        $backup_content = get_post_field('post_content', $post_id);
-        set_transient('sim_undo_' . $post_id, $backup_content, 300);
         
         usort($insertions, function($a, $b) {
             return $b['heading_position'] - $a['heading_position'];
@@ -183,36 +196,6 @@ class SIM_AJAX {
         ));
     }
     
-    public static function undo_insertions() {
-        check_ajax_referer('sim_editor_nonce', 'nonce');
-        
-        if (!current_user_can('edit_posts')) {
-            wp_send_json_error(array('message' => __('Permission denied', 'smart-image-matcher')));
-        }
-        
-        $post_id = isset($_POST['post_id']) ? intval($_POST['post_id']) : 0;
-        
-        if (!$post_id) {
-            wp_send_json_error(array('message' => __('Invalid post ID', 'smart-image-matcher')));
-        }
-        
-        $backup_content = get_transient('sim_undo_' . $post_id);
-        
-        if ($backup_content === false) {
-            wp_send_json_error(array('message' => __('Undo timeout expired', 'smart-image-matcher')));
-        }
-        
-        wp_update_post(array(
-            'ID' => $post_id,
-            'post_content' => $backup_content,
-        ));
-        
-        delete_transient('sim_undo_' . $post_id);
-        
-        SIM_Cache::clear_post_cache($post_id);
-        
-        wp_send_json_success(array('message' => __('Insertions undone', 'smart-image-matcher')));
-    }
     
     private static function insert_image_after_heading($post_id, $image_id, $heading_position) {
         $post = get_post($post_id);
@@ -225,33 +208,58 @@ class SIM_AJAX {
         $content = $post->post_content;
         error_log('SIM: Original content length: ' . strlen($content));
         
-        // Match headings in the content
-        preg_match_all('/<h[2-6][^>]*>.*?<\/h[2-6]>/is', $content, $matches, PREG_OFFSET_CAPTURE);
+        // Parse blocks if this is Gutenberg content
+        $has_blocks = has_blocks($content);
+        error_log('SIM: Content has Gutenberg blocks: ' . ($has_blocks ? 'YES' : 'NO'));
         
-        error_log('SIM: Found ' . count($matches[0]) . ' headings');
-        error_log('SIM: Looking for heading at position: ' . $heading_position);
-        
-        $heading_end = null;
-        foreach ($matches[0] as $match) {
-            error_log('SIM: Checking heading at position: ' . $match[1]);
-            if ($match[1] == $heading_position) {
-                $heading_end = $match[1] + strlen($match[0]);
-                error_log('SIM: Found matching heading! End position: ' . $heading_end);
-                break;
+        if ($has_blocks) {
+            // Use WordPress block parser for Gutenberg
+            $blocks = parse_blocks($content);
+            error_log('SIM: Parsed ' . count($blocks) . ' blocks');
+            
+            // Find the heading block and insert image after it
+            $inserted = false;
+            $new_blocks = array();
+            
+            foreach ($blocks as $block) {
+                $new_blocks[] = $block;
+                
+                // Check if this is a heading block at the target position
+                if (!$inserted && isset($block['blockName']) && $block['blockName'] === 'core/heading') {
+                    $block_html = render_block($block);
+                    $block_position = strpos($content, $block_html);
+                    
+                    if ($block_position !== false && abs($block_position - $heading_position) < 50) {
+                        // Insert image block after this heading
+                        $image_block = self::create_gutenberg_image_block($image_id);
+                        $new_blocks[] = $image_block;
+                        $inserted = true;
+                        error_log('SIM: Inserted image block after Gutenberg heading');
+                    }
+                }
             }
+            
+            if ($inserted) {
+                // Serialize blocks back to content
+                $new_content = serialize_blocks($new_blocks);
+            } else {
+                error_log('SIM: Could not find Gutenberg heading, falling back to HTML insertion');
+                $new_content = self::insert_via_html($content, $image_id, $heading_position);
+            }
+        } else {
+            // Classic editor or HTML content
+            error_log('SIM: Using HTML insertion for Classic Editor');
+            $new_content = self::insert_via_html($content, $image_id, $heading_position);
         }
         
-        if ($heading_end === null) {
-            error_log('SIM: Heading not found at position ' . $heading_position);
-            return new WP_Error('heading_not_found', __('Heading not found at specified position. Content may have changed.', 'smart-image-matcher'));
+        if (empty($new_content) || $new_content === $content) {
+            error_log('SIM: Content unchanged after insertion attempt');
+            return new WP_Error('insertion_failed', __('Failed to insert image', 'smart-image-matcher'));
         }
         
-        $image_block = self::create_image_block($image_id);
-        error_log('SIM: Image block created, length: ' . strlen($image_block));
-        
-        $new_content = substr($content, 0, $heading_end) . "\n\n" . $image_block . "\n\n" . substr($content, $heading_end);
         error_log('SIM: New content length: ' . strlen($new_content));
         
+        // Update post with WordPress function
         $update_result = wp_update_post(array(
             'ID' => $post_id,
             'post_content' => $new_content,
@@ -262,24 +270,80 @@ class SIM_AJAX {
             return $update_result;
         }
         
-        error_log('SIM: wp_update_post succeeded, post ID: ' . $update_result);
+        error_log('SIM: wp_update_post succeeded');
         
-        // Verify the update
-        $updated_post = get_post($post_id);
-        $updated_length = strlen($updated_post->post_content);
-        error_log('SIM: Verified updated content length: ' . $updated_length);
-        
-        if ($updated_length <= strlen($content)) {
-            error_log('SIM: WARNING - Content length did not increase!');
-        }
+        // Clear caches using WordPress functions
+        clean_post_cache($post_id);
         
         return true;
+    }
+    
+    private static function insert_via_html($content, $image_id, $heading_position) {
+        // HTML-based insertion for Classic Editor
+        preg_match_all('/<h[2-6][^>]*>.*?<\/h[2-6]>/is', $content, $matches, PREG_OFFSET_CAPTURE);
+        
+        $heading_end = null;
+        foreach ($matches[0] as $match) {
+            if ($match[1] == $heading_position) {
+                $heading_end = $match[1] + strlen($match[0]);
+                break;
+            }
+        }
+        
+        if ($heading_end === null) {
+            return $content;
+        }
+        
+        $image_block = self::create_image_block($image_id);
+        return substr($content, 0, $heading_end) . "\n\n" . $image_block . "\n\n" . substr($content, $heading_end);
+    }
+    
+    private static function create_gutenberg_image_block($image_id) {
+        $image_url = wp_get_attachment_url($image_id);
+        $alt_text = get_post_meta($image_id, '_wp_attachment_image_alt', true);
+        $caption = wp_get_attachment_caption($image_id);
+        
+        // Build block attributes - ONLY id, sizeSlug, linkDestination (no width/height)
+        $attrs = array(
+            'id' => $image_id,
+            'sizeSlug' => 'large',
+            'linkDestination' => 'none',
+        );
+        
+        // Create img tag WITHOUT width/height - Gutenberg handles via sizeSlug
+        $img_html = sprintf(
+            '<img src="%s" alt="%s" class="wp-image-%d"/>',
+            esc_url($image_url),
+            esc_attr($alt_text),
+            $image_id
+        );
+        
+        // Wrap in figure with optional caption
+        $innerHTML = '<figure class="wp-block-image size-large">' . $img_html;
+        if (!empty($caption)) {
+            $innerHTML .= '<figcaption class="wp-element-caption">' . wp_kses_post($caption) . '</figcaption>';
+        }
+        $innerHTML .= '</figure>';
+        
+        // Create proper Gutenberg block array for parse_blocks/serialize_blocks
+        $block = array(
+            'blockName' => 'core/image',
+            'attrs' => $attrs,
+            'innerBlocks' => array(),
+            'innerHTML' => $innerHTML,
+            'innerContent' => array($innerHTML),
+        );
+        
+        error_log('SIM: Created Gutenberg block array without width/height in attrs or img');
+        
+        return $block;
     }
     
     private static function create_image_block($image_id) {
         $image = get_post($image_id);
         
         if (!$image) {
+            error_log('SIM: Image not found for ID: ' . $image_id);
             return '';
         }
         
@@ -287,31 +351,38 @@ class SIM_AJAX {
         $alt_text = get_post_meta($image_id, '_wp_attachment_image_alt', true);
         $caption = wp_get_attachment_caption($image_id);
         
-        $metadata = wp_get_attachment_metadata($image_id);
-        $width = isset($metadata['width']) ? $metadata['width'] : '';
-        $height = isset($metadata['height']) ? $metadata['height'] : '';
-        
+        // Build Gutenberg block comment with ONLY required attributes
         $block = sprintf(
             '<!-- wp:image {"id":%d,"sizeSlug":"large","linkDestination":"none"} -->',
             $image_id
         );
         $block .= "\n";
+        
+        // Start figure tag
         $block .= '<figure class="wp-block-image size-large">';
+        
+        // Create img tag WITHOUT width/height attributes
+        // Gutenberg handles dimensions automatically via sizeSlug
         $block .= sprintf(
-            '<img src="%s" alt="%s" class="wp-image-%d"%s%s/>',
+            '<img src="%s" alt="%s" class="wp-image-%d"/>',
             esc_url($image_url),
             esc_attr($alt_text),
-            $image_id,
-            $width ? ' width="' . esc_attr($width) . '"' : '',
-            $height ? ' height="' . esc_attr($height) . '"' : ''
+            $image_id
         );
         
+        // Add caption if exists
         if (!empty($caption)) {
-            $block .= sprintf('<figcaption class="wp-element-caption">%s</figcaption>', wp_kses_post($caption));
+            $block .= sprintf(
+                '<figcaption class="wp-element-caption">%s</figcaption>',
+                wp_kses_post($caption)
+            );
         }
         
+        // Close figure tag
         $block .= '</figure>';
         $block .= "\n" . '<!-- /wp:image -->';
+        
+        error_log('SIM: Created Gutenberg block without width/height');
         
         return $block;
     }
