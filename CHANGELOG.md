@@ -21,11 +21,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Lists: "Birds: Cardinals, Robins, Blue Jays"
 - More accurate keyword extraction from complex heading text
 - Handles parenthetical information without losing keywords
+- **Clarified Image Title Guidelines**: Added example showing titles should use natural language
+  - Updated tips: "Kentucky Warbler" (natural) not "kentucky-warbler" (with dashes)
+  - Image titles should be human-readable, not filename-style
 
 ### Technical
 - Updated `extract_keywords()` method in `class-sim-matcher.php`
 - Separators replaced with spaces before special character removal
 - Handles: `/`, `,`, `|`, `;`, `:`, `(`, `)`, `[`, `]`
+- Updated tips in both settings page and modal with clear title example
 
 ## [1.3.3] - 12/10/2025
 

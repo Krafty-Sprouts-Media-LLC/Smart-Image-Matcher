@@ -3,7 +3,7 @@
  * Filename: settings-page.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.0.2
+ * Version: 1.0.3
  * Last Modified: 12/10/2025
  * Description: Settings page view with image naming best practices
  */
@@ -40,7 +40,7 @@ $delete_on_uninstall = get_option('sim_delete_on_uninstall', true);
         <p><?php esc_html_e('For best matching results, follow these guidelines when naming and organizing your images:', 'smart-image-matcher'); ?></p>
         <ul style="margin-left: 20px;">
             <li><strong><?php esc_html_e('Descriptive Filenames:', 'smart-image-matcher'); ?></strong> <?php esc_html_e('Use descriptive names with clear word separators (e.g., "western-black-widow.jpg" or "western_black_widow.jpg" instead of "IMG_1234.jpg")', 'smart-image-matcher'); ?></li>
-            <li><strong><?php esc_html_e('Meaningful Titles:', 'smart-image-matcher'); ?></strong> <?php esc_html_e('Set custom image titles in Media Library that match your content headings', 'smart-image-matcher'); ?></li>
+            <li><strong><?php esc_html_e('Meaningful Titles:', 'smart-image-matcher'); ?></strong> <?php esc_html_e('Set custom image titles in Media Library using natural language (e.g., "Kentucky Warbler" not "kentucky-warbler")', 'smart-image-matcher'); ?></li>
             <li><strong><?php esc_html_e('SEO-Friendly Alt Text:', 'smart-image-matcher'); ?></strong> <?php esc_html_e('Add descriptive alt text that describes the image content', 'smart-image-matcher'); ?></li>
             <li><strong><?php esc_html_e('Match Your Headings:', 'smart-image-matcher'); ?></strong> <?php esc_html_e('Use keywords from your post headings in image metadata', 'smart-image-matcher'); ?></li>
             <li><strong><?php esc_html_e('Avoid Generic Names:', 'smart-image-matcher'); ?></strong> <?php esc_html_e('Replace auto-generated names like "IMG_001.jpg" or "screenshot.png" with specific descriptions', 'smart-image-matcher'); ?></li>

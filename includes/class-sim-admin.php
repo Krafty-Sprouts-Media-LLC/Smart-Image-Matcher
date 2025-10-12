@@ -3,7 +3,7 @@
  * Filename: class-sim-admin.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.0.3
+ * Version: 1.0.4
  * Last Modified: 12/10/2025
  * Description: Admin interface for post editor button and bulk processing page
  * Supports both Classic Editor and Gutenberg Block Editor
@@ -186,7 +186,7 @@ class SIM_Admin {
                                 <p style="margin: 8px 0 8px 0;"><strong><?php esc_html_e('How to improve your matches:', 'smart-image-matcher'); ?></strong></p>
                                 <ul style="margin: 8px 0 8px 20px; list-style: disc;">
                                     <li><?php esc_html_e('Use descriptive filenames with word separators (dashes, underscores, or spaces)', 'smart-image-matcher'); ?></li>
-                                    <li><?php esc_html_e('Set meaningful image titles in Media Library', 'smart-image-matcher'); ?></li>
+                                    <li><?php esc_html_e('Set image titles using natural language (e.g., "Kentucky Warbler" not dashes)', 'smart-image-matcher'); ?></li>
                                     <li><?php esc_html_e('Add relevant alt text for SEO and accessibility', 'smart-image-matcher'); ?></li>
                                     <li><?php esc_html_e('Match keywords from your headings in image metadata', 'smart-image-matcher'); ?></li>
                                     <li><?php esc_html_e('Avoid generic names like "IMG_001.jpg" or "screenshot.png"', 'smart-image-matcher'); ?></li>
