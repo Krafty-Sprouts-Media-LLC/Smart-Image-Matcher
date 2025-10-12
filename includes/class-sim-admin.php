@@ -3,9 +3,10 @@
  * Filename: class-sim-admin.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.0.0
+ * Version: 1.0.1
  * Last Modified: 12/10/2025
  * Description: Admin interface for post editor button and bulk processing page
+ * Supports both Classic Editor and Gutenberg Block Editor
  */
 
 if (!defined('ABSPATH')) {
@@ -16,6 +17,8 @@ class SIM_Admin {
     
     public static function init() {
         add_action('edit_form_after_title', array(__CLASS__, 'add_editor_button'));
+        add_action('enqueue_block_editor_assets', array(__CLASS__, 'enqueue_gutenberg_button'));
+        add_action('admin_footer', array(__CLASS__, 'add_modal_to_footer'));
     }
     
     public static function add_editor_button($post) {
@@ -35,6 +38,61 @@ class SIM_Admin {
             </button>
         </div>
         <?php
+    }
+    
+    public static function enqueue_gutenberg_button() {
+        global $post;
+        
+        if (!$post || !in_array($post->post_type, array('post', 'page'))) {
+            return;
+        }
+        
+        $inline_script = "
+        (function() {
+            if (typeof wp === 'undefined' || !wp.data || !wp.element) {
+                return;
+            }
+            
+            setTimeout(function() {
+                var toolbar = document.querySelector('.edit-post-header__toolbar');
+                if (!toolbar || document.getElementById('sim-gutenberg-button')) {
+                    return;
+                }
+                
+                var buttonContainer = document.createElement('div');
+                buttonContainer.style.marginLeft = '12px';
+                buttonContainer.style.display = 'inline-flex';
+                buttonContainer.style.alignItems = 'center';
+                
+                var button = document.createElement('button');
+                button.id = 'sim-gutenberg-button';
+                button.className = 'components-button is-secondary';
+                button.type = 'button';
+                button.innerHTML = '<span class=\"dashicons dashicons-format-image\" style=\"margin-right: 5px;\"></span>Smart Image Matcher';
+                button.onclick = function() {
+                    if (typeof jQuery !== 'undefined') {
+                        jQuery('#sim-modal').show();
+                        if (typeof window.simFindMatches === 'function') {
+                            window.simFindMatches();
+                        }
+                    }
+                };
+                
+                buttonContainer.appendChild(button);
+                toolbar.appendChild(buttonContainer);
+            }, 1000);
+        })();
+        ";
+        
+        wp_add_inline_script('wp-blocks', $inline_script);
+    }
+    
+    public static function add_modal_to_footer() {
+        $screen = get_current_screen();
+        
+        if (!$screen || !in_array($screen->id, array('post', 'page'))) {
+            return;
+        }
         
         self::render_modal();
     }

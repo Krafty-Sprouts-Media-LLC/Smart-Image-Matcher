@@ -14,13 +14,16 @@
     let undoTimerId = null;
 
     $(document).ready(function() {
-        $('#sim-open-modal').on('click', openModal);
+        $('#sim-open-modal, #sim-gutenberg-button').on('click', openModal);
         $('.sim-modal-close, .sim-cancel-button').on('click', closeModal);
         $('.sim-modal-overlay').on('click', closeModal);
         $('.sim-insert-all-button').on('click', insertAllSelected);
         
         $(document).on('click', '.sim-insert-single-button', insertSingleImage);
         $(document).on('click', '.sim-undo-button', undoInsertions);
+        $(document).on('click', '#sim-gutenberg-button', openModal);
+        
+        window.simFindMatches = findMatches;
     });
 
     function openModal() {

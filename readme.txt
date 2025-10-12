@@ -4,7 +4,7 @@ Tags: images, media, automation, ai, matching
 Requires at least: 6.0
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.0.1
+Stable tag: 1.0.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -48,6 +48,11 @@ Yes, Smart Image Matcher is compatible with all major WordPress caching plugins 
 
 == Changelog ==
 
+= 1.0.2 =
+* Fixed: Critical fix for Gutenberg Block Editor support - button now appears in toolbar
+* Fixed: Button not visible on post edit screen for Gutenberg users
+* Changed: Added proper Gutenberg integration hooks
+
 = 1.0.1 =
 * Fixed: Corrected image matching priority to properly prioritize Title (90 points) and Alt Text (85 points)
 * Fixed: Increased Filename score to 100 points for better accuracy
@@ -63,6 +68,9 @@ Yes, Smart Image Matcher is compatible with all major WordPress caching plugins 
 * Cache compatibility
 
 == Upgrade Notice ==
+
+= 1.0.2 =
+Critical fix: Adds Gutenberg Block Editor support. Button now appears for all users.
 
 = 1.0.1 =
 Critical update: Fixes image matching priority to better match real-world metadata usage.

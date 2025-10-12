@@ -5,6 +5,19 @@ All notable changes to Smart Image Matcher will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] - 12/10/2025
+
+### Fixed
+- **CRITICAL**: Added Gutenberg (Block Editor) support - button now appears in toolbar
+- Fixed button not appearing on post edit screen for Gutenberg users
+- Added `enqueue_block_editor_assets` hook for proper Gutenberg integration
+- Modal now properly renders in admin footer for both editors
+
+### Changed
+- Updated `class-sim-admin.php` to support both Classic Editor and Gutenberg
+- Enhanced JavaScript to handle Gutenberg button clicks
+- Improved button positioning and visibility in both editors
+
 ## [1.0.1] - 12/10/2025
 
 ### Fixed
