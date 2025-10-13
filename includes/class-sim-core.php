@@ -3,7 +3,7 @@
  * Filename: class-sim-core.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.2.0
+ * Version: 1.2.1
  * Last Modified: 12/10/2025
  * Description: Core functionality and initialization for Smart Image Matcher with organized menu structure
  */
@@ -99,10 +99,10 @@ class SIM_Core {
     }
     
     public function register_admin_menu() {
-        // Parent menu item with "SIM" abbreviation
+        // Parent menu item with "SIM" abbreviation (no tooltip)
         add_menu_page(
             __('Smart Image Matcher', 'smart-image-matcher'),
-            '<span class="sim-menu-title" title="Smart Image Matcher">SIM</span>',
+            __('SIM', 'smart-image-matcher'),
             'edit_posts',
             'smart-image-matcher',
             array('SIM_Settings', 'render_settings_page'),

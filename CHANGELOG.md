@@ -5,30 +5,34 @@ All notable changes to Smart Image Matcher will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.1] - 12/10/2025
+
+### Fixed
+- **Removed Tooltip**: Removed hover tooltip from sidebar menu
+- Menu now simply shows "SIM" with no hover popup
+- Cleaner, non-intrusive design
+- Full name "Smart Image Matcher" still shown in post editor button
+
+### Changed
+- Simplified menu styling - removed all CSS tooltip code
+- Menu title is just plain text "SIM" with icon
+- No hover effects or popups in admin sidebar
+
 ## [1.5.0] - 12/10/2025
 
 ### Changed
 - **Compact Menu Design**: Changed menu title from "Smart Image Matcher" to "SIM"
 - Space-efficient abbreviation saves horizontal space in admin sidebar
-- Hover tooltip shows full name "Smart Image Matcher" with CSS animation
-- Clean tooltip with arrow pointer on hover
-- Professional dark theme tooltip styling
 
 ### Added
-- CSS tooltip system with hover effects for menu item
-- Custom styling for .sim-menu-title with letter-spacing
-- Tooltip appears on right side of menu when hovering
+- Reorganized menu structure with parent and submenus
+- Main menu: "SIM" with dashicons-format-image icon
+- Admin CSS now enqueued globally for menu styling
 
 ### Improved
 - Saved horizontal space in WordPress admin sidebar
-- Professional tooltip UX on hover
 - Clear branding with SIM abbreviation
 - Better visual design
-
-### Technical
-- Admin CSS now enqueued globally for menu styling (not just on specific pages)
-- Added CSS pseudo-elements for tooltip (::after) and arrow (::before)
-- Z-index management for proper tooltip layering
 
 ## [1.4.2] - 12/10/2025
 
