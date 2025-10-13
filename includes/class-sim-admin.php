@@ -3,7 +3,7 @@
  * Filename: class-sim-admin.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.0.5
+ * Version: 1.0.6
  * Last Modified: 12/10/2025
  * Description: Admin interface for post editor button and bulk processing page
  * Supports both Classic Editor and Gutenberg Block Editor
