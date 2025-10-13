@@ -3,10 +3,11 @@
  * Filename: class-sim-ajax.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.3.1
+ * Version: 1.4.0
  * Last Modified: 12/10/2025
  * Description: AJAX handlers for editor modal and bulk processing
  * Includes comprehensive error logging for debugging insertion issues
+ * Optimized bulk insert to create ONE revision instead of multiple
  */
 
 if (!defined('ABSPATH')) {
@@ -166,33 +167,86 @@ class SIM_AJAX {
             wp_send_json_error(array('message' => __('Invalid parameters', 'smart-image-matcher')));
         }
         
+        $post = get_post($post_id);
+        if (!$post) {
+            wp_send_json_error(array('message' => __('Post not found', 'smart-image-matcher')));
+        }
+        
+        // Sort bottom to top to preserve positions
         usort($insertions, function($a, $b) {
             return $b['heading_position'] - $a['heading_position'];
         });
         
-        $success_count = 0;
-        $errors = array();
+        $content = $post->post_content;
+        $original_content = $content;
+        $has_blocks = has_blocks($content);
         
+        error_log('SIM: Bulk insert - Processing ' . count($insertions) . ' images in ONE update');
+        
+        // Filter out duplicates before processing
+        $valid_insertions = array();
         foreach ($insertions as $insertion) {
-            $result = self::insert_image_after_heading(
-                $post_id,
-                $insertion['image_id'],
-                $insertion['heading_position']
-            );
-            
-            if (is_wp_error($result)) {
-                $errors[] = $result->get_error_message();
+            if (!self::image_exists_in_content($content, $insertion['image_id'], $insertion['heading_position'])) {
+                $valid_insertions[] = $insertion;
             } else {
-                $success_count++;
+                error_log('SIM: Skipping duplicate image ID ' . $insertion['image_id'] . ' at position ' . $insertion['heading_position']);
             }
+        }
+        
+        if (empty($valid_insertions)) {
+            wp_send_json_error(array('message' => __('All images already exist in content', 'smart-image-matcher')));
+        }
+        
+        // Process all insertions into content (Gutenberg or Classic)
+        if ($has_blocks) {
+            $content = self::bulk_insert_gutenberg($content, $valid_insertions);
+        } else {
+            $content = self::bulk_insert_html($content, $valid_insertions);
+        }
+        
+        if (empty($content) || $content === $original_content) {
+            error_log('SIM: Bulk insert failed - content unchanged');
+            wp_send_json_error(array('message' => __('Failed to insert images', 'smart-image-matcher')));
+        }
+        
+        error_log('SIM: Content updated, calling wp_update_post ONCE for ' . count($valid_insertions) . ' images');
+        
+        // ONE update for all images - creates ONE revision
+        $update_result = wp_update_post(array(
+            'ID' => $post_id,
+            'post_content' => $content,
+        ), true);
+        
+        if (is_wp_error($update_result)) {
+            error_log('SIM: wp_update_post failed: ' . $update_result->get_error_message());
+            wp_send_json_error(array('message' => $update_result->get_error_message()));
+        }
+        
+        // Update match statuses
+        global $wpdb;
+        $matches_table = $wpdb->prefix . 'sim_matches';
+        foreach ($valid_insertions as $insertion) {
+            $wpdb->update(
+                $matches_table,
+                array('status' => 'approved'),
+                array(
+                    'post_id' => $post_id,
+                    'image_id' => $insertion['image_id'],
+                    'heading_position' => $insertion['heading_position'],
+                ),
+                array('%s'),
+                array('%d', '%d', '%d')
+            );
         }
         
         SIM_Cache::clear_post_cache($post_id);
         
+        error_log('SIM: Bulk insert succeeded - ONE revision created for ' . count($valid_insertions) . ' images');
+        
         wp_send_json_success(array(
-            'message' => sprintf(__('Inserted %d images', 'smart-image-matcher'), $success_count),
-            'success_count' => $success_count,
-            'errors' => $errors,
+            'message' => sprintf(__('Inserted %d images', 'smart-image-matcher'), count($valid_insertions)),
+            'success_count' => count($valid_insertions),
+            'errors' => array(),
         ));
     }
     
@@ -417,6 +471,72 @@ class SIM_AJAX {
         }
         
         return false;
+    }
+    
+    private static function bulk_insert_gutenberg($content, $insertions) {
+        $blocks = parse_blocks($content);
+        error_log('SIM: Bulk Gutenberg - Parsed ' . count($blocks) . ' blocks');
+        
+        // Create a map of positions to images for quick lookup
+        $insertion_map = array();
+        foreach ($insertions as $insertion) {
+            $insertion_map[$insertion['heading_position']] = $insertion['image_id'];
+        }
+        
+        $new_blocks = array();
+        
+        foreach ($blocks as $block) {
+            $new_blocks[] = $block;
+            
+            // Check if this is a heading block
+            if (isset($block['blockName']) && $block['blockName'] === 'core/heading') {
+                $block_html = render_block($block);
+                $block_position = strpos($content, $block_html);
+                
+                // Check if we have an image to insert after this heading
+                foreach ($insertion_map as $heading_pos => $image_id) {
+                    if ($block_position !== false && abs($block_position - $heading_pos) < 50) {
+                        $image_block = self::create_gutenberg_image_block($image_id);
+                        $new_blocks[] = $image_block;
+                        error_log('SIM: Bulk Gutenberg - Inserted image ' . $image_id . ' after heading at position ' . $block_position);
+                        unset($insertion_map[$heading_pos]); // Remove so we don't insert twice
+                        break;
+                    }
+                }
+            }
+        }
+        
+        return serialize_blocks($new_blocks);
+    }
+    
+    private static function bulk_insert_html($content, $insertions) {
+        // Find all headings
+        preg_match_all('/<h[2-6][^>]*>.*?<\/h[2-6]>/is', $content, $matches, PREG_OFFSET_CAPTURE);
+        
+        // Build array of insertion points (position => image_id)
+        $insertion_points = array();
+        
+        foreach ($insertions as $insertion) {
+            foreach ($matches[0] as $match) {
+                if ($match[1] == $insertion['heading_position']) {
+                    $heading_end = $match[1] + strlen($match[0]);
+                    $insertion_points[$heading_end] = $insertion['image_id'];
+                    break;
+                }
+            }
+        }
+        
+        // Sort by position (descending) to insert from bottom to top
+        krsort($insertion_points);
+        
+        // Insert images
+        foreach ($insertion_points as $position => $image_id) {
+            $image_block = self::create_image_block($image_id);
+            $content = substr($content, 0, $position) . "\n\n" . $image_block . "\n\n" . substr($content, $position);
+            error_log('SIM: Bulk HTML - Inserted image ' . $image_id . ' at position ' . $position);
+        }
+        
+        return $content;
     }
 }
 

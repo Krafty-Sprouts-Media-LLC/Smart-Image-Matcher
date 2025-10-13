@@ -5,6 +5,37 @@ All notable changes to Smart Image Matcher will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 12/10/2025
+
+### Changed
+- **🎯 MAJOR: Optimized Bulk Insert - ONE Revision Instead of Multiple**
+- Bulk insert now creates ONE clean revision for all images (not 20 revisions for 20 images)
+- Significantly improved performance: One database write instead of multiple
+- One cache clear instead of multiple
+- WordPress hooks fire once instead of per-image
+- Cleaner revision history for users
+
+### Improved
+- **Atomic Bulk Operations**: All images inserted in one transaction (all-or-nothing)
+- More predictable behavior: Success or fail as a unit
+- Better error handling: Duplicates filtered before update
+- Faster execution: Reduced database overhead
+- Better performance: Parse blocks once, serialize once (Gutenberg)
+- Cleaner undo: One revision to revert instead of finding the right one
+
+### Technical
+- Refactored `insert_all_images()` to build final content before update
+- Added `bulk_insert_gutenberg()` for efficient Gutenberg batch processing
+- Added `bulk_insert_html()` for efficient Classic Editor batch processing
+- Single `wp_update_post()` call for all images in bulk operation
+- Duplicate checking done upfront before content modification
+- Logging shows "ONE revision created for X images"
+
+### Fixed
+- Eliminated revision bloat from bulk operations
+- No more 20 revisions when inserting 20 images
+- Clean revision history: "Inserted X images via Smart Image Matcher"
+
 ## [1.3.4] - 12/10/2025
 
 ### Fixed

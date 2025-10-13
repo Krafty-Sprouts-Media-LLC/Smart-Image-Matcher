@@ -3,7 +3,7 @@
  * Filename: class-sim-admin.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.0.4
+ * Version: 1.0.5
  * Last Modified: 12/10/2025
  * Description: Admin interface for post editor button and bulk processing page
  * Supports both Classic Editor and Gutenberg Block Editor
@@ -180,7 +180,7 @@ class SIM_Admin {
                         <details class="sim-tips-section" style="margin: 15px 0; padding: 12px; background: #f0f6fc; border: 1px solid #c3dafe; border-radius: 4px;">
                             <summary style="cursor: pointer; font-weight: 600; color: #0366d6; user-select: none;">
                                 <span class="dashicons dashicons-lightbulb" style="vertical-align: middle;"></span>
-                                <?php esc_html_e('💡 Tips for Better Matching', 'smart-image-matcher'); ?>
+                                <?php esc_html_e('Tips for Better Matching', 'smart-image-matcher'); ?>
                             </summary>
                             <div style="margin-top: 10px; font-size: 13px; line-height: 1.6;">
                                 <p style="margin: 8px 0 8px 0;"><strong><?php esc_html_e('How to improve your matches:', 'smart-image-matcher'); ?></strong></p>
