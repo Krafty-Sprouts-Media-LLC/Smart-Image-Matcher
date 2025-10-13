@@ -5,34 +5,17 @@ All notable changes to Smart Image Matcher will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.5.1] - 12/10/2025
+## [1.5.2] - 12/10/2025
+
+### Changed
+- **Reverted to Full Name**: Changed menu title back to "Smart Image Matcher"
+- Removed "SIM" abbreviation based on user feedback
+- Full name is clearer and more professional
+- Consistent branding across all admin areas
 
 ### Fixed
-- **Removed Tooltip**: Removed hover tooltip from sidebar menu
-- Menu now simply shows "SIM" with no hover popup
-- Cleaner, non-intrusive design
-- Full name "Smart Image Matcher" still shown in post editor button
-
-### Changed
-- Simplified menu styling - removed all CSS tooltip code
-- Menu title is just plain text "SIM" with icon
-- No hover effects or popups in admin sidebar
-
-## [1.5.0] - 12/10/2025
-
-### Changed
-- **Compact Menu Design**: Changed menu title from "Smart Image Matcher" to "SIM"
-- Space-efficient abbreviation saves horizontal space in admin sidebar
-
-### Added
-- Reorganized menu structure with parent and submenus
-- Main menu: "SIM" with dashicons-format-image icon
-- Admin CSS now enqueued globally for menu styling
-
-### Improved
-- Saved horizontal space in WordPress admin sidebar
-- Clear branding with SIM abbreviation
-- Better visual design
+- Menu now shows complete plugin name for better clarity
+- No abbreviations that might confuse users
 
 ## [1.4.2] - 12/10/2025
 
