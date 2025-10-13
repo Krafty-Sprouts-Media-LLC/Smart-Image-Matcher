@@ -3,7 +3,7 @@
  * Filename: class-sim-matcher.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.0.8
+ * Version: 1.1.0
  * Last Modified: 12/10/2025
  * Description: Matching engine for keyword-based and AI-powered image matching
  * 
@@ -236,10 +236,24 @@ class SIM_Matcher {
                 $filename_score = 100;
             }
             
-            // Penalty for extra words (dilution)
+            // Smart penalty/bonus for word count matching
             $extra_words = count($filename_words) - count($heading_keywords);
-            if ($extra_words > 3) {
-                $filename_score *= 0.85; // 15% penalty for verbose filenames
+            
+            if ($extra_words === 0) {
+                // PERFECT: Exact word count match - BOOST
+                $filename_score = min($filename_score * 1.1, 100); // 10% bonus
+            } elseif ($extra_words > 0) {
+                // Penalty for extra words - graduated scale
+                // 1 extra word = 10% penalty
+                // 2 extra words = 18% penalty
+                // 3+ extra words = 25% penalty
+                if ($extra_words === 1) {
+                    $filename_score *= 0.90; // 10% penalty
+                } elseif ($extra_words === 2) {
+                    $filename_score *= 0.82; // 18% penalty
+                } else {
+                    $filename_score *= 0.75; // 25% penalty for 3+ extra words
+                }
             }
             
             $scores[] = array('field' => 'filename', 'score' => $filename_score, 'weight' => 1.0);
@@ -265,10 +279,19 @@ class SIM_Matcher {
                 $title_score = min($title_score + 10, 100);
             }
             
-            // Penalty for extra words
+            // Smart penalty/bonus for word count matching
             $extra_words = count($title_words) - count($heading_keywords);
-            if ($extra_words > 3) {
-                $title_score *= 0.85;
+            
+            if ($extra_words === 0) {
+                $title_score = min($title_score * 1.1, 100); // 10% bonus for exact match
+            } elseif ($extra_words > 0) {
+                if ($extra_words === 1) {
+                    $title_score *= 0.90; // 10% penalty
+                } elseif ($extra_words === 2) {
+                    $title_score *= 0.82; // 18% penalty
+                } else {
+                    $title_score *= 0.75; // 25% penalty
+                }
             }
             
             $scores[] = array('field' => 'title', 'score' => $title_score, 'weight' => 0.9);
@@ -287,6 +310,21 @@ class SIM_Matcher {
             // Bonus for exact phrase match in alt
             if (strpos($alt, $heading_text) !== false) {
                 $alt_score = 85;
+            }
+            
+            // Smart penalty/bonus for word count matching
+            $extra_words = count($alt_words) - count($heading_keywords);
+            
+            if ($extra_words === 0) {
+                $alt_score = min($alt_score * 1.1, 85); // 10% bonus for exact match
+            } elseif ($extra_words > 0) {
+                if ($extra_words === 1) {
+                    $alt_score *= 0.90; // 10% penalty
+                } elseif ($extra_words === 2) {
+                    $alt_score *= 0.82; // 18% penalty
+                } else {
+                    $alt_score *= 0.75; // 25% penalty
+                }
             }
             
             $scores[] = array('field' => 'alt', 'score' => $alt_score, 'weight' => 0.85);

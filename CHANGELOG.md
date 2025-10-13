@@ -5,6 +5,36 @@ All notable changes to Smart Image Matcher will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 12/10/2025
+
+### Fixed
+- **CRITICAL: Improved Matching Accuracy for Similar Names**
+- Now correctly differentiates between "Woodland Mosquito" vs "Woodland Malaria Mosquito"
+- Previously both would match to "woodland-malaria-mosquito.jpg"
+- Now "Woodland Mosquito" matches "woodland-mosquito.jpg" (100 pts) over "woodland-malaria-mosquito.jpg" (90 pts)
+
+### Changed
+- **Enhanced Scoring Algorithm**: Graduated penalty system for extra words
+- 0 extra words = 10% BONUS (exact match preferred!)
+- 1 extra word = 10% penalty
+- 2 extra words = 18% penalty  
+- 3+ extra words = 25% penalty
+- Applied to all fields: filename, title, and alt text
+
+### Improved
+- Much better specificity matching
+- Prefers exact matches over verbose filenames
+- "woodland-mosquito.jpg" now outscores "woodland-malaria-mosquito.jpg" for "Woodland Mosquito" heading
+- More accurate matching for similar image names
+- Better differentiation between related images
+
+### Technical
+- Refactored penalty logic in `calculate_match_score()` method
+- Removed old threshold-based penalty (only >3 words)
+- Implemented graduated scale for ANY extra words
+- Added 10% bonus for perfect word count matches
+- Applied consistently across filename, title, and alt text fields
+
 ## [1.5.2] - 12/10/2025
 
 ### Changed
