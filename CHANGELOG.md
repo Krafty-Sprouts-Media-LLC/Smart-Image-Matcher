@@ -9,38 +9,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Compact Menu Design**: Changed menu title from "Smart Image Matcher" to "SIM"
-- Space-efficient abbreviation with icon
+- Space-efficient abbreviation saves horizontal space in admin sidebar
 - Hover tooltip shows full name "Smart Image Matcher" with CSS animation
 - Clean tooltip with arrow pointer on hover
 - Professional dark theme tooltip styling
 
 ### Added
-- **Reorganized Admin Menu Structure**: Parent menu with submenus
-- Main menu: "SIM" with dashicons-format-image icon
-  - Submenu: Settings (default page)
-  - Submenu: Bulk Processor (Phase 7 placeholder)
-- Enhanced bulk processor placeholder with detailed roadmap
-- Shows planned features:
-  - Step 1: Select Posts (with filters)
-  - Step 2: Configure Processing  
-  - Step 3: Review & Approve matches
-  - Step 4: Monitor Progress
-- CSS tooltip system with hover effects
-- "Coming Soon - Phase 7" notice
-- Workaround instructions for single-post workflow
-
-### Fixed
-- Removed duplicate menu entries in Settings and Tools menus
-- Removed duplicate `render_bulk_processor_page()` method from SIM_Admin
-- Method now properly located only in SIM_Bulk class
-- Admin CSS now enqueued globally for menu styling
+- CSS tooltip system with hover effects for menu item
+- Custom styling for .sim-menu-title with letter-spacing
+- Tooltip appears on right side of menu when hovering
 
 ### Improved
 - Saved horizontal space in WordPress admin sidebar
-- Better visual hierarchy with organized submenu structure
 - Professional tooltip UX on hover
-- All features accessible from one organized location
 - Clear branding with SIM abbreviation
+- Better visual design
+
+### Technical
+- Admin CSS now enqueued globally for menu styling (not just on specific pages)
+- Added CSS pseudo-elements for tooltip (::after) and arrow (::before)
+- Z-index management for proper tooltip layering
+
+## [1.4.2] - 12/10/2025
+
+### Changed
+- **Reorganized Admin Menu Structure**: Now uses parent menu with submenus
+- Main menu item: "Smart Image Matcher" (with dashicons-format-image icon)
+  - Submenu: Settings (default page)
+  - Submenu: Bulk Processor (placeholder for Phase 7)
+- Removed duplicate menu entries in Settings and Tools
+- All features accessible from one organized location
+
+### Added
+- Enhanced bulk processor placeholder page with roadmap
+- Shows planned features for Phase 7:
+  - Step 1: Select Posts (with filters)
+  - Step 2: Configure Processing
+  - Step 3: Review & Approve matches
+  - Step 4: Monitor Progress
+- "Coming Soon" notice with clear messaging
+- Workaround instructions for current single-post workflow
+
+### Fixed
+- Removed duplicate `render_bulk_processor_page()` method from SIM_Admin
+- Method now properly located only in SIM_Bulk class
+- Eliminated menu confusion
+
+### Improved
+- Better navigation structure
+- Clear separation: Settings vs Bulk Processing
+- Professional placeholder with feature preview
+- Icon in main menu for easy identification
 
 ## [1.4.1] - 12/10/2025
 
