@@ -3,9 +3,9 @@
  * Filename: class-sim-core.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.0.0
+ * Version: 1.2.0
  * Last Modified: 12/10/2025
- * Description: Core functionality and initialization for Smart Image Matcher
+ * Description: Core functionality and initialization for Smart Image Matcher with organized menu structure
  */
 
 if (!defined('ABSPATH')) {
@@ -38,22 +38,24 @@ class SIM_Core {
     public function enqueue_admin_assets($hook) {
         global $post;
         
-        $allowed_hooks = array(
-            'post.php',
-            'post-new.php',
-            'tools_page_smart-image-matcher'
-        );
-        
-        if (!in_array($hook, $allowed_hooks)) {
-            return;
-        }
-        
+        // Always enqueue CSS for menu styling
         wp_enqueue_style(
             'sim-admin-css',
             SIM_PLUGIN_URL . 'admin/css/sim-admin.css',
             array(),
             SIM_VERSION
         );
+        
+        $allowed_hooks = array(
+            'post.php',
+            'post-new.php',
+            'toplevel_page_smart-image-matcher',
+            'smart-image-matcher_page_smart-image-matcher-bulk'
+        );
+        
+        if (!in_array($hook, $allowed_hooks)) {
+            return;
+        }
         
         if ($hook === 'post.php' || $hook === 'post-new.php') {
             wp_enqueue_script(
@@ -97,21 +99,35 @@ class SIM_Core {
     }
     
     public function register_admin_menu() {
-        add_submenu_page(
-            'tools.php',
+        // Parent menu item with "SIM" abbreviation
+        add_menu_page(
             __('Smart Image Matcher', 'smart-image-matcher'),
-            __('Smart Image Matcher', 'smart-image-matcher'),
+            '<span class="sim-menu-title" title="Smart Image Matcher">SIM</span>',
             'edit_posts',
             'smart-image-matcher',
-            array('SIM_Admin', 'render_bulk_processor_page')
+            array('SIM_Settings', 'render_settings_page'),
+            'dashicons-format-image',
+            30
         );
         
-        add_options_page(
-            __('Smart Image Matcher Settings', 'smart-image-matcher'),
-            __('Smart Image Matcher', 'smart-image-matcher'),
+        // Submenu: Settings (default page)
+        add_submenu_page(
+            'smart-image-matcher',
+            __('Smart Image Matcher - Settings', 'smart-image-matcher'),
+            __('Settings', 'smart-image-matcher'),
             'manage_options',
-            'smart-image-matcher-settings',
+            'smart-image-matcher',
             array('SIM_Settings', 'render_settings_page')
+        );
+        
+        // Submenu: Bulk Processor
+        add_submenu_page(
+            'smart-image-matcher',
+            __('Smart Image Matcher - Bulk Processor', 'smart-image-matcher'),
+            __('Bulk Processor', 'smart-image-matcher'),
+            'edit_posts',
+            'smart-image-matcher-bulk',
+            array('SIM_Bulk', 'render_bulk_processor_page')
         );
     }
 }

@@ -5,6 +5,43 @@ All notable changes to Smart Image Matcher will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 12/10/2025
+
+### Changed
+- **Compact Menu Design**: Changed menu title from "Smart Image Matcher" to "SIM"
+- Space-efficient abbreviation with icon
+- Hover tooltip shows full name "Smart Image Matcher" with CSS animation
+- Clean tooltip with arrow pointer on hover
+- Professional dark theme tooltip styling
+
+### Added
+- **Reorganized Admin Menu Structure**: Parent menu with submenus
+- Main menu: "SIM" with dashicons-format-image icon
+  - Submenu: Settings (default page)
+  - Submenu: Bulk Processor (Phase 7 placeholder)
+- Enhanced bulk processor placeholder with detailed roadmap
+- Shows planned features:
+  - Step 1: Select Posts (with filters)
+  - Step 2: Configure Processing  
+  - Step 3: Review & Approve matches
+  - Step 4: Monitor Progress
+- CSS tooltip system with hover effects
+- "Coming Soon - Phase 7" notice
+- Workaround instructions for single-post workflow
+
+### Fixed
+- Removed duplicate menu entries in Settings and Tools menus
+- Removed duplicate `render_bulk_processor_page()` method from SIM_Admin
+- Method now properly located only in SIM_Bulk class
+- Admin CSS now enqueued globally for menu styling
+
+### Improved
+- Saved horizontal space in WordPress admin sidebar
+- Better visual hierarchy with organized submenu structure
+- Professional tooltip UX on hover
+- All features accessible from one organized location
+- Clear branding with SIM abbreviation
+
 ## [1.4.1] - 12/10/2025
 
 ### Fixed

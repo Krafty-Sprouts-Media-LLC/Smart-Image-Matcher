@@ -3,9 +3,9 @@
  * Filename: class-sim-bulk.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.0.0
+ * Version: 1.0.1
  * Last Modified: 12/10/2025
- * Description: Bulk processing functionality for multiple posts
+ * Description: Bulk processing functionality for multiple posts with render method
  */
 
 if (!defined('ABSPATH')) {
@@ -145,6 +145,14 @@ class SIM_Bulk {
         ));
         
         return $matches;
+    }
+    
+    public static function render_bulk_processor_page() {
+        if (!current_user_can('edit_posts')) {
+            wp_die(__('You do not have sufficient permissions to access this page.', 'smart-image-matcher'));
+        }
+        
+        require_once SIM_PLUGIN_DIR . 'admin/views/bulk-processor.php';
     }
 }
 

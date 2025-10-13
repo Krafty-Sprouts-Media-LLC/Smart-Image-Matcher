@@ -3,9 +3,9 @@
  * Filename: class-sim-admin.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.0.6
+ * Version: 1.0.7
  * Last Modified: 12/10/2025
- * Description: Admin interface for post editor button and bulk processing page
+ * Description: Admin interface for post editor button and modal
  * Supports both Classic Editor and Gutenberg Block Editor
  * Includes image naming tips in modal and settings page
  */
@@ -214,14 +214,6 @@ class SIM_Admin {
             </div>
         </div>
         <?php
-    }
-    
-    public static function render_bulk_processor_page() {
-        if (!current_user_can('edit_posts')) {
-            wp_die(esc_html__('You do not have permission to access this page.', 'smart-image-matcher'));
-        }
-        
-        include SIM_PLUGIN_DIR . 'admin/views/bulk-processor.php';
     }
 }
 
