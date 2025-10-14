@@ -5,6 +5,14 @@ All notable changes to Smart Image Matcher will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.1] - 12/10/2025
+
+### Fixed
+- **Carousel Button Alignment**: Fixed arrow icons alignment in Prev/Next buttons
+- Dashicons now properly aligned with button text
+- Added vertical-align: middle and margin-top adjustment
+- Cleaner, more professional button appearance
+
 ## [1.7.0] - 12/10/2025
 
 ### Added
