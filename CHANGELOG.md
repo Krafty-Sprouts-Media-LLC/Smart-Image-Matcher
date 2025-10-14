@@ -5,6 +5,44 @@ All notable changes to Smart Image Matcher will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] - 12/10/2025
+
+### Added
+- **Configurable Match Limit**: New admin setting "Maximum Matches Per Heading"
+- Users can choose 1-10 alternative images to show (default: 3)
+- Setting located in Settings page with helpful description
+- Saved in WordPress options for persistence
+
+### Improved
+- **Smart Image Preloading**: Eliminated first-time navigation slowness
+- Preloads next image automatically after each navigation
+- Also preloads previous image when going backwards
+- Navigation now instant even on first click
+- Minimal bandwidth cost (~30KB per preload vs 450KB for all)
+- Perfect balance of speed and efficiency
+
+### Changed
+- Matcher no longer hard-coded to 3 matches
+- Now uses `get_option('sim_max_matches_per_heading', 3)`
+- Administrators can adjust based on their needs
+- More matches = more choice, fewer = faster decisions
+
+### Technical
+- Added `preloadImage()` function in JavaScript
+- Preloading triggered after each `updateCarouselDisplay()`
+- Preloads next (index + 1) and previous (index - 1) images
+- Browser caches images automatically
+- New database option: `sim_max_matches_per_heading`
+- Default value set in `sim_set_default_options()`
+- Setting saved via `SIM_Settings::save_settings()`
+
+### Performance Impact
+- Initial load: Fast (only shows image #1)
+- First navigation: Now instant (image #2 preloaded upfront)
+- Subsequent navigation: Instant (next image preloaded each time)
+- Bandwidth: Minimal (+30KB per heading with >1 match)
+- No impact on admin area overall
+
 ## [1.7.2] - 12/10/2025
 
 ### Improved

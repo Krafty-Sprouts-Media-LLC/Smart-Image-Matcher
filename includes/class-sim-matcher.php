@@ -3,7 +3,7 @@
  * Filename: class-sim-matcher.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.1.0
+ * Version: 1.2.0
  * Last Modified: 12/10/2025
  * Description: Matching engine for keyword-based and AI-powered image matching
  * 
@@ -171,7 +171,10 @@ class SIM_Matcher {
             return $b['confidence_score'] - $a['confidence_score'];
         });
         
-        return array_slice($scored_images, 0, 3);
+        // Get configurable max matches (default 3)
+        $max_matches = get_option('sim_max_matches_per_heading', 3);
+        
+        return array_slice($scored_images, 0, $max_matches);
     }
     
     public static function extract_keywords($text) {

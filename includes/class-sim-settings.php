@@ -3,9 +3,9 @@
  * Filename: class-sim-settings.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.0.0
+ * Version: 1.1.0
  * Last Modified: 12/10/2025
- * Description: Settings page and options management
+ * Description: Settings page and options management with configurable match limit
  */
 
 if (!defined('ABSPATH')) {
@@ -33,6 +33,7 @@ class SIM_Settings {
             'sim_confidence_threshold' => isset($_POST['sim_confidence_threshold']) ? intval($_POST['sim_confidence_threshold']) : 70,
             'sim_hierarchy_mode' => isset($_POST['sim_hierarchy_mode']) ? sanitize_text_field($_POST['sim_hierarchy_mode']) : 'smart',
             'sim_heading_overlap_threshold' => isset($_POST['sim_heading_overlap_threshold']) ? intval($_POST['sim_heading_overlap_threshold']) : 70,
+            'sim_max_matches_per_heading' => isset($_POST['sim_max_matches_per_heading']) ? intval($_POST['sim_max_matches_per_heading']) : 3,
             'sim_minimum_image_spacing' => isset($_POST['sim_minimum_image_spacing']) ? intval($_POST['sim_minimum_image_spacing']) : 300,
             'sim_claude_api_key' => isset($_POST['sim_claude_api_key']) ? sanitize_text_field($_POST['sim_claude_api_key']) : '',
             'sim_claude_model' => isset($_POST['sim_claude_model']) ? sanitize_text_field($_POST['sim_claude_model']) : 'claude-sonnet-4-20250514',

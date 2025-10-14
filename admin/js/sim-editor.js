@@ -2,12 +2,12 @@
  * Filename: sim-editor.js
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.4.1
+ * Version: 1.5.0
  * Last Modified: 12/10/2025
  * 
  * Simplified UX: No undo, just insert and reload with clear notices
  * Warning notice reminds users to review matches before inserting
- * Carousel feature: Browse multiple matches with smooth transitions
+ * Carousel feature: Browse multiple matches with smart preloading
  * Description: JavaScript for editor modal and image matching interface
  */
 
@@ -130,6 +130,11 @@
                 currentIndices[heading.position] = 0;
                 const matchHtml = createMatchHtml(heading, matches);
                 container.append(matchHtml);
+                
+                // Preload next image (image #2) for instant navigation
+                if (matches.length > 1) {
+                    preloadImage(matches[1].image_url);
+                }
             } else {
                 const noMatchHtml = createNoMatchHtml(heading);
                 container.append(noMatchHtml);
@@ -484,6 +489,21 @@
                 $info.removeClass('sim-transitioning');
             }, 150);
         }, 10);
+        
+        // Preload next image for instant navigation
+        if (index + 1 < totalMatches) {
+            preloadImage(matches[index + 1].image_url);
+        }
+        // Also preload previous if going backwards
+        if (index - 1 >= 0) {
+            preloadImage(matches[index - 1].image_url);
+        }
+    }
+    
+    function preloadImage(url) {
+        // Create new Image object - browser will cache it
+        const img = new Image();
+        img.src = url;
     }
     
     function escapeHtml(text) {

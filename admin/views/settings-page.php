@@ -3,9 +3,9 @@
  * Filename: settings-page.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.0.3
+ * Version: 1.1.0
  * Last Modified: 12/10/2025
- * Description: Settings page view with image naming best practices
+ * Description: Settings page view with image naming best practices and match limit configuration
  */
 
 if (!defined('ABSPATH')) {
@@ -16,6 +16,7 @@ $match_mode = get_option('sim_match_mode', 'keyword');
 $confidence_threshold = get_option('sim_confidence_threshold', 70);
 $hierarchy_mode = get_option('sim_hierarchy_mode', 'smart');
 $heading_overlap_threshold = get_option('sim_heading_overlap_threshold', 70);
+$max_matches_per_heading = get_option('sim_max_matches_per_heading', 3);
 $claude_api_key = get_option('sim_claude_api_key', '');
 $claude_model = get_option('sim_claude_model', 'claude-sonnet-4-20250514');
 $daily_spending_limit = get_option('sim_daily_spending_limit', 10.00);
@@ -104,6 +105,16 @@ $delete_on_uninstall = get_option('sim_delete_on_uninstall', true);
                     <input type="number" name="sim_heading_overlap_threshold" id="sim_heading_overlap_threshold" value="<?php echo esc_attr($heading_overlap_threshold); ?>" min="0" max="100" step="1">
                     <span>%</span>
                     <p class="description"><?php esc_html_e('Skip subheadings if keyword overlap exceeds this threshold (Smart Hierarchy mode).', 'smart-image-matcher'); ?></p>
+                </td>
+            </tr>
+            
+            <tr>
+                <th scope="row">
+                    <label for="sim_max_matches_per_heading"><?php esc_html_e('Maximum Matches Per Heading', 'smart-image-matcher'); ?></label>
+                </th>
+                <td>
+                    <input type="number" name="sim_max_matches_per_heading" id="sim_max_matches_per_heading" value="<?php echo esc_attr($max_matches_per_heading); ?>" min="1" max="10" step="1">
+                    <p class="description"><?php esc_html_e('Maximum number of alternative images to show for each heading (1-10). Use carousel arrows to browse alternatives. Default: 3', 'smart-image-matcher'); ?></p>
                 </td>
             </tr>
         </table>
