@@ -5,6 +5,24 @@ All notable changes to Smart Image Matcher will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.2] - 12/10/2025
+
+### Improved
+- **Faster Carousel Response**: Optimized image switching for instant feedback
+- Text updates (title, filename, confidence) happen immediately on button click
+- Image preview transitions smoothly with 150ms fade effect
+- Added smooth opacity transitions for professional feel
+- Text changes instantly, image fades smoothly
+- Much more responsive and snappy user experience
+
+### Technical
+- All text/metadata updates now execute immediately (no delay)
+- Image preview uses CSS transition with opacity fade
+- Reduced setTimeout delays (50ms → 10ms)
+- Added .sim-transitioning class with 0.15s transition
+- Image loads asynchronously while text updates instantly
+- Fallback timer ensures transition completes even if image doesn't load
+
 ## [1.7.1] - 12/10/2025
 
 ### Fixed

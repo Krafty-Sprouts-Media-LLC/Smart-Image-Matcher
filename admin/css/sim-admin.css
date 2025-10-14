@@ -2,9 +2,9 @@
  * Filename: sim-admin.css
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.1.1
+ * Version: 1.1.2
  * Last Modified: 12/10/2025
- * Description: Admin styles for Smart Image Matcher modal and UI with carousel controls
+ * Description: Admin styles for Smart Image Matcher modal and UI with carousel controls and transitions
  */
 
 /* Admin Bar Button */
@@ -239,10 +239,20 @@
     object-fit: cover;
     border-radius: 4px;
     border: 1px solid #ddd;
+    transition: opacity 0.15s ease-in-out;
+}
+
+.sim-image-preview.sim-transitioning {
+    opacity: 0.5;
 }
 
 .sim-image-info {
     flex: 1;
+    transition: opacity 0.15s ease-in-out;
+}
+
+.sim-image-info.sim-transitioning {
+    opacity: 0.5;
 }
 
 .sim-confidence-score {

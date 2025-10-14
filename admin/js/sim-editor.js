@@ -2,12 +2,12 @@
  * Filename: sim-editor.js
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.4.0
+ * Version: 1.4.1
  * Last Modified: 12/10/2025
  * 
  * Simplified UX: No undo, just insert and reload with clear notices
  * Warning notice reminds users to review matches before inserting
- * Carousel feature: Browse multiple matches with prev/next navigation
+ * Carousel feature: Browse multiple matches with smooth transitions
  * Description: JavaScript for editor modal and image matching interface
  */
 
@@ -402,13 +402,17 @@
         const match = matches[index];
         const totalMatches = matches.length;
         
+        // Add transitioning class for smooth fade
+        const $preview = $item.find('.sim-image-preview');
+        const $info = $item.find('.sim-image-info');
+        
+        $preview.addClass('sim-transitioning');
+        $info.addClass('sim-transitioning');
+        
         // Update image ID for insertion
         $item.data('image-id', match.image_id);
         
-        // Update image preview
-        $item.find('.sim-image-preview').attr('src', match.image_url);
-        
-        // Update confidence score and styling
+        // Update confidence score and styling IMMEDIATELY
         const confidenceClass = match.confidence_score >= 90 ? 'sim-confidence-high' :
                                 match.confidence_score >= 70 ? 'sim-confidence-medium' :
                                 'sim-confidence-low';
@@ -418,7 +422,7 @@
             .addClass(confidenceClass);
         $item.find('.sim-confidence-value').text(match.confidence_score + '%');
         
-        // Update title and filename
+        // Update title and filename IMMEDIATELY
         if (match.title) {
             if ($item.find('.sim-image-title').length === 0) {
                 $item.find('.sim-image-filename').before(
@@ -432,7 +436,7 @@
         }
         $item.find('.sim-filename-value').text(match.filename);
         
-        // Update AI reasoning
+        // Update AI reasoning IMMEDIATELY
         if (match.ai_reasoning) {
             if ($item.find('.sim-ai-reasoning').length === 0) {
                 $item.find('.sim-image-filename').after(
@@ -445,13 +449,13 @@
             $item.find('.sim-ai-reasoning').remove();
         }
         
-        // Update View Full link
+        // Update View Full link IMMEDIATELY
         $item.find('.sim-view-full').attr('href', match.image_url);
         
-        // Update carousel controls
+        // Update carousel controls IMMEDIATELY
         $item.find('.sim-current-index').text(index + 1);
         
-        // Show/hide best match badge
+        // Show/hide best match badge IMMEDIATELY
         if (index === 0) {
             if ($item.find('.sim-best-match-badge').length === 0) {
                 $item.find('.sim-carousel-counter strong').prepend('<span class="sim-best-match-badge">⭐ Best Match</span> ');
@@ -460,9 +464,26 @@
             $item.find('.sim-best-match-badge').remove();
         }
         
-        // Enable/disable navigation buttons
+        // Enable/disable navigation buttons IMMEDIATELY
         $item.find('.sim-carousel-prev').prop('disabled', index === 0);
         $item.find('.sim-carousel-next').prop('disabled', index === totalMatches - 1);
+        
+        // Update image with smooth transition (slightly delayed for effect)
+        setTimeout(function() {
+            $preview.attr('src', match.image_url);
+            
+            // Remove transition class when image loads
+            $preview.one('load', function() {
+                $preview.removeClass('sim-transitioning');
+                $info.removeClass('sim-transitioning');
+            });
+            
+            // Fallback: remove class after short delay
+            setTimeout(function() {
+                $preview.removeClass('sim-transitioning');
+                $info.removeClass('sim-transitioning');
+            }, 150);
+        }, 10);
     }
     
     function escapeHtml(text) {
