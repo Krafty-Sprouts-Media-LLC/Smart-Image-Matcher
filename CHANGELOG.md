@@ -5,6 +5,48 @@ All notable changes to Smart Image Matcher will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 12/10/2025
+
+### Added
+- **🎨 MAJOR FEATURE: Image Carousel for Multiple Matches**
+- Users can now browse through alternative matches for each heading
+- Prev/Next navigation buttons to cycle through all matched images
+- Counter display: "Image 2 of 3" shows position in match list
+- ⭐ "Best Match" badge on #1 recommended image
+- Real-time updates: Everything changes when navigating:
+  - Image preview
+  - Image title and filename
+  - Confidence score and color coding
+  - "View Full" link
+  - AI reasoning (if available)
+- **Keyboard Navigation**: Left/Right arrow keys to browse matches
+- **User Choice**: Insert whichever image is currently displayed
+- **Bulk Insert**: Uses currently selected image for each heading (not just top match)
+
+### Improved
+- User empowerment: Not forced to accept top match
+- Better accuracy: Users can choose best contextual fit
+- Visual comparison: Browse all options before deciding
+- Handles similar image names perfectly (e.g., "Woodland Mosquito" vs "Woodland Malaria Mosquito")
+- Educational: Users see all matches and understand scoring
+- Professional UX: Like WordPress media selector
+
+### Technical
+- Added `currentIndices` object to track selected image per heading
+- All matches stored in `data-all-matches` attribute (JSON)
+- `updateCarouselDisplay()` function updates DOM dynamically
+- No page refresh - pure JavaScript transitions
+- Carousel controls only show if `matches.length > 1`
+- Prev/Next buttons auto-disable at boundaries
+- Golden gradient badge for recommended match
+
+### UX Details
+- Always starts with #1 (best score) by default
+- Badge disappears when browsing to other matches
+- Disabled buttons show with reduced opacity
+- Smooth, instant transitions
+- Keyboard accessible for power users
+
 ## [1.6.0] - 12/10/2025
 
 ### Fixed

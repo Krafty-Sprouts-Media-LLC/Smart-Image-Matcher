@@ -2,9 +2,9 @@
  * Filename: sim-admin.css
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.0.4
+ * Version: 1.1.0
  * Last Modified: 12/10/2025
- * Description: Admin styles for Smart Image Matcher modal and UI
+ * Description: Admin styles for Smart Image Matcher modal and UI with carousel controls
  */
 
 /* Admin Bar Button */
@@ -144,6 +144,59 @@
     padding: 15px;
     margin-bottom: 15px;
     background: #fff;
+}
+
+/* Carousel Controls */
+.sim-carousel-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px;
+    margin: 10px 0;
+    background: #f8f9fa;
+    border: 1px solid #e1e4e8;
+    border-radius: 6px;
+}
+
+.sim-carousel-prev,
+.sim-carousel-next {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 80px;
+}
+
+.sim-carousel-prev .dashicons,
+.sim-carousel-next .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+}
+
+.sim-carousel-prev:disabled,
+.sim-carousel-next:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.sim-carousel-counter {
+    font-size: 14px;
+    color: #333;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.sim-best-match-badge {
+    display: inline-block;
+    background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
+    color: #333;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    box-shadow: 0 2px 4px rgba(255, 215, 0, 0.3);
+    margin-right: 5px;
 }
 
 .sim-match-item.no-match {

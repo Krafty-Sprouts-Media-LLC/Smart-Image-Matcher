@@ -2,11 +2,12 @@
  * Filename: sim-editor.js
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.3.2
+ * Version: 1.4.0
  * Last Modified: 12/10/2025
  * 
  * Simplified UX: No undo, just insert and reload with clear notices
  * Warning notice reminds users to review matches before inserting
+ * Carousel feature: Browse multiple matches with prev/next navigation
  * Description: JavaScript for editor modal and image matching interface
  */
 
@@ -14,6 +15,7 @@
     'use strict';
 
     let currentMatches = [];
+    let currentIndices = {}; // Track current image index for each heading
     let undoTimerId = null;
 
     $(document).ready(function() {
@@ -24,6 +26,21 @@
         
         $(document).on('click', '.sim-insert-single-button', insertSingleImage);
         $(document).on('click', '#sim-gutenberg-button', openModal);
+        $(document).on('click', '.sim-carousel-prev', navigatePrev);
+        $(document).on('click', '.sim-carousel-next', navigateNext);
+        
+        // Keyboard navigation
+        $(document).on('keydown', function(e) {
+            if ($('#sim-modal').is(':visible')) {
+                if (e.key === 'ArrowLeft') {
+                    e.preventDefault();
+                    $('.sim-match-item:visible .sim-carousel-prev').first().click();
+                } else if (e.key === 'ArrowRight') {
+                    e.preventDefault();
+                    $('.sim-match-item:visible .sim-carousel-next').first().click();
+                }
+            }
+        });
         
         window.simFindMatches = findMatches;
     });
@@ -96,20 +113,22 @@
             '<strong>' + matchedHeadings + ' matches found for ' + totalHeadings + ' headings</strong>' +
             '<div style="margin-top: 10px; padding: 10px; background: #fff3cd; border-left: 4px solid #ffc107; font-size: 14px;">' +
             '<strong>⚠️ Please Review:</strong> Check each match for accuracy before inserting. ' +
-            'Uncheck any incorrect matches and verify images are relevant to their headings.' +
+            'Use arrows to browse alternative matches. Uncheck any incorrect matches.' +
             '</div>'
         );
         
         const container = $('.sim-matches-container');
         container.empty();
+        currentIndices = {}; // Reset indices
         
         currentMatches.forEach(function(matchGroup) {
             const heading = matchGroup.heading;
             const matches = matchGroup.matches;
             
             if (matches.length > 0) {
-                const topMatch = matches[0];
-                const matchHtml = createMatchHtml(heading, topMatch);
+                // Initialize current index for this heading
+                currentIndices[heading.position] = 0;
+                const matchHtml = createMatchHtml(heading, matches);
                 container.append(matchHtml);
             } else {
                 const noMatchHtml = createNoMatchHtml(heading);
@@ -120,37 +139,59 @@
         $('.sim-insert-all-button').show();
     }
 
-    function createMatchHtml(heading, match) {
+    function createMatchHtml(heading, matches) {
+        const currentIndex = 0; // Always start with first match
+        const match = matches[currentIndex];
+        const totalMatches = matches.length;
+        
         const confidenceClass = match.confidence_score >= 90 ? 'sim-confidence-high' :
                                 match.confidence_score >= 70 ? 'sim-confidence-medium' :
                                 'sim-confidence-low';
         
-        let html = '<div class="sim-match-item" data-heading-position="' + heading.position + '" data-image-id="' + match.image_id + '">';
+        let html = '<div class="sim-match-item" data-heading-position="' + heading.position + '" data-image-id="' + match.image_id + '" data-all-matches=\'' + JSON.stringify(matches) + '\'>';
         html += '<div class="sim-match-heading">';
         html += '<span class="dashicons dashicons-yes"></span>';
         html += '<span>' + heading.tag.toUpperCase() + ': ' + escapeHtml(heading.text) + '</span>';
         html += '</div>';
         
+        // Carousel navigation (only show if multiple matches)
+        if (totalMatches > 1) {
+            html += '<div class="sim-carousel-controls">';
+            html += '<button type="button" class="button sim-carousel-prev" ' + (currentIndex === 0 ? 'disabled' : '') + '>';
+            html += '<span class="dashicons dashicons-arrow-left-alt2"></span> Prev';
+            html += '</button>';
+            html += '<span class="sim-carousel-counter">';
+            if (currentIndex === 0) {
+                html += '<span class="sim-best-match-badge">⭐ Best Match</span> ';
+            }
+            html += '<strong>Image <span class="sim-current-index">' + (currentIndex + 1) + '</span> of ' + totalMatches + '</strong>';
+            html += '</span>';
+            html += '<button type="button" class="button sim-carousel-next" ' + (currentIndex === totalMatches - 1 ? 'disabled' : '') + '>';
+            html += 'Next <span class="dashicons dashicons-arrow-right-alt2"></span>';
+            html += '</button>';
+            html += '</div>';
+        }
+        
         html += '<div class="sim-image-preview-container">';
         html += '<img src="' + match.image_url + '" alt="" class="sim-image-preview" />';
         html += '<div class="sim-image-info">';
         html += '<div class="sim-confidence-score ' + confidenceClass + '">';
-        html += simEditor.strings.confidence + ': ' + match.confidence_score + '%';
+        html += simEditor.strings.confidence + ': <span class="sim-confidence-value">' + match.confidence_score + '%</span>';
         html += '</div>';
         
         if (match.title) {
-            html += '<div class="sim-filename"><strong>Image Title:</strong> ' + escapeHtml(match.title) + '</div>';
+            html += '<div class="sim-filename sim-image-title"><strong>Image Title:</strong> <span class="sim-title-value">' + escapeHtml(match.title) + '</span></div>';
         }
-        html += '<div class="sim-filename"><strong>Filename:</strong> ' + escapeHtml(match.filename) + '</div>';
+        html += '<div class="sim-filename sim-image-filename"><strong>Filename:</strong> <span class="sim-filename-value">' + escapeHtml(match.filename) + '</span></div>';
         
         if (match.ai_reasoning) {
-            html += '<div class="sim-ai-reasoning">' + escapeHtml(match.ai_reasoning) + '</div>';
+            html += '<div class="sim-ai-reasoning sim-reasoning-value">' + escapeHtml(match.ai_reasoning) + '</div>';
         }
         
         html += '<div class="sim-match-actions">';
         html += '<label><input type="checkbox" class="sim-select-checkbox" checked> Selected</label>';
         html += '<button type="button" class="button sim-insert-single-button">Insert Now</button>';
-        html += '<a href="' + match.image_url + '" target="_blank" class="button">View Full ↗</a>';
+        html += '<a href="' + match.image_url + '" target="_blank" class="button sim-view-full">View Full ↗</a>';
         html += '</div>';
         html += '</div>';
         html += '</div>';
@@ -335,6 +376,95 @@
         $('.sim-error-message').text(message);
     }
 
+    function navigatePrev() {
+        const $item = $(this).closest('.sim-match-item');
+        const headingPosition = $item.data('heading-position');
+        const allMatches = $item.data('all-matches');
+        
+        if (currentIndices[headingPosition] > 0) {
+            currentIndices[headingPosition]--;
+            updateCarouselDisplay($item, allMatches, currentIndices[headingPosition]);
+        }
+    }
+    
+    function navigateNext() {
+        const $item = $(this).closest('.sim-match-item');
+        const headingPosition = $item.data('heading-position');
+        const allMatches = $item.data('all-matches');
+        
+        if (currentIndices[headingPosition] < allMatches.length - 1) {
+            currentIndices[headingPosition]++;
+            updateCarouselDisplay($item, allMatches, currentIndices[headingPosition]);
+        }
+    }
+    
+    function updateCarouselDisplay($item, matches, index) {
+        const match = matches[index];
+        const totalMatches = matches.length;
+        
+        // Update image ID for insertion
+        $item.data('image-id', match.image_id);
+        
+        // Update image preview
+        $item.find('.sim-image-preview').attr('src', match.image_url);
+        
+        // Update confidence score and styling
+        const confidenceClass = match.confidence_score >= 90 ? 'sim-confidence-high' :
+                                match.confidence_score >= 70 ? 'sim-confidence-medium' :
+                                'sim-confidence-low';
+        
+        $item.find('.sim-confidence-score')
+            .removeClass('sim-confidence-high sim-confidence-medium sim-confidence-low')
+            .addClass(confidenceClass);
+        $item.find('.sim-confidence-value').text(match.confidence_score + '%');
+        
+        // Update title and filename
+        if (match.title) {
+            if ($item.find('.sim-image-title').length === 0) {
+                $item.find('.sim-image-filename').before(
+                    '<div class="sim-filename sim-image-title"><strong>Image Title:</strong> <span class="sim-title-value">' + escapeHtml(match.title) + '</span></div>'
+                );
+            } else {
+                $item.find('.sim-title-value').text(match.title);
+            }
+        } else {
+            $item.find('.sim-image-title').remove();
+        }
+        $item.find('.sim-filename-value').text(match.filename);
+        
+        // Update AI reasoning
+        if (match.ai_reasoning) {
+            if ($item.find('.sim-ai-reasoning').length === 0) {
+                $item.find('.sim-image-filename').after(
+                    '<div class="sim-ai-reasoning sim-reasoning-value">' + escapeHtml(match.ai_reasoning) + '</div>'
+                );
+            } else {
+                $item.find('.sim-reasoning-value').text(match.ai_reasoning);
+            }
+        } else {
+            $item.find('.sim-ai-reasoning').remove();
+        }
+        
+        // Update View Full link
+        $item.find('.sim-view-full').attr('href', match.image_url);
+        
+        // Update carousel controls
+        $item.find('.sim-current-index').text(index + 1);
+        
+        // Show/hide best match badge
+        if (index === 0) {
+            if ($item.find('.sim-best-match-badge').length === 0) {
+                $item.find('.sim-carousel-counter strong').prepend('<span class="sim-best-match-badge">⭐ Best Match</span> ');
+            }
+        } else {
+            $item.find('.sim-best-match-badge').remove();
+        }
+        
+        // Enable/disable navigation buttons
+        $item.find('.sim-carousel-prev').prop('disabled', index === 0);
+        $item.find('.sim-carousel-next').prop('disabled', index === totalMatches - 1);
+    }
+    
     function escapeHtml(text) {
         const div = document.createElement('div');
         div.textContent = text;
