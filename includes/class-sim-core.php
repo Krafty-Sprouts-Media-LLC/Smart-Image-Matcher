@@ -3,9 +3,9 @@
  * Filename: class-sim-core.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.2.2
- * Last Modified: 12/10/2025
- * Description: Core functionality and initialization for Smart Image Matcher with organized menu structure
+ * Version: 1.3.0
+ * Last Modified: 21/10/2025
+ * Description: Core functionality with Gutenberg toolbar integration using custom SVG icons
  */
 
 if (!defined('ABSPATH')) {
@@ -58,6 +58,7 @@ class SIM_Core {
         }
         
         if ($hook === 'post.php' || $hook === 'post-new.php') {
+            // Enqueue jQuery-based editor script (for modal)
             wp_enqueue_script(
                 'sim-editor-js',
                 SIM_PLUGIN_URL . 'admin/js/sim-editor.js',
@@ -80,6 +81,31 @@ class SIM_Core {
                     'confidence' => __('Confidence', 'smart-image-matcher'),
                 )
             ));
+            
+            // Enqueue Gutenberg toolbar plugin (React-based)
+            wp_enqueue_script(
+                'sim-gutenberg-plugin',
+                SIM_PLUGIN_URL . 'admin/js/sim-gutenberg-plugin.js',
+                array(
+                    'wp-plugins',
+                    'wp-edit-post',
+                    'wp-element',
+                    'wp-components',
+                    'wp-i18n',
+                    'wp-data',
+                    'sim-editor-js' // Depends on the modal script
+                ),
+                SIM_VERSION,
+                true
+            );
+            
+            // Enqueue Gutenberg-specific CSS
+            wp_enqueue_style(
+                'sim-gutenberg-css',
+                SIM_PLUGIN_URL . 'admin/css/sim-gutenberg.css',
+                array(),
+                SIM_VERSION
+            );
         }
         
         if ($hook === 'tools_page_smart-image-matcher') {

@@ -3,7 +3,7 @@
  * Plugin Name: Smart Image Matcher
  * Plugin URI: https://kraftysprouts.com
  * Description: Automatically scans the media library and intelligently attaches relevant images to headings within posts and pages. Offers keyword-based and AI-powered matching.
- * Version: 1.9.0
+ * Version: 2.0.0
  * Author: Krafty Sprouts Media, LLC
  * Author URI: https://kraftysprouts.com
  * License: GPL v2 or later
@@ -15,16 +15,16 @@
  * Filename: smart-image-matcher.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.9.0
+ * Version: 2.0.0
  * Last Modified: 21/10/2025
- * Description: Main plugin file with enhanced linguistic matching capabilities
+ * Description: Main plugin file with Gutenberg toolbar integration and custom SVG icon
  */
 
 if (!defined('ABSPATH')) {
     exit;
 }
 
-define('SIM_VERSION', '1.9.0');
+define('SIM_VERSION', '2.0.0');
 define('SIM_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('SIM_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('SIM_PLUGIN_BASENAME', plugin_basename(__FILE__));

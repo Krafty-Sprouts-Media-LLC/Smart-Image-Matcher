@@ -1,0 +1,96 @@
+/**
+ * Filename: sim-gutenberg.css
+ * Author: Krafty Sprouts Media, LLC
+ * Created: 21/10/2025
+ * Version: 1.0.0
+ * Last Modified: 21/10/2025
+ * Description: Gutenberg editor toolbar button styling
+ */
+
+/* Toolbar Button Styling */
+.sim-gutenberg-toolbar-button {
+    display: inline-flex;
+    align-items: center;
+}
+
+.sim-toolbar-button {
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+}
+
+.sim-toolbar-button svg {
+    flex-shrink: 0;
+}
+
+/* Document Panel Styling */
+.sim-document-panel .components-panel__body {
+    padding: 16px;
+}
+
+.sim-document-panel .components-button.is-primary {
+    justify-content: center;
+}
+
+.sim-document-panel svg {
+    margin-right: 8px;
+}
+
+/* More Menu Item */
+.components-menu-item__button .sim-icon {
+    margin-right: 8px;
+}
+
+/* Icon hover effect */
+.sim-toolbar-button:hover svg,
+.components-menu-item__button:hover svg {
+    opacity: 0.8;
+}
+
+/* Active state */
+.sim-toolbar-button:active svg {
+    transform: scale(0.95);
+}
+
+/* Tooltip positioning */
+.sim-toolbar-button .components-tooltip {
+    z-index: 1000000;
+}
+
+/* Panel icon in sidebar */
+.edit-post-sidebar .sim-document-panel svg {
+    color: #1e1e1e;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+    .edit-post-sidebar .sim-document-panel svg {
+        color: #fff;
+    }
+}
+
+/* Animation for button */
+@keyframes sim-pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.6;
+    }
+}
+
+.sim-toolbar-button.is-loading svg circle[fill="#4CAF50"] {
+    animation: sim-pulse 1.5s ease-in-out infinite;
+}
+
+/* Responsive adjustments */
+@media (max-width: 782px) {
+    .sim-toolbar-button span {
+        display: none;
+    }
+    
+    .sim-toolbar-button {
+        padding: 8px !important;
+    }
+}
+

@@ -5,6 +5,70 @@ All notable changes to Smart Image Matcher will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 21/10/2025
+
+### 🚀 MAJOR RELEASE - Gutenberg Integration
+
+This is a major version release introducing modern React-based Gutenberg integration, representing a significant architectural enhancement to Smart Image Matcher.
+
+### Added
+- **Gutenberg Toolbar Integration**: Modern block editor toolbar button with custom SVG icon
+- **Custom SVG Icon**: Beautiful image-matching icon (no Dashicons dependency)
+- **Document Settings Panel**: Dedicated Smart Image Matcher panel in editor sidebar
+- **More Tools Menu Item**: Quick access from the editor's three-dot menu
+- **React-based Plugin**: Uses WordPress `@wordpress/plugins` API for seamless integration
+- **SVG Icon Design**: Custom icon featuring image frame with matching indicators
+
+### Improved
+- **Modern WordPress Standards**: Following [WordPress Design Team recommendations](https://make.wordpress.org/design/2020/04/20/next-steps-for-dashicons/)
+- **Block Editor Experience**: Native Gutenberg integration with proper icon component
+- **User Experience**: Multiple access points (toolbar button, sidebar panel, more menu)
+- **Icon Quality**: Scalable SVG instead of icon font for better rendering
+- **Mobile Responsive**: Button adapts to smaller screens
+
+### Changed
+- **Icon Format**: Migrated from Dashicons to SVG (following WordPress best practices)
+- **Editor Integration**: Added React-based Gutenberg plugin alongside jQuery modal
+- **Asset Loading**: Properly enqueued with Gutenberg dependencies (wp-plugins, wp-edit-post, etc.)
+
+### Technical
+- New file: `admin/js/sim-gutenberg-plugin.js` (React/Gutenberg integration)
+- New file: `admin/css/sim-gutenberg.css` (Toolbar button styling)
+- Updated `class-sim-core.php` to v1.3.0
+- Dependencies: wp-plugins, wp-edit-post, wp-element, wp-components, wp-i18n, wp-data
+- Custom SVG icon with image frame, photo elements, and matching indicators
+- Maintains backward compatibility with existing jQuery modal
+- Responsive design with mobile breakpoint at 782px
+
+### Design Details
+- Icon: 20x20px SVG with currentColor stroke (adapts to theme)
+- Green indicator dots show matching capability
+- Tooltip on hover with full plugin name
+- Consistent with WordPress block editor design language
+- Dark mode support via CSS prefers-color-scheme
+
+### Access Points
+1. **Sidebar Panel**: Settings sidebar → Smart Image Matcher panel
+2. **More Menu**: Three dots (⋮) → Tools → Smart Image Matcher
+3. **Panel Button**: "Find Matching Images" button with full description
+
+### Performance
+- SVG loads faster than icon font
+- Only loads on post/page editor screens
+- No impact on frontend performance
+- Minimal CSS footprint (~80 lines)
+
+### Breaking Changes
+None! This is a major version bump due to significant architectural changes (React/Gutenberg integration), but all existing functionality remains fully backward compatible. No migration required.
+
+### Why v2.0.0?
+- Major architectural change: Added React-based Gutenberg plugin system
+- New dependency stack: WordPress block editor APIs (wp-plugins, wp-edit-post)
+- Significant UX evolution: Native block editor integration
+- Future-proof foundation for Block Editor ecosystem
+
+---
+
 ## [1.9.0] - 21/10/2025
 
 ### Added
