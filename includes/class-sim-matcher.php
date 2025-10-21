@@ -3,9 +3,9 @@
  * Filename: class-sim-matcher.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.2.0
- * Last Modified: 12/10/2025
- * Description: Matching engine for keyword-based and AI-powered image matching
+ * Version: 1.3.0
+ * Last Modified: 21/10/2025
+ * Description: Matching engine with enhanced linguistic support (stemming, spelling variants, possessive handling)
  * 
  * Scoring Priority:
  * 1. Filename - 100 points (PRIMARY - always exists)
@@ -178,16 +178,19 @@ class SIM_Matcher {
     }
     
     public static function extract_keywords($text) {
+        // Check if enhanced linguistic processing is enabled
+        $enable_stemming = get_option('sim_enable_stemming', true);
+        $enable_spelling_variants = get_option('sim_enable_spelling_variants', true);
+        
+        // Use enhanced normalizer if available
+        if (class_exists('SIM_Normalizer')) {
+            return SIM_Normalizer::normalize_text($text, $enable_stemming, $enable_spelling_variants);
+        }
+        
+        // Fallback to basic normalization (backward compatibility)
         $text = strtolower($text);
-        
-        // Replace common separators with spaces BEFORE removing special chars
-        // This prevents words from merging (e.g., "female/immature" -> "female immature" not "femaleimmature")
         $text = str_replace(array('/', ',', '|', ';', ':', '(', ')', '[', ']'), ' ', $text);
-        
-        // Now remove remaining special characters (keep only letters, numbers, spaces, hyphens)
         $text = preg_replace('/[^a-z0-9\s-]/', '', $text);
-        
-        // Split into words
         $words = preg_split('/\s+/', $text);
         
         $stop_words = array(
@@ -205,6 +208,11 @@ class SIM_Matcher {
     }
     
     public static function calculate_match_score($heading_keywords, $image) {
+        // Get linguistic settings
+        $enable_stemming = get_option('sim_enable_stemming', true);
+        $enable_spelling_variants = get_option('sim_enable_spelling_variants', true);
+        $use_enhanced_matching = class_exists('SIM_Normalizer') && ($enable_stemming || $enable_spelling_variants);
+        
         $filename = strtolower(pathinfo($image['filename'], PATHINFO_FILENAME));
         $filename = str_replace(array('-', '_'), ' ', $filename);
         $filename_words = preg_split('/\s+/', $filename);
@@ -227,8 +235,23 @@ class SIM_Matcher {
         // Score 1: Filename matching (PRIMARY - 100 points)
         $filename_matches = 0;
         foreach ($heading_keywords as $keyword) {
-            if (in_array($keyword, $filename_words)) {
-                $filename_matches++;
+            if ($use_enhanced_matching) {
+                // Use enhanced matching with linguistic awareness
+                $matched = false;
+                foreach ($filename_words as $fw) {
+                    if (SIM_Normalizer::words_match($keyword, $fw, $enable_stemming, $enable_spelling_variants)) {
+                        $matched = true;
+                        break;
+                    }
+                }
+                if ($matched) {
+                    $filename_matches++;
+                }
+            } else {
+                // Use exact matching
+                if (in_array($keyword, $filename_words)) {
+                    $filename_matches++;
+                }
             }
         }
         if ($filename_matches > 0) {
@@ -265,8 +288,23 @@ class SIM_Matcher {
         // Score 2: Title matching (90 points + intentional bonus)
         $title_matches = 0;
         foreach ($heading_keywords as $keyword) {
-            if (in_array($keyword, $title_words)) {
-                $title_matches++;
+            if ($use_enhanced_matching) {
+                // Use enhanced matching
+                $matched = false;
+                foreach ($title_words as $tw) {
+                    if (SIM_Normalizer::words_match($keyword, $tw, $enable_stemming, $enable_spelling_variants)) {
+                        $matched = true;
+                        break;
+                    }
+                }
+                if ($matched) {
+                    $title_matches++;
+                }
+            } else {
+                // Use exact matching
+                if (in_array($keyword, $title_words)) {
+                    $title_matches++;
+                }
             }
         }
         if ($title_matches > 0 && !empty($title)) {
@@ -303,8 +341,23 @@ class SIM_Matcher {
         // Score 3: Alt text matching (85 points)
         $alt_matches = 0;
         foreach ($heading_keywords as $keyword) {
-            if (in_array($keyword, $alt_words)) {
-                $alt_matches++;
+            if ($use_enhanced_matching) {
+                // Use enhanced matching
+                $matched = false;
+                foreach ($alt_words as $aw) {
+                    if (SIM_Normalizer::words_match($keyword, $aw, $enable_stemming, $enable_spelling_variants)) {
+                        $matched = true;
+                        break;
+                    }
+                }
+                if ($matched) {
+                    $alt_matches++;
+                }
+            } else {
+                // Use exact matching
+                if (in_array($keyword, $alt_words)) {
+                    $alt_matches++;
+                }
             }
         }
         if ($alt_matches > 0 && !empty($alt)) {

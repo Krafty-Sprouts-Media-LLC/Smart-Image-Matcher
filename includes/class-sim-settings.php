@@ -3,9 +3,9 @@
  * Filename: class-sim-settings.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.1.0
- * Last Modified: 12/10/2025
- * Description: Settings page and options management with configurable match limit
+ * Version: 1.2.0
+ * Last Modified: 21/10/2025
+ * Description: Settings page with linguistic enhancement options (stemming, spelling variants)
  */
 
 if (!defined('ABSPATH')) {
@@ -43,11 +43,16 @@ class SIM_Settings {
             'sim_email_notifications' => isset($_POST['sim_email_notifications']) ? 1 : 0,
             'sim_auto_fallback_keyword' => isset($_POST['sim_auto_fallback_keyword']) ? 1 : 0,
             'sim_delete_on_uninstall' => isset($_POST['sim_delete_on_uninstall']) ? 1 : 0,
+            'sim_enable_stemming' => isset($_POST['sim_enable_stemming']) ? 1 : 0,
+            'sim_enable_spelling_variants' => isset($_POST['sim_enable_spelling_variants']) ? 1 : 0,
         );
         
         foreach ($settings as $option => $value) {
             update_option($option, $value);
         }
+        
+        // Clear cache when settings change
+        SIM_Cache::clear_all_transients();
         
         add_settings_error(
             'sim_settings',

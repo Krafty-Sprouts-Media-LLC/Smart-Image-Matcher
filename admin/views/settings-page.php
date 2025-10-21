@@ -3,9 +3,9 @@
  * Filename: settings-page.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.1.0
- * Last Modified: 12/10/2025
- * Description: Settings page view with image naming best practices and match limit configuration
+ * Version: 1.2.0
+ * Last Modified: 21/10/2025
+ * Description: Settings page with enhanced linguistic options (stemming, spelling variants)
  */
 
 if (!defined('ABSPATH')) {
@@ -25,6 +25,8 @@ $cost_warnings = get_option('sim_cost_warnings', true);
 $email_notifications = get_option('sim_email_notifications', true);
 $auto_fallback_keyword = get_option('sim_auto_fallback_keyword', true);
 $delete_on_uninstall = get_option('sim_delete_on_uninstall', true);
+$enable_stemming = get_option('sim_enable_stemming', true);
+$enable_spelling_variants = get_option('sim_enable_spelling_variants', true);
 ?>
 
 <div class="wrap">
@@ -115,6 +117,52 @@ $delete_on_uninstall = get_option('sim_delete_on_uninstall', true);
                 <td>
                     <input type="number" name="sim_max_matches_per_heading" id="sim_max_matches_per_heading" value="<?php echo esc_attr($max_matches_per_heading); ?>" min="1" max="10" step="1">
                     <p class="description"><?php esc_html_e('Maximum number of alternative images to show for each heading (1-10). Use carousel arrows to browse alternatives. Default: 3', 'smart-image-matcher'); ?></p>
+                </td>
+            </tr>
+        </table>
+        
+        <h2><?php esc_html_e('Linguistic Enhancements', 'smart-image-matcher'); ?></h2>
+        
+        <div class="notice notice-success" style="margin: 10px 0 20px 0; padding: 12px;">
+            <p style="margin: 0;">
+                <span class="dashicons dashicons-yes-alt" style="color: #46b450;"></span>
+                <strong><?php esc_html_e('Enhanced Text Matching:', 'smart-image-matcher'); ?></strong>
+                <?php esc_html_e('These features improve matching accuracy by recognizing linguistic variations in your content and image metadata.', 'smart-image-matcher'); ?>
+            </p>
+        </div>
+        
+        <table class="form-table">
+            <tr>
+                <th scope="row"><?php esc_html_e('Text Recognition Options', 'smart-image-matcher'); ?></th>
+                <td>
+                    <label>
+                        <input type="checkbox" name="sim_enable_stemming" value="1" <?php checked($enable_stemming, 1); ?>>
+                        <strong><?php esc_html_e('Enable Stemming (Singular/Plural)', 'smart-image-matcher'); ?></strong>
+                    </label>
+                    <p class="description" style="margin-left: 25px; margin-bottom: 15px;">
+                        <?php esc_html_e('Matches singular and plural forms: "bird" ↔ "birds", "child" ↔ "children", "leaf" ↔ "leaves". Also handles possessives: "bird\'s nest" = "birds nest"', 'smart-image-matcher'); ?>
+                        <br>
+                        <em style="color: #666;"><?php esc_html_e('Examples: Heading "Red Birds" will match image "red-bird.jpg" | Heading "Bird\'s Wings" matches "bird-wings.jpg"', 'smart-image-matcher'); ?></em>
+                    </p>
+                    
+                    <label>
+                        <input type="checkbox" name="sim_enable_spelling_variants" value="1" <?php checked($enable_spelling_variants, 1); ?>>
+                        <strong><?php esc_html_e('Enable Spelling Variants (US/British)', 'smart-image-matcher'); ?></strong>
+                    </label>
+                    <p class="description" style="margin-left: 25px; margin-bottom: 10px;">
+                        <?php esc_html_e('Recognizes US/British spelling differences: "color" ↔ "colour", "gray" ↔ "grey", "organize" ↔ "organise", "center" ↔ "centre", and 30+ more variants.', 'smart-image-matcher'); ?>
+                        <br>
+                        <em style="color: #666;"><?php esc_html_e('Examples: Heading "Grey Wolf" matches "gray-wolf.jpg" | "Color Theory" matches "colour-theory.jpg"', 'smart-image-matcher'); ?></em>
+                    </p>
+                    
+                    <div style="margin-top: 15px; padding: 10px; background: #f0f6fc; border-left: 4px solid #2271b1;">
+                        <strong><?php esc_html_e('Already Handled:', 'smart-image-matcher'); ?></strong>
+                        <ul style="margin: 5px 0 0 20px; line-height: 1.6;">
+                            <li><?php esc_html_e('✓ Slashes, hyphens, special characters: "female/immature" = "female immature"', 'smart-image-matcher'); ?></li>
+                            <li><?php esc_html_e('✓ Case variations: "Bird" = "bird" = "BIRD"', 'smart-image-matcher'); ?></li>
+                            <li><?php esc_html_e('✓ Common separators: commas, pipes, semicolons converted to spaces', 'smart-image-matcher'); ?></li>
+                        </ul>
+                    </div>
                 </td>
             </tr>
         </table>

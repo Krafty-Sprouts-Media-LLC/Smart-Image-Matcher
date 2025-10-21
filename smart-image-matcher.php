@@ -3,7 +3,7 @@
  * Plugin Name: Smart Image Matcher
  * Plugin URI: https://kraftysprouts.com
  * Description: Automatically scans the media library and intelligently attaches relevant images to headings within posts and pages. Offers keyword-based and AI-powered matching.
- * Version: 1.8.0
+ * Version: 1.9.0
  * Author: Krafty Sprouts Media, LLC
  * Author URI: https://kraftysprouts.com
  * License: GPL v2 or later
@@ -15,16 +15,16 @@
  * Filename: smart-image-matcher.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.8.0
- * Last Modified: 12/10/2025
- * Description: Main plugin file for Smart Image Matcher
+ * Version: 1.9.0
+ * Last Modified: 21/10/2025
+ * Description: Main plugin file with enhanced linguistic matching capabilities
  */
 
 if (!defined('ABSPATH')) {
     exit;
 }
 
-define('SIM_VERSION', '1.8.0');
+define('SIM_VERSION', '1.9.0');
 define('SIM_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('SIM_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('SIM_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -32,6 +32,7 @@ define('SIM_PLUGIN_BASENAME', plugin_basename(__FILE__));
 define('SIM_MAX_API_CALLS_PER_HOUR', 50);
 define('SIM_MAX_API_CALLS_PER_DAY', 500);
 
+require_once SIM_PLUGIN_DIR . 'includes/class-sim-normalizer.php';
 require_once SIM_PLUGIN_DIR . 'includes/class-sim-core.php';
 require_once SIM_PLUGIN_DIR . 'includes/class-sim-matcher.php';
 require_once SIM_PLUGIN_DIR . 'includes/class-sim-ai.php';
@@ -129,6 +130,8 @@ function sim_set_default_options() {
         'sim_delete_on_uninstall' => true,
         'sim_cache_media_library_duration' => 86400,
         'sim_cache_match_results_duration' => 3600,
+        'sim_enable_stemming' => true,
+        'sim_enable_spelling_variants' => true,
     );
     
     foreach ($defaults as $option => $value) {
