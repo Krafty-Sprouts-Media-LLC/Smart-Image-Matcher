@@ -3,8 +3,8 @@
  * Filename: class-sim-admin.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.0.7
- * Last Modified: 12/10/2025
+ * Version: 1.0.8
+ * Last Modified: 22/10/2025
  * Description: Admin interface for post editor button and modal
  * Supports both Classic Editor and Gutenberg Block Editor
  * Includes image naming tips in modal and settings page
@@ -124,6 +124,16 @@ class SIM_Admin {
     }
     
     public static function add_admin_bar_button($wp_admin_bar) {
+        // Only show in admin area - get_current_screen() is not available on frontend
+        if (!is_admin()) {
+            return;
+        }
+        
+        // Check if get_current_screen() function exists (extra safety check)
+        if (!function_exists('get_current_screen')) {
+            return;
+        }
+        
         $screen = get_current_screen();
         
         if (!$screen || !in_array($screen->id, array('post', 'page'))) {
@@ -147,6 +157,11 @@ class SIM_Admin {
     }
     
     public static function add_modal_to_footer() {
+        // Check if get_current_screen() function exists (should be in admin context)
+        if (!function_exists('get_current_screen')) {
+            return;
+        }
+        
         $screen = get_current_screen();
         
         if (!$screen || !in_array($screen->id, array('post', 'page'))) {

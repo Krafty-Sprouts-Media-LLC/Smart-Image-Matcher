@@ -5,6 +5,28 @@ All notable changes to Smart Image Matcher will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1] - 22/10/2025
+
+### Fixed
+- **CRITICAL: Fixed Fatal Error on Frontend** - Call to undefined function `get_current_screen()`
+- Added `is_admin()` check in `add_admin_bar_button()` to prevent frontend execution
+- Added `function_exists('get_current_screen')` safety checks in admin methods
+- Admin bar button now only appears in admin area (where it's functional)
+- Modal footer also protected with function existence check
+
+### Technical
+- Updated `class-sim-admin.php` to v1.0.8
+- `get_current_screen()` only exists in WordPress admin context, not frontend
+- Admin bar renders on both frontend/backend when user logged in, causing error
+- Fixed stack trace: wp_body_open() → admin_bar_menu → get_current_screen()
+
+### Error Details
+- Error occurred when admin bar rendered on frontend while user logged in
+- Theme called `wp_body_open()` → WordPress rendered admin bar → plugin called undefined function
+- Now properly checks execution context before using admin-only functions
+
+---
+
 ## [2.0.0] - 21/10/2025
 
 ### 🚀 MAJOR RELEASE - Gutenberg Integration
