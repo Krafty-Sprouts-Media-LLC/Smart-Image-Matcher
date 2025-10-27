@@ -3,8 +3,8 @@
  * Filename: class-sim-normalizer.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 21/10/2025
- * Version: 1.0.0
- * Last Modified: 21/10/2025
+ * Version: 1.0.5
+ * Last Modified: 27/10/2025
  * Description: Advanced text normalization with stemming, spelling variants, and linguistic enhancements
  */
 
@@ -96,8 +96,8 @@ class SIM_Normalizer {
         // "birds' nests" -> "birds nests"
         $text = preg_replace("/([a-z])'s?\b/", '$1', $text);
         
-        // Replace common separators with spaces
-        $text = str_replace(array('/', ',', '|', ';', ':', '(', ')', '[', ']'), ' ', $text);
+        // Replace common separators with spaces (including hyphens and underscores)
+        $text = str_replace(array('/', ',', '|', ';', ':', '(', ')', '[', ']', '-', '_'), ' ', $text);
         
         // Remove remaining special characters (keep only letters, numbers, spaces, hyphens)
         $text = preg_replace('/[^a-z0-9\s-]/', '', $text);
@@ -113,13 +113,18 @@ class SIM_Normalizer {
             'should', 'may', 'might', 'can', 'this', 'that', 'these', 'those'
         );
         
-        $keywords = array_filter($words, function($word) use ($stop_words) {
-            return strlen($word) > 2 && !in_array($word, $stop_words);
+        // Get whitelisted short words from settings
+        $whitelisted_short_words = get_option('sim_whitelisted_short_words', 'io');
+        $whitelist = array_map('trim', explode(',', $whitelisted_short_words));
+        $whitelist = array_filter($whitelist); // Remove empty entries
+        
+        $keywords = array_filter($words, function($word) use ($stop_words, $whitelist) {
+            return (strlen($word) > 1 || in_array($word, $whitelist)) && !in_array($word, $stop_words);
         });
         
         // Apply stemming if enabled
         if ($enable_stemming) {
-            $keywords = array_map(array('self', 'stem_word'), $keywords);
+            $keywords = array_map(array('SIM_Normalizer', 'stem_word'), $keywords);
         }
         
         // Generate spelling variants if enabled

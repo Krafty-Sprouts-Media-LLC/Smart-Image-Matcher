@@ -2,8 +2,8 @@
  * Filename: sim-editor.js
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.5.0
- * Last Modified: 12/10/2025
+ * Version: 1.1.2
+ * Last Modified: 26/10/2025
  * 
  * Simplified UX: No undo, just insert and reload with clear notices
  * Warning notice reminds users to review matches before inserting
@@ -28,6 +28,7 @@
         $(document).on('click', '#sim-gutenberg-button', openModal);
         $(document).on('click', '.sim-carousel-prev', navigatePrev);
         $(document).on('click', '.sim-carousel-next', navigateNext);
+        $(document).on('change', '.sim-select-checkbox', handleCheckboxChange);
         
         // Keyboard navigation
         $(document).on('keydown', function(e) {
@@ -76,6 +77,11 @@
 
     function findMatches() {
         updateProgress(30);
+        
+        console.log('SIM: Starting AJAX request');
+        console.log('SIM: AJAX URL:', simEditor.ajaxUrl);
+        console.log('SIM: Nonce:', simEditor.nonce);
+        console.log('SIM: Post ID:', simEditor.postId);
 
         $.ajax({
             url: simEditor.ajaxUrl,
@@ -87,17 +93,26 @@
                 mode: 'keyword'
             },
             success: function(response) {
+                console.log('SIM: AJAX success response:', response);
                 updateProgress(100);
                 
                 if (response.success) {
                     currentMatches = response.data.matches;
                     displayResults();
                 } else {
+                    console.error('SIM: AJAX success but response.error:', response.data);
                     showError(response.data.message);
                 }
             },
             error: function(xhr, status, error) {
-                showError('AJAX error: ' + error);
+                console.error('SIM: AJAX error details:', {
+                    xhr: xhr,
+                    status: status,
+                    error: error,
+                    responseText: xhr.responseText,
+                    statusText: xhr.statusText
+                });
+                showError('AJAX error: ' + error + ' (Status: ' + xhr.status + ')');
             }
         });
     }
@@ -155,7 +170,7 @@
         
         let html = '<div class="sim-match-item" data-heading-position="' + heading.position + '" data-image-id="' + match.image_id + '" data-all-matches=\'' + JSON.stringify(matches) + '\'>';
         html += '<div class="sim-match-heading">';
-        html += '<span class="dashicons dashicons-yes"></span>';
+        html += SimSvgIcons.check();
         html += '<span>' + heading.tag.toUpperCase() + ': ' + escapeHtml(heading.text) + '</span>';
         html += '</div>';
         
@@ -163,7 +178,7 @@
         if (totalMatches > 1) {
             html += '<div class="sim-carousel-controls">';
             html += '<button type="button" class="button sim-carousel-prev" ' + (currentIndex === 0 ? 'disabled' : '') + '>';
-            html += '<span class="dashicons dashicons-arrow-left-alt2"></span> Prev';
+            html += SimSvgIcons.arrowLeft() + ' Prev';
             html += '</button>';
             html += '<span class="sim-carousel-counter">';
             if (currentIndex === 0) {
@@ -172,7 +187,7 @@
             html += '<strong>Image <span class="sim-current-index">' + (currentIndex + 1) + '</span> of ' + totalMatches + '</strong>';
             html += '</span>';
             html += '<button type="button" class="button sim-carousel-next" ' + (currentIndex === totalMatches - 1 ? 'disabled' : '') + '>';
-            html += 'Next <span class="dashicons dashicons-arrow-right-alt2"></span>';
+            html += 'Next ' + SimSvgIcons.arrowRight();
             html += '</button>';
             html += '</div>';
         }
@@ -208,11 +223,11 @@
     function createNoMatchHtml(heading) {
         let html = '<div class="sim-match-item no-match">';
         html += '<div class="sim-match-heading">';
-        html += '<span class="dashicons dashicons-no"></span>';
+        html += SimSvgIcons.close();
         html += '<span>' + heading.tag.toUpperCase() + ': ' + escapeHtml(heading.text) + '</span>';
         html += '</div>';
         html += '<div class="sim-no-match-warning">';
-        html += '<span class="dashicons dashicons-warning"></span>';
+        html += SimSvgIcons.warning();
         html += '<span>' + simEditor.strings.noMatches + '</span>';
         html += '</div>';
         html += '</div>';
@@ -510,6 +525,31 @@
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+    
+    function handleCheckboxChange() {
+        const $checkbox = $(this);
+        const $label = $checkbox.parent();
+        const isChecked = $checkbox.is(':checked');
+        
+        // Update the text based on checkbox state
+        if (isChecked) {
+            $label.contents().last()[0].textContent = ' Selected';
+        } else {
+            $label.contents().last()[0].textContent = ' Select';
+        }
+        
+        // Update icon based on checkbox state
+        const $matchItem = $checkbox.closest('.sim-match-item');
+        const $iconContainer = $matchItem.find('.sim-match-heading');
+        
+        if (isChecked) {
+            // Show checkmark
+            $iconContainer.find('.sim-svg-icon').replaceWith(SimSvgIcons.check());
+        } else {
+            // Show X
+            $iconContainer.find('.sim-svg-icon').replaceWith(SimSvgIcons.close());
+        }
     }
 
 })(jQuery);

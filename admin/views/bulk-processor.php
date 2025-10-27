@@ -15,13 +15,13 @@ if (!defined('ABSPATH')) {
 
 <div class="wrap sim-bulk-container">
     <h1>
-        <span class="dashicons dashicons-format-image" style="font-size: 32px; width: 32px; height: 32px;"></span>
+        <span class="sim-svg-icon sim-icon-image" style="font-size: 32px; width: 32px; height: 32px;"></span>
         <?php esc_html_e('Bulk Processor', 'smart-image-matcher'); ?>
     </h1>
     
     <div class="notice notice-info" style="margin: 20px 0; padding: 15px;">
         <h3 style="margin-top: 0;">
-            <span class="dashicons dashicons-info"></span>
+            <span class="sim-svg-icon sim-icon-info"></span>
             <?php esc_html_e('Coming Soon - Phase 7', 'smart-image-matcher'); ?>
         </h3>
         <p><?php esc_html_e('The Bulk Processor will allow you to process multiple posts at once. This feature is currently in development.', 'smart-image-matcher'); ?></p>
@@ -32,7 +32,7 @@ if (!defined('ABSPATH')) {
         
         <div class="sim-bulk-step" style="margin: 15px 0; padding: 15px; background: #f9f9f9; border-left: 4px solid #2271b1;">
             <h3 style="margin-top: 0;">
-                <span class="dashicons dashicons-admin-post"></span>
+                <span class="sim-svg-icon sim-icon-post"></span>
                 <?php esc_html_e('Step 1: Select Posts', 'smart-image-matcher'); ?>
             </h3>
             <p><?php esc_html_e('Select multiple posts/pages to process in batch. Filter by category, tag, date range, or post status.', 'smart-image-matcher'); ?></p>
@@ -40,7 +40,7 @@ if (!defined('ABSPATH')) {
         
         <div class="sim-bulk-step" style="margin: 15px 0; padding: 15px; background: #f9f9f9; border-left: 4px solid #2271b1;">
             <h3 style="margin-top: 0;">
-                <span class="dashicons dashicons-admin-settings"></span>
+                <span class="sim-svg-icon sim-icon-settings"></span>
                 <?php esc_html_e('Step 2: Configure Processing', 'smart-image-matcher'); ?>
             </h3>
             <p><?php esc_html_e('Choose matching mode (Keyword/AI), confidence threshold, and processing options.', 'smart-image-matcher'); ?></p>
@@ -48,7 +48,7 @@ if (!defined('ABSPATH')) {
         
         <div class="sim-bulk-step" style="margin: 15px 0; padding: 15px; background: #f9f9f9; border-left: 4px solid #2271b1;">
             <h3 style="margin-top: 0;">
-                <span class="dashicons dashicons-yes-alt"></span>
+                <span class="sim-svg-icon sim-icon-success"></span>
                 <?php esc_html_e('Step 3: Review & Approve', 'smart-image-matcher'); ?>
             </h3>
             <p><?php esc_html_e('Review all matches in a queue, approve/reject individually, and insert approved images.', 'smart-image-matcher'); ?></p>
@@ -56,7 +56,7 @@ if (!defined('ABSPATH')) {
         
         <div class="sim-bulk-step" style="margin: 15px 0; padding: 15px; background: #f9f9f9; border-left: 4px solid #2271b1;">
             <h3 style="margin-top: 0;">
-                <span class="dashicons dashicons-chart-bar"></span>
+                <span class="sim-svg-icon sim-icon-chart"></span>
                 <?php esc_html_e('Step 4: Monitor Progress', 'smart-image-matcher'); ?>
             </h3>
             <p><?php esc_html_e('Track processing progress with real-time updates, view statistics, and download reports.', 'smart-image-matcher'); ?></p>

@@ -5,6 +5,326 @@ All notable changes to Smart Image Matcher will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.1] - 27/10/2025
+
+### Fixed
+- **Io Moth Caterpillar Issue** - Fixed "Io" being filtered out as too short (2 characters)
+- **Short Word Filtering** - Reduced minimum word length from 3 to 2 characters
+- **Species Name Recognition** - Now properly recognizes short species names like "Io"
+
+### Added
+- **Whitelisted Short Words Setting** - New setting to specify short words that should never be filtered
+- **User Control** - Users can add custom short words (e.g., "io, id, ok") via settings page
+- **Default Whitelist** - "io" is included by default for Io moth species
+
+### Changed
+- **Word Processing** - Short words are now preserved if they're in the whitelist or longer than 1 character
+- **Settings Page** - Added "Whitelisted Short Words" field in Linguistic Enhancements section
+
+## [2.4.0] - 27/10/2025
+
+### Fixed
+- **Scoring Algorithm** - Fixed exact matches not appearing in top 5 results
+- **Hyphen Consistency** - Fixed hyphen processing mismatch between normalizer and matcher
+- **Exact Phrase Override** - Perfect matches now get 100% score with no penalties
+- **Penalty Severity** - Reduced penalties from 10%/18%/25% to 5%/10%/15% for better matching
+
+### Changed
+- **Exact Matches** - Files like "white-lined-sphinx-caterpillar" now properly match "White-lined Sphinx Caterpillar"
+- **Penalty System** - Only applies to non-exact matches, preserving perfect matches
+
+## [2.3.3] - 27/10/2025
+
+### Fixed
+- **Default Selection** - Images are now selected by default when modal opens
+- **Icon States** - Unselected images now show X icon instead of red checkmark
+- **User Experience** - Clearer visual feedback for selected/unselected states
+
+## [2.3.2] - 27/10/2025
+
+### Fixed
+- **PHP Fatal Error** - Fixed "Using $this when not in object context" in class-sim-normalizer.php
+- **PHP Deprecated Warning** - Fixed "Use of 'self' in callables is deprecated" by using full class name
+- **AJAX 500 Error** - Resolved "AJAX error: Internal Server Error" that was preventing image matching
+
+## [2.3.1] - 27/10/2025
+
+### Added
+- Comprehensive debug logging for AJAX requests to help diagnose "AJAX error:" issues
+- Enhanced error reporting in JavaScript console with detailed request/response information
+- Better error handling with try-catch blocks for nonce verification
+
+### Changed
+- Improved AJAX error messages to include HTTP status codes
+- Enhanced console logging for debugging AJAX communication issues
+
+## [2.3.0] - 27/10/2025
+
+### Fixed
+- **Dashboard Menu Icon Visibility** - Fixed very dark icon that was difficult to see
+- **Icon Color** - Changed from `currentColor` to light gray (`#666666`) for better visibility
+- **User Experience** - Dashboard menu icon now clearly visible against dark WordPress admin background
+
+### Technical
+- Updated `includes/class-sim-core.php` to v1.1.0
+- Changed SVG stroke and fill colors from `currentColor` to `#666666`
+- Improved icon visibility in WordPress admin sidebar
+- Maintained consistent icon design between dashboard and Gutenberg toolbar
+
+---
+
+## [2.2.9] - 27/10/2025
+
+### Fixed
+- **PHP Parse Error** - Fixed syntax error caused by long base64 string in add_menu_page
+- **Code Structure** - Moved base64 icon string to variable for better readability
+- **Plugin Stability** - Resolved PHP parse errors that were breaking the plugin
+
+### Technical
+- Updated `includes/class-sim-core.php` to v1.0.13
+- Extracted long base64 string into `$sim_icon_base64` variable
+- Improved code maintainability and readability
+- Fixed PHP syntax error on line 144
+
+---
+
+## [2.2.8] - 27/10/2025
+
+### Fixed
+- **Icon Consistency** - Fixed different icons between dashboard menu and Gutenberg toolbar
+- **Visual Uniformity** - Both locations now use identical SVG icon design
+- **User Experience** - Consistent visual branding across all plugin interfaces
+
+### Technical
+- Updated `includes/class-sim-core.php` to v1.0.12
+- Replaced simple `<rect>` with complex `<path>` in dashboard menu icon
+- Synchronized SVG paths between dashboard and Gutenberg toolbar icons
+- Both icons now use identical rounded rectangle frame with same styling
+
+---
+
+## [2.2.7] - 27/10/2025
+
+### Changed
+- **Plugin Name** - Changed dashboard menu name from "Smart Image Matcher" to "SIM"
+- **Admin Menu** - Simplified sidebar menu display for better space efficiency
+- **Branding** - Shorter, cleaner plugin name in WordPress admin
+
+### Technical
+- Updated `smart-image-matcher.php` to v2.2.7
+- Updated `includes/class-sim-core.php` to v1.0.11
+- Changed `add_menu_page` second parameter to display "SIM" instead of full name
+- Maintained full plugin name in page titles and descriptions
+
+---
+
+## [2.2.6] - 27/10/2025
+
+### Fixed
+- **Toolbar Icon Display** - Fixed icon not appearing in right side toolbar (3 dots menu)
+- **Proper Integration** - Now uses PluginSidebarMoreMenuItem like Yoast, Jetpack, and other plugins
+- **Icon Placement** - Icon now appears in the correct location (right side toolbar)
+
+### Enhanced
+- **User Experience** - Icon now appears where users expect it (with other plugin icons)
+- **Consistency** - Matches exactly how professional plugins integrate with Gutenberg
+- **Sidebar Integration** - Added proper sidebar that opens when icon is clicked
+
+### Technical
+- Updated `admin/js/sim-gutenberg-plugin.js` to v1.0.5
+- Updated `includes/class-sim-core.php` to v1.0.10
+- Added `wp-block-editor` dependency for proper ToolbarButton support
+- Implemented PluginSidebarMoreMenuItem for right-side toolbar integration
+- Added PluginSidebar with button to open modal
+- Removed duplicate menu items and simplified structure
+
+---
+
+## [2.2.5] - 27/10/2025
+
+### Fixed
+- **PHP Deprecated Warning** - Fixed "Use of 'self' in callables is deprecated" in class-sim-normalizer.php
+- **JavaScript Errors** - Fixed "ToolbarButton is not defined" error
+- **Deprecated API Warnings** - Fixed wp.editPost.PluginSidebarMoreMenuItem deprecation warnings
+- **Plugin Rendering** - Plugin now renders without errors
+
+### Enhanced
+- **WordPress 6.6 Compatibility** - Updated to use wp.editor instead of wp.editPost
+- **Error Handling** - Improved error handling and compatibility
+- **Code Quality** - Fixed all deprecated function calls
+
+### Technical
+- Updated `admin/js/sim-gutenberg-plugin.js` to v1.0.4
+- Updated `includes/class-sim-normalizer.php` to v1.0.1
+- Fixed array_map callable from 'self' to '$this'
+- Added missing ToolbarButton import from wp.components
+- Updated PluginSidebarMoreMenuItem import to wp.editor
+- Removed duplicate imports causing conflicts
+
+---
+
+## [2.2.4] - 27/10/2025
+
+### Fixed
+- **Toolbar Button Rendering** - Fixed black spot issue by using proper Gutenberg ToolbarButton API
+- Button now renders correctly as proper icon instead of black spot
+- Removed custom DOM injection in favor of official Gutenberg API
+- Button now appears in toolbar like other plugins (Yoast, Jetpack, etc.)
+
+### Enhanced
+- **Proper Integration** - Now uses `wp.blockEditor.ToolbarButton` component
+- **Consistency** - Matches exactly how Paranumberer and other plugins work
+- **Reliability** - No more custom toolbar injection that could break
+
+### Technical
+- Updated `admin/js/sim-gutenberg-plugin.js` to v1.0.3
+- Updated `includes/class-sim-admin.php` to v1.1.1
+- Removed custom toolbar injection code (60+ lines)
+- Added proper `SimToolbarButton` component using `createElement(ToolbarButton, ...)`
+- Button now renders through official Gutenberg plugin registration
+
+---
+
+## [2.2.3] - 27/10/2025
+
+### Fixed
+- **Toolbar Button Position** - Moved Smart Image Matcher button to right side toolbar as icon
+- Button now appears as proper icon button like other Gutenberg plugins
+- Updated toolbar selectors to target right side toolbar groups
+- Improved button styling to match Gutenberg design standards
+- Added proper hover and focus states for better UX
+
+### Enhanced
+- **Visual Design** - Button now displays as 36x36px icon-only button
+- **User Experience** - Proper tooltip and hover effects
+- **Consistency** - Matches WordPress Gutenberg toolbar button design
+- **Accessibility** - Proper focus states and keyboard navigation
+
+### Technical
+- Updated `includes/class-sim-admin.php` to v1.1.0
+- Updated `admin/css/sim-admin.css` to v1.0.1
+- Added right-side toolbar selectors: `.edit-post-header__toolbar-right`, `.editor-document-tools__right`
+- Improved button styling with proper dimensions and hover states
+- Enhanced CSS for Gutenberg toolbar integration
+
+---
+
+## [2.2.2] - 27/10/2025
+
+### Fixed
+- **WordPress 6.6 Compatibility** - Fixed deprecated API warnings in Gutenberg plugin
+- Updated `PluginDocumentSettingPanel` import from `wp.editPost` to `wp.editor`
+- Updated `PluginMoreMenuItem` import from `wp.editPost` to `wp.editor`
+- Improved Gutenberg toolbar detection with additional selectors for WordPress 6.6+
+- Enhanced retry logic with better debugging and error handling
+
+### Technical
+- Updated `admin/js/sim-gutenberg-plugin.js` to v1.0.2
+- Updated `includes/class-sim-admin.php` to v1.0.9
+- Added modern toolbar selectors: `.edit-post-header-toolbar__left`, `.editor-header-toolbar__left`, `.block-editor-block-toolbar`
+- Improved retry mechanism with attempt counting and better error messages
+- Fixed variable scope issues in toolbar detection logic
+
+---
+
+## [2.2.1] - 27/10/2025
+
+### Fixed
+- **JSX Syntax Error** - Fixed `Uncaught SyntaxError: Unexpected token '<'` in Gutenberg plugin
+- Gutenberg toolbar button now loads without JavaScript errors
+- Converted all JSX syntax to proper JavaScript using `wp.element.createElement`
+- Plugin now fully compatible with WordPress Gutenberg editor
+
+### Technical
+- Updated `admin/js/sim-gutenberg-plugin.js` to v1.0.1
+- Converted JSX `<svg>` elements to `createElement('svg', ...)`
+- Converted JSX `<Button>` components to `createElement(Button, ...)`
+- Converted JSX `<PluginDocumentSettingPanel>` to `createElement(PluginDocumentSettingPanel, ...)`
+- Converted JSX `<PluginMoreMenuItem>` to `createElement(PluginMoreMenuItem, ...)`
+- Added proper `createElement` import from `wp.element`
+
+---
+
+## [2.2.0] - 26/10/2025
+
+### 🚀 MAJOR RELEASE - SVG Icon Migration
+
+This is a significant architectural improvement replacing deprecated Dashicons with modern SVG icons throughout the entire plugin, following WordPress Design Team recommendations.
+
+### Replaced
+- **Dashicons Dependency Removed** - Eliminated all Dashicons usage across the plugin
+- **Custom SVG Icon System** - Implemented comprehensive SVG icon library
+- **Modern Icon Standards** - Following WordPress Design Team recommendations for icon usage
+- **Future-Proof Architecture** - No longer dependent on deprecated icon fonts
+
+### Added
+- **Custom SVG Icon Library** - Complete set of 11 custom SVG icons
+- **Automatic Icon Replacement** - JavaScript-based Dashicons to SVG conversion
+- **Scalable Vector Graphics** - Crisp rendering at all screen sizes and resolutions
+- **Consistent Icon Styling** - Unified color scheme and sizing across all icons
+
+### Enhanced
+- **Icon Quality** - Vector-based icons provide better rendering than icon fonts
+- **Performance** - Reduced dependency on WordPress Dashicons CSS
+- **Accessibility** - Better screen reader support with semantic SVG markup
+- **Maintainability** - Self-contained icon system independent of WordPress updates
+
+### Technical
+- Created `admin/js/sim-svg-icons.js` - Complete SVG icon library
+- Updated all JavaScript files to use SVG icons instead of Dashicons
+- Updated all PHP files to use SVG icons instead of Dashicons
+- Updated all view templates to use SVG icons instead of Dashicons
+- Added comprehensive CSS styling for SVG icons
+- Updated admin menu to use base64-encoded SVG icon
+- Enhanced icon color system with proper CSS classes
+
+### Icons Replaced
+- ✅ Check/Yes icons (with dynamic color states)
+- ❌ Close/No icons
+- ⬅️ Arrow left icons
+- ➡️ Arrow right icons
+- ⚠️ Warning icons
+- 🖼️ Image/Format icons
+- 💡 Lightbulb icons
+- ℹ️ Info icons
+- 📄 Post icons
+- ⚙️ Settings icons
+- 📊 Chart/Stats icons
+- ✅ Success/Check circle icons
+
+---
+
+## [2.1.1] - 26/10/2025
+
+### Enhanced
+- **Dynamic Checkmark Color** - Checkmark now turns red when checkbox is unchecked
+- Visual feedback system: Green checkmark = selected, Red checkmark = unselected
+- Enhanced user experience with clear visual state indicators
+
+### Technical
+- Updated `admin/js/sim-editor.js` to v1.1.0
+- Added `.sim-match-heading .dashicons-yes.unselected` CSS class for red checkmark state
+- Checkmark color toggles dynamically based on checkbox state
+- Enhanced `handleCheckboxChange()` function to manage checkmark color
+
+---
+
+## [2.0.2] - 26/10/2025
+
+### Fixed
+- **Checkbox Text Display Issue** - Fixed checkbox text showing "Selected" when unchecked
+- Checkbox now correctly displays "Select" when unchecked and "Selected" when checked
+- Added dynamic text update handler for checkbox state changes
+- Improved user experience with accurate visual feedback
+
+### Technical
+- Updated `admin/js/sim-editor.js` to v1.0.9
+- Added `handleCheckboxChange()` function for dynamic text updates
+- Added event listener for `.sim-select-checkbox` change events
+- Checkboxes now start unchecked with "Select" text by default
+
+---
+
 ## [2.0.1] - 22/10/2025
 
 ### Fixed

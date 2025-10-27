@@ -3,7 +3,7 @@
  * Filename: class-sim-matcher.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.3.0
+ * Version: 1.3.1
  * Last Modified: 21/10/2025
  * Description: Matching engine with enhanced linguistic support (stemming, spelling variants, possessive handling)
  * 
@@ -172,7 +172,7 @@ class SIM_Matcher {
         });
         
         // Get configurable max matches (default 3)
-        $max_matches = get_option('sim_max_matches_per_heading', 3);
+        $max_matches = get_option('sim_max_matches_per_heading', 5);
         
         return array_slice($scored_images, 0, $max_matches);
     }
@@ -257,32 +257,37 @@ class SIM_Matcher {
         if ($filename_matches > 0) {
             $filename_score = ($filename_matches / count($heading_keywords)) * 100;
             
-            // Bonus for exact phrase match in filename
-            if (strpos($filename, $heading_text) !== false) {
-                $filename_score = 100;
-            }
+            // Check for exact phrase match (normalize both for comparison)
+            $filename_normalized = str_replace(['-', '_'], ' ', $filename);
+            $heading_normalized = str_replace(['-', '_'], ' ', $heading_text);
             
-            // Smart penalty/bonus for word count matching
-            $extra_words = count($filename_words) - count($heading_keywords);
-            
-            if ($extra_words === 0) {
-                // PERFECT: Exact word count match - BOOST
-                $filename_score = min($filename_score * 1.1, 100); // 10% bonus
-            } elseif ($extra_words > 0) {
-                // Penalty for extra words - graduated scale
-                // 1 extra word = 10% penalty
-                // 2 extra words = 18% penalty
-                // 3+ extra words = 25% penalty
-                if ($extra_words === 1) {
-                    $filename_score *= 0.90; // 10% penalty
-                } elseif ($extra_words === 2) {
-                    $filename_score *= 0.82; // 18% penalty
-                } else {
-                    $filename_score *= 0.75; // 25% penalty for 3+ extra words
+            if (strpos($filename_normalized, $heading_normalized) !== false) {
+                $filename_score = 100; // Perfect match gets maximum score - NO PENALTIES
+                $scores[] = array('field' => 'filename', 'score' => $filename_score, 'weight' => 1.0);
+                // Skip penalty system for exact matches
+            } else {
+                // Smart penalty/bonus for word count matching (only for non-exact matches)
+                $extra_words = count($filename_words) - count($heading_keywords);
+                
+                if ($extra_words === 0) {
+                    // PERFECT: Exact word count match - BOOST
+                    $filename_score = min($filename_score * 1.1, 100); // 10% bonus
+                } elseif ($extra_words > 0) {
+                    // Reduced penalty for extra words - lighter scale
+                    // 1 extra word = 5% penalty (was 10%)
+                    // 2 extra words = 10% penalty (was 18%)
+                    // 3+ extra words = 15% penalty (was 25%)
+                    if ($extra_words === 1) {
+                        $filename_score *= 0.95; // 5% penalty
+                    } elseif ($extra_words === 2) {
+                        $filename_score *= 0.90; // 10% penalty
+                    } else {
+                        $filename_score *= 0.85; // 15% penalty for 3+ extra words
+                    }
                 }
+                
+                $scores[] = array('field' => 'filename', 'score' => $filename_score, 'weight' => 1.0);
             }
-            
-            $scores[] = array('field' => 'filename', 'score' => $filename_score, 'weight' => 1.0);
         }
         
         // Score 2: Title matching (90 points + intentional bonus)

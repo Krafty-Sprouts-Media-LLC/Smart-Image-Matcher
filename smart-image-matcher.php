@@ -3,7 +3,7 @@
  * Plugin Name: Smart Image Matcher
  * Plugin URI: https://kraftysprouts.com
  * Description: Automatically scans the media library and intelligently attaches relevant images to headings within posts and pages. Offers keyword-based and AI-powered matching.
- * Version: 2.0.1
+ * Version: 2.4.1
  * Author: Krafty Sprouts Media, LLC
  * Author URI: https://kraftysprouts.com
  * License: GPL v2 or later
@@ -15,8 +15,8 @@
  * Filename: smart-image-matcher.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 2.0.1
- * Last Modified: 22/10/2025
+ * Version: 2.4.1
+ * Last Modified: 26/10/2025
  * Description: Main plugin file with Gutenberg toolbar integration and custom SVG icon
  */
 
@@ -24,7 +24,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('SIM_VERSION', '2.0.1');
+define('SIM_VERSION', '2.4.1');
 define('SIM_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('SIM_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('SIM_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -118,7 +118,7 @@ function sim_set_default_options() {
         'sim_confidence_threshold' => 70,
         'sim_hierarchy_mode' => 'smart',
         'sim_heading_overlap_threshold' => 70,
-        'sim_max_matches_per_heading' => 3,
+        'sim_max_matches_per_heading' => 5,
         'sim_minimum_image_spacing' => 300,
         'sim_claude_api_key' => '',
         'sim_claude_model' => 'claude-sonnet-4-20250514',
@@ -132,6 +132,7 @@ function sim_set_default_options() {
         'sim_cache_match_results_duration' => 3600,
         'sim_enable_stemming' => true,
         'sim_enable_spelling_variants' => true,
+        'sim_whitelisted_short_words' => 'io',
     );
     
     foreach ($defaults as $option => $value) {

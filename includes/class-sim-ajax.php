@@ -3,7 +3,7 @@
  * Filename: class-sim-ajax.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.4.0
+ * Version: 1.4.1
  * Last Modified: 12/10/2025
  * Description: AJAX handlers for editor modal and bulk processing
  * Includes comprehensive error logging for debugging insertion issues
@@ -23,16 +23,29 @@ class SIM_AJAX {
     }
     
     public static function find_matches() {
-        check_ajax_referer('sim_editor_nonce', 'nonce');
+        error_log('SIM AJAX: find_matches called');
+        error_log('SIM AJAX: POST data: ' . print_r($_POST, true));
+        
+        try {
+            check_ajax_referer('sim_editor_nonce', 'nonce');
+            error_log('SIM AJAX: Nonce verification passed');
+        } catch (Exception $e) {
+            error_log('SIM AJAX: Nonce verification failed: ' . $e->getMessage());
+            wp_send_json_error(array('message' => __('Security check failed', 'smart-image-matcher')));
+        }
         
         if (!current_user_can('edit_posts')) {
+            error_log('SIM AJAX: User lacks edit_posts capability');
             wp_send_json_error(array('message' => __('Permission denied', 'smart-image-matcher')));
         }
         
         $post_id = isset($_POST['post_id']) ? intval($_POST['post_id']) : 0;
         $mode = isset($_POST['mode']) ? sanitize_text_field($_POST['mode']) : 'keyword';
         
+        error_log('SIM AJAX: Post ID: ' . $post_id . ', Mode: ' . $mode);
+        
         if (!$post_id) {
+            error_log('SIM AJAX: Invalid post ID');
             wp_send_json_error(array('message' => __('Invalid post ID', 'smart-image-matcher')));
         }
         

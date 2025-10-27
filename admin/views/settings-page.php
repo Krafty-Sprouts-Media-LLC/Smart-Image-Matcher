@@ -3,7 +3,7 @@
  * Filename: settings-page.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.2.0
+ * Version: 1.2.1
  * Last Modified: 21/10/2025
  * Description: Settings page with enhanced linguistic options (stemming, spelling variants)
  */
@@ -27,6 +27,7 @@ $auto_fallback_keyword = get_option('sim_auto_fallback_keyword', true);
 $delete_on_uninstall = get_option('sim_delete_on_uninstall', true);
 $enable_stemming = get_option('sim_enable_stemming', true);
 $enable_spelling_variants = get_option('sim_enable_spelling_variants', true);
+$whitelisted_short_words = get_option('sim_whitelisted_short_words', 'io');
 ?>
 
 <div class="wrap">
@@ -37,7 +38,7 @@ $enable_spelling_variants = get_option('sim_enable_spelling_variants', true);
     <!-- Image Naming Best Practices -->
     <div class="notice notice-info" style="margin: 20px 0; padding: 15px;">
         <h3 style="margin-top: 0;">
-            <span class="dashicons dashicons-lightbulb" style="color: #2271b1;"></span>
+            <span class="sim-svg-icon sim-icon-lightbulb" style="color: #2271b1;"></span>
             <?php esc_html_e('Image Naming Best Practices', 'smart-image-matcher'); ?>
         </h3>
         <p><?php esc_html_e('For best matching results, follow these guidelines when naming and organizing your images:', 'smart-image-matcher'); ?></p>
@@ -125,7 +126,7 @@ $enable_spelling_variants = get_option('sim_enable_spelling_variants', true);
         
         <div class="notice notice-success" style="margin: 10px 0 20px 0; padding: 12px;">
             <p style="margin: 0;">
-                <span class="dashicons dashicons-yes-alt" style="color: #46b450;"></span>
+                <span class="sim-svg-icon sim-icon-success" style="color: #46b450;"></span>
                 <strong><?php esc_html_e('Enhanced Text Matching:', 'smart-image-matcher'); ?></strong>
                 <?php esc_html_e('These features improve matching accuracy by recognizing linguistic variations in your content and image metadata.', 'smart-image-matcher'); ?>
             </p>
@@ -163,6 +164,20 @@ $enable_spelling_variants = get_option('sim_enable_spelling_variants', true);
                             <li><?php esc_html_e('✓ Common separators: commas, pipes, semicolons converted to spaces', 'smart-image-matcher'); ?></li>
                         </ul>
                     </div>
+                </td>
+            </tr>
+            
+            <tr>
+                <th scope="row">
+                    <label for="sim_whitelisted_short_words"><?php esc_html_e('Whitelisted Short Words', 'smart-image-matcher'); ?></label>
+                </th>
+                <td>
+                    <input type="text" name="sim_whitelisted_short_words" id="sim_whitelisted_short_words" value="<?php echo esc_attr($whitelisted_short_words); ?>" class="regular-text">
+                    <p class="description">
+                        <?php esc_html_e('Comma-separated list of short words that should never be filtered out (e.g., "io, id, ok"). These are typically species names or important identifiers that are only 2 characters long.', 'smart-image-matcher'); ?>
+                        <br>
+                        <em style="color: #666;"><?php esc_html_e('Example: "Io Moth Caterpillar" will now match "io-moth-caterpillar.jpg" because "io" is whitelisted', 'smart-image-matcher'); ?></em>
+                    </p>
                 </td>
             </tr>
         </table>

@@ -2,8 +2,8 @@
  * Filename: sim-admin.css
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.1.2
- * Last Modified: 12/10/2025
+ * Version: 1.0.1
+ * Last Modified: 27/10/2025
  * Description: Admin styles for Smart Image Matcher modal and UI with carousel controls and transitions
  */
 
@@ -214,12 +214,70 @@
     align-items: center;
 }
 
-.sim-match-heading .dashicons {
+.sim-match-heading .dashicons,
+.sim-match-heading .sim-svg-icon {
     margin-right: 8px;
 }
 
+/* SVG Icon Styles */
+.sim-svg-icon {
+    display: inline-block;
+    vertical-align: middle;
+    flex-shrink: 0;
+}
+
+.sim-svg-icon.sim-icon-check {
+    color: #46b450;
+}
+
+.sim-svg-icon.sim-icon-check.unselected {
+    color: #dc3232;
+}
+
+.sim-svg-icon.sim-icon-close {
+    color: #dc3232;
+}
+
+.sim-svg-icon.sim-icon-warning {
+    color: #ffb900;
+}
+
+.sim-svg-icon.sim-icon-image {
+    color: #2271b1;
+}
+
+.sim-svg-icon.sim-icon-lightbulb {
+    color: #2271b1;
+}
+
+.sim-svg-icon.sim-icon-info {
+    color: #2271b1;
+}
+
+.sim-svg-icon.sim-icon-post {
+    color: #666;
+}
+
+.sim-svg-icon.sim-icon-settings {
+    color: #666;
+}
+
+.sim-svg-icon.sim-icon-chart {
+    color: #666;
+}
+
+.sim-svg-icon.sim-icon-success {
+    color: #46b450;
+}
+
+/* Gutenberg Toolbar Button Styles - Now using proper ToolbarButton API */
+
 .sim-match-heading .dashicons-yes {
     color: #46b450;
+}
+
+.sim-match-heading .dashicons-yes.unselected {
+    color: #dc3232;
 }
 
 .sim-match-heading .dashicons-no {

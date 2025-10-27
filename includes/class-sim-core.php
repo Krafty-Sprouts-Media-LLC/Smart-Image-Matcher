@@ -3,8 +3,8 @@
  * Filename: class-sim-core.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.3.0
- * Last Modified: 21/10/2025
+ * Version: 1.1.0
+ * Last Modified: 27/10/2025
  * Description: Core functionality with Gutenberg toolbar integration using custom SVG icons
  */
 
@@ -60,9 +60,17 @@ class SIM_Core {
         if ($hook === 'post.php' || $hook === 'post-new.php') {
             // Enqueue jQuery-based editor script (for modal)
             wp_enqueue_script(
+                'sim-svg-icons',
+                SIM_PLUGIN_URL . 'admin/js/sim-svg-icons.js',
+                array('jquery'),
+                SIM_VERSION,
+                true
+            );
+            
+            wp_enqueue_script(
                 'sim-editor-js',
                 SIM_PLUGIN_URL . 'admin/js/sim-editor.js',
-                array('jquery'),
+                array('jquery', 'sim-svg-icons'),
                 SIM_VERSION,
                 true
             );
@@ -91,6 +99,7 @@ class SIM_Core {
                     'wp-edit-post',
                     'wp-element',
                     'wp-components',
+                    'wp-block-editor',
                     'wp-i18n',
                     'wp-data',
                     'sim-editor-js' // Depends on the modal script
@@ -126,13 +135,15 @@ class SIM_Core {
     
     public function register_admin_menu() {
         // Parent menu item with full name
+        $sim_icon_base64 = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAyMCAyMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNMiAzQzIgMi40NDc3MiAyLjQ0NzcyIDIgMyAySDE3QzE3LjU1MjMgMiAxOCAyLjQ0NzcyIDE4IDNWMTNDMTggMTMuNTUyMyAxNy41NTIzIDE0IDE3IDE0SDNDMi40NDc3MiAxNCAyIDEzLjU1MjMgMiAxM1YzWiIgc3Ryb2tlPSIjNjY2NjY2IiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PGNpcmNsZSBjeD0iNyIgY3k9IjciIHI9IjEuNSIgZmlsbD0iIzY2NjY2NiIvPjxwYXRoIGQ9Ik0yIDExTDUuNSA4TDkgMTAuNUwxMy41IDZMMTggMTAiIHN0cm9rZT0iIzY2NjY2NiIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjwvc3ZnPg==';
+        
         add_menu_page(
             __('Smart Image Matcher', 'smart-image-matcher'),
-            __('Smart Image Matcher', 'smart-image-matcher'),
+            __('SIM', 'smart-image-matcher'),
             'edit_posts',
             'smart-image-matcher',
             array('SIM_Settings', 'render_settings_page'),
-            'dashicons-format-image',
+            $sim_icon_base64,
             30
         );
         

@@ -3,8 +3,8 @@
  * Filename: class-sim-admin.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.0.8
- * Last Modified: 22/10/2025
+ * Version: 1.1.1
+ * Last Modified: 27/10/2025
  * Description: Admin interface for post editor button and modal
  * Supports both Classic Editor and Gutenberg Block Editor
  * Includes image naming tips in modal and settings page
@@ -35,7 +35,7 @@ class SIM_Admin {
         ?>
         <div id="sim-editor-button-container" style="margin: 10px 0;">
             <button type="button" id="sim-open-modal" class="button button-secondary">
-                <span class="dashicons dashicons-format-image" style="vertical-align: middle;"></span>
+                <span class="sim-svg-icon sim-icon-image" style="vertical-align: middle;"></span>
                 <?php esc_html_e('Smart Image Matcher', 'smart-image-matcher'); ?>
             </button>
         </div>
@@ -49,78 +49,7 @@ class SIM_Admin {
             return;
         }
         
-        $inline_script = "
-        (function() {
-            // Try multiple selectors for Gutenberg toolbar
-            var selectors = [
-                '.edit-post-header__toolbar',
-                '.editor-header__toolbar',
-                '.edit-post-header-toolbar',
-                '.editor-document-tools__left',
-                '.edit-site-header-edit-mode__start'
-            ];
-            
-            function addButton() {
-                if (document.getElementById('sim-gutenberg-button')) {
-                    return; // Already added
-                }
-                
-                var toolbar = null;
-                for (var i = 0; i < selectors.length; i++) {
-                    toolbar = document.querySelector(selectors[i]);
-                    if (toolbar) break;
-                }
-                
-                if (!toolbar) {
-                    console.log('SIM: Toolbar not found, will retry...');
-                    return false;
-                }
-                
-                var buttonContainer = document.createElement('div');
-                buttonContainer.id = 'sim-button-container';
-                buttonContainer.style.cssText = 'margin-left: 12px; display: inline-flex; align-items: center;';
-                
-                var button = document.createElement('button');
-                button.id = 'sim-gutenberg-button';
-                button.className = 'components-button is-secondary';
-                button.type = 'button';
-                button.style.cssText = 'margin: 0 8px; height: 36px;';
-                button.innerHTML = '<span class=\"dashicons dashicons-format-image\" style=\"margin-right: 5px; vertical-align: middle;\"></span>Smart Image Matcher';
-                button.onclick = function(e) {
-                    e.preventDefault();
-                    if (typeof jQuery !== 'undefined') {
-                        jQuery('#sim-modal').show();
-                        if (typeof window.simFindMatches === 'function') {
-                            window.simFindMatches();
-                        }
-                    }
-                };
-                
-                buttonContainer.appendChild(button);
-                toolbar.appendChild(buttonContainer);
-                console.log('SIM: Button added successfully');
-                return true;
-            }
-            
-            // Try immediately
-            if (!addButton()) {
-                // Retry with delays
-                var attempts = 0;
-                var maxAttempts = 10;
-                var interval = setInterval(function() {
-                    attempts++;
-                    if (addButton() || attempts >= maxAttempts) {
-                        clearInterval(interval);
-                        if (attempts >= maxAttempts) {
-                            console.log('SIM: Could not find Gutenberg toolbar after ' + maxAttempts + ' attempts');
-                        }
-                    }
-                }, 500);
-            }
-        })();
-        ";
-        
-        wp_add_inline_script('wp-blocks', $inline_script);
+        // No longer needed - using proper Gutenberg ToolbarButton API
     }
     
     public static function add_admin_bar_button($wp_admin_bar) {
@@ -147,7 +76,7 @@ class SIM_Admin {
         
         $wp_admin_bar->add_node(array(
             'id' => 'smart-image-matcher',
-            'title' => '<span class="ab-icon dashicons dashicons-format-image"></span><span class="ab-label">Smart Image Matcher</span>',
+            'title' => '<span class="ab-icon sim-svg-icon sim-icon-image"></span><span class="ab-label">Smart Image Matcher</span>',
             'href' => '#',
             'meta' => array(
                 'class' => 'sim-admin-bar-button',
@@ -194,7 +123,7 @@ class SIM_Admin {
                         <!-- Image Naming Tips (Collapsible) -->
                         <details class="sim-tips-section" style="margin: 15px 0; padding: 12px; background: #f0f6fc; border: 1px solid #c3dafe; border-radius: 4px;">
                             <summary style="cursor: pointer; font-weight: 600; color: #0366d6; user-select: none;">
-                                <span class="dashicons dashicons-lightbulb" style="vertical-align: middle;"></span>
+                                <span class="sim-svg-icon sim-icon-lightbulb" style="vertical-align: middle;"></span>
                                 <?php esc_html_e('Tips for Better Matching', 'smart-image-matcher'); ?>
                             </summary>
                             <div style="margin-top: 10px; font-size: 13px; line-height: 1.6;">
