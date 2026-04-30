@@ -8,28 +8,34 @@
  * Description: Settings page with enhanced linguistic options (stemming, spelling variants)
  */
 
-if (!defined('ABSPATH')) {
-    exit;
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
 }
 
-$match_mode = get_option('sim_match_mode', 'keyword');
-$confidence_threshold = get_option('sim_confidence_threshold', 70);
-$hierarchy_mode = get_option('sim_hierarchy_mode', 'smart');
-$heading_overlap_threshold = get_option('sim_heading_overlap_threshold', 70);
-$max_matches_per_heading = get_option('sim_max_matches_per_heading', 3);
-    $claude_api_key_encrypted = get_option('sim_claude_api_key', '');
-    $claude_api_key = !empty($claude_api_key_encrypted) ? SIM_Core::decrypt_data($claude_api_key_encrypted) : '';
-$claude_model = get_option('sim_claude_model', 'claude-sonnet-4-20250514');
-$daily_spending_limit = get_option('sim_daily_spending_limit', 10.00);
-$batch_size_limit = get_option('sim_batch_size_limit', 50);
-$cost_warnings = get_option('sim_cost_warnings', true);
-$email_notifications = get_option('sim_email_notifications', true);
-$auto_fallback_keyword = get_option('sim_auto_fallback_keyword', true);
-$delete_on_uninstall = get_option('sim_delete_on_uninstall', true);
-$enable_stemming = get_option('sim_enable_stemming', true);
-$enable_spelling_variants = get_option('sim_enable_spelling_variants', true);
-    $whitelisted_short_words = get_option('sim_whitelisted_short_words', 'io');
-    $debug_mode = get_option('sim_debug_mode', false);
+$match_mode                  = get_option( 'sim_match_mode', 'keyword' );
+$confidence_threshold        = get_option( 'sim_confidence_threshold', 70 );
+$hierarchy_mode              = get_option( 'sim_hierarchy_mode', 'smart' );
+$heading_overlap_threshold   = get_option( 'sim_heading_overlap_threshold', 70 );
+$max_matches_per_heading     = get_option( 'sim_max_matches_per_heading', 3 );
+$claude_api_key_encrypted    = get_option( 'sim_claude_api_key', '' );
+$claude_api_key              = ! empty( $claude_api_key_encrypted ) ? SIM_Core::decrypt_data( $claude_api_key_encrypted ) : '';
+$claude_model                = get_option( 'sim_claude_model', 'claude-sonnet-4-20250514' );
+$daily_spending_limit        = get_option( 'sim_daily_spending_limit', 10.00 );
+$batch_size_limit            = get_option( 'sim_batch_size_limit', 50 );
+$cost_warnings               = get_option( 'sim_cost_warnings', true );
+$email_notifications         = get_option( 'sim_email_notifications', true );
+$auto_fallback_keyword       = get_option( 'sim_auto_fallback_keyword', true );
+$delete_on_uninstall         = get_option( 'sim_delete_on_uninstall', true );
+$enable_stemming             = get_option( 'sim_enable_stemming', true );
+$enable_spelling_variants    = get_option( 'sim_enable_spelling_variants', true );
+$whitelisted_short_words     = get_option( 'sim_whitelisted_short_words', 'io' );
+$debug_mode                  = get_option( 'sim_debug_mode', false );
+$sim_fiaa_auto_assign_on_upload = get_option( 'sim_fiaa_auto_assign_on_upload', 1 );
+$sim_fiaa_upload_post_types  = get_option( 'sim_fiaa_upload_post_types', 'post,page' );
+$sim_fiaa_cron_enabled       = get_option( 'sim_fiaa_cron_enabled', 1 );
+$sim_fiaa_cron_post_types    = get_option( 'sim_fiaa_cron_post_types', 'post' );
+$sim_fiaa_cron_overwrite     = get_option( 'sim_fiaa_cron_overwrite', 0 );
+$sim_fiaa_last_run_summary   = get_option( 'sim_fiaa_last_run_summary', array() );
 ?>
 
 <div class="wrap">
@@ -196,6 +202,75 @@ $enable_spelling_variants = get_option('sim_enable_spelling_variants', true);
                         <br>
                         <em style="color: #666;"><?php esc_html_e('Debug logs will appear in your WordPress error log when enabled', 'smart-image-matcher'); ?></em>
                     </p>
+                </td>
+            </tr>
+        </table>
+
+        <h2><?php esc_html_e('Featured Image Auto-Assigner', 'smart-image-matcher'); ?></h2>
+
+        <table class="form-table">
+            <tr>
+                <th scope="row"><?php esc_html_e('Upload Auto-Assign', 'smart-image-matcher'); ?></th>
+                <td>
+                    <label>
+                        <input type="checkbox" name="sim_fiaa_auto_assign_on_upload" value="1" <?php checked($sim_fiaa_auto_assign_on_upload, 1); ?>>
+                        <?php esc_html_e('Automatically assign featured images on upload when filename slug matches post slug', 'smart-image-matcher'); ?>
+                    </label>
+                    <p class="description"><?php esc_html_e('Only assigns when target post has no featured image.', 'smart-image-matcher'); ?></p>
+                </td>
+            </tr>
+            <tr>
+                <th scope="row">
+                    <label for="sim_fiaa_upload_post_types"><?php esc_html_e('Upload Match Post Types', 'smart-image-matcher'); ?></label>
+                </th>
+                <td>
+                    <input type="text" name="sim_fiaa_upload_post_types" id="sim_fiaa_upload_post_types" value="<?php echo esc_attr($sim_fiaa_upload_post_types); ?>" class="regular-text">
+                    <p class="description"><?php esc_html_e('Comma-separated post types for upload matching. Example: post,page', 'smart-image-matcher'); ?></p>
+                </td>
+            </tr>
+            <tr>
+                <th scope="row"><?php esc_html_e('Daily Scheduled Run (WP-Cron)', 'smart-image-matcher'); ?></th>
+                <td>
+                    <label>
+                        <input type="checkbox" name="sim_fiaa_cron_enabled" value="1" <?php checked($sim_fiaa_cron_enabled, 1); ?>>
+                        <?php esc_html_e('Enable daily featured image auto-assignment job', 'smart-image-matcher'); ?>
+                    </label>
+                </td>
+            </tr>
+            <tr>
+                <th scope="row">
+                    <label for="sim_fiaa_cron_post_types"><?php esc_html_e('Cron Post Types', 'smart-image-matcher'); ?></label>
+                </th>
+                <td>
+                    <input type="text" name="sim_fiaa_cron_post_types" id="sim_fiaa_cron_post_types" value="<?php echo esc_attr($sim_fiaa_cron_post_types); ?>" class="regular-text">
+                    <p class="description"><?php esc_html_e('Comma-separated post types for cron runs. Example: post,page', 'smart-image-matcher'); ?></p>
+                </td>
+            </tr>
+            <tr>
+                <th scope="row"><?php esc_html_e('Cron Overwrite Existing', 'smart-image-matcher'); ?></th>
+                <td>
+                    <label>
+                        <input type="checkbox" name="sim_fiaa_cron_overwrite" value="1" <?php checked($sim_fiaa_cron_overwrite, 1); ?>>
+                        <?php esc_html_e('Allow cron jobs to replace existing featured images', 'smart-image-matcher'); ?>
+                    </label>
+                </td>
+            </tr>
+            <tr>
+                <th scope="row"><?php esc_html_e('Last Cron Summary', 'smart-image-matcher'); ?></th>
+                <td>
+                    <?php if (is_array($sim_fiaa_last_run_summary) && !empty($sim_fiaa_last_run_summary['ran_at'])) : ?>
+                        <p>
+                            <strong><?php esc_html_e('Ran:', 'smart-image-matcher'); ?></strong> <?php echo esc_html($sim_fiaa_last_run_summary['ran_at']); ?><br>
+                            <strong><?php esc_html_e('Matched:', 'smart-image-matcher'); ?></strong> <?php echo esc_html((string) (int) $sim_fiaa_last_run_summary['matched']); ?> |
+                            <strong><?php esc_html_e('Skipped:', 'smart-image-matcher'); ?></strong> <?php echo esc_html((string) (int) $sim_fiaa_last_run_summary['skipped']); ?> |
+                            <strong><?php esc_html_e('Unmatched:', 'smart-image-matcher'); ?></strong> <?php echo esc_html((string) (int) $sim_fiaa_last_run_summary['unmatched']); ?> |
+                            <strong><?php esc_html_e('Total:', 'smart-image-matcher'); ?></strong> <?php echo esc_html((string) (int) $sim_fiaa_last_run_summary['total']); ?> |
+                            <strong><?php esc_html_e('Duration (ms):', 'smart-image-matcher'); ?></strong> <?php echo esc_html((string) (int) $sim_fiaa_last_run_summary['duration_ms']); ?>
+                        </p>
+                    <?php else : ?>
+                        <p class="description"><?php esc_html_e('No scheduled runs recorded yet.', 'smart-image-matcher'); ?></p>
+                    <?php endif; ?>
+                    <p><a href="<?php echo esc_url(admin_url('admin.php?page=smart-image-matcher-featured-images')); ?>"><?php esc_html_e('Open Featured Images tool', 'smart-image-matcher'); ?></a></p>
                 </td>
             </tr>
         </table>

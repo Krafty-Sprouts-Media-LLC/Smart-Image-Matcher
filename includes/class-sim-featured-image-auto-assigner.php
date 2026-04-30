@@ -83,11 +83,12 @@ class SIM_Featured_Image_Auto_Assigner {
 	 * @return void
 	 */
 	public function register_menu() {
-		add_media_page(
-			__( 'Featured Image Auto-Assigner', 'smart-image-matcher' ),
-			__( 'Image Auto-Assigner', 'smart-image-matcher' ),
+		add_submenu_page(
+			'smart-image-matcher',
+			__( 'Smart Image Matcher - Featured Images', 'smart-image-matcher' ),
+			__( 'Featured Images', 'smart-image-matcher' ),
 			'manage_options',
-			'sim-featured-image-auto-assigner',
+			'smart-image-matcher-featured-images',
 			array( $this, 'render_admin_page' )
 		);
 	}
@@ -278,7 +279,7 @@ class SIM_Featured_Image_Auto_Assigner {
 			AND post_status = 'inherit'
 			AND post_name <> ''",
 			ARRAY_A
-		);
+		); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		$slug_map = array();
 		if ( is_array( $rows ) ) {
@@ -300,7 +301,7 @@ class SIM_Featured_Image_Auto_Assigner {
 	 * Find attachment ID by slug/filename.
 	 *
 	 * @since 2.6.0
-	 * @param string         $slug      Post slug.
+	 * @param string            $slug     Post slug.
 	 * @param array<string,int> $slug_map Attachment map keyed by slug.
 	 * @return int|null
 	 */
@@ -349,6 +350,10 @@ class SIM_Featured_Image_Auto_Assigner {
 	 * @return void
 	 */
 	public function on_image_upload( $attachment_id ) {
+		if ( ! get_option( 'sim_fiaa_auto_assign_on_upload', 1 ) ) {
+			return;
+		}
+
 		if ( ! wp_attachment_is_image( $attachment_id ) ) {
 			return;
 		}
@@ -360,10 +365,18 @@ class SIM_Featured_Image_Auto_Assigner {
 			return;
 		}
 
+		$allowed_post_types_raw = (string) get_option( 'sim_fiaa_upload_post_types', 'post,page' );
+		$allowed_post_types     = array_filter( array_map( 'sanitize_key', array_map( 'trim', explode( ',', $allowed_post_types_raw ) ) ) );
+		$supported_post_types   = $this->get_supported_post_types();
+		$allowed_post_types     = array_values( array_intersect( $allowed_post_types, $supported_post_types ) );
+		if ( empty( $allowed_post_types ) ) {
+			$allowed_post_types = array( 'post' );
+		}
+
 		$posts = get_posts(
 			array(
 				'name'           => $attachment->post_name,
-				'post_type'      => $this->get_supported_post_types(),
+				'post_type'      => $allowed_post_types,
 				'post_status'    => array( 'publish', 'draft', 'pending', 'future' ),
 				'posts_per_page' => 1,
 				'fields'         => 'ids',
@@ -534,14 +547,14 @@ class SIM_Featured_Image_Auto_Assigner {
 			"SELECT COUNT(*) FROM {$wpdb->posts}
 			WHERE post_type = 'post'
 			AND post_status IN ('publish', 'draft')"
-		);
+		); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		$with_thumbnail = (int) $wpdb->get_var(
 			"SELECT COUNT(*) FROM {$wpdb->posts} p
 			INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id AND pm.meta_key = '_thumbnail_id'
 			WHERE p.post_type = 'post'
 			AND p.post_status IN ('publish', 'draft')"
-		);
+		); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		$without = $total_posts - $with_thumbnail;
 
@@ -549,6 +562,24 @@ class SIM_Featured_Image_Auto_Assigner {
 		echo '<p>' . esc_html__( 'Total posts:', 'smart-image-matcher' ) . ' <strong>' . esc_html( (string) $total_posts ) . '</strong> | ';
 		echo esc_html__( 'With featured image:', 'smart-image-matcher' ) . ' <strong>' . esc_html( (string) $with_thumbnail ) . '</strong> | ';
 		echo esc_html__( 'Missing featured image:', 'smart-image-matcher' ) . ' <strong>' . esc_html( (string) $without ) . '</strong></p>';
+
+		$last_summary = get_option( 'sim_fiaa_last_run_summary', array() );
+		if ( is_array( $last_summary ) && ! empty( $last_summary['ran_at'] ) ) {
+			$last_ran_at    = isset( $last_summary['ran_at'] ) ? (string) $last_summary['ran_at'] : '';
+			$last_matched   = isset( $last_summary['matched'] ) ? (int) $last_summary['matched'] : 0;
+			$last_skipped   = isset( $last_summary['skipped'] ) ? (int) $last_summary['skipped'] : 0;
+			$last_unmatched = isset( $last_summary['unmatched'] ) ? (int) $last_summary['unmatched'] : 0;
+			$last_duration  = isset( $last_summary['duration_ms'] ) ? (int) $last_summary['duration_ms'] : 0;
+
+			echo '<h3>' . esc_html__( 'Last Scheduled Run', 'smart-image-matcher' ) . '</h3>';
+			echo '<p>';
+			echo '<strong>' . esc_html__( 'Ran At:', 'smart-image-matcher' ) . '</strong> ' . esc_html( $last_ran_at ) . ' | ';
+			echo '<strong>' . esc_html__( 'Matched:', 'smart-image-matcher' ) . '</strong> ' . esc_html( (string) $last_matched ) . ' | ';
+			echo '<strong>' . esc_html__( 'Skipped:', 'smart-image-matcher' ) . '</strong> ' . esc_html( (string) $last_skipped ) . ' | ';
+			echo '<strong>' . esc_html__( 'Unmatched:', 'smart-image-matcher' ) . '</strong> ' . esc_html( (string) $last_unmatched ) . ' | ';
+			echo '<strong>' . esc_html__( 'Duration (ms):', 'smart-image-matcher' ) . '</strong> ' . esc_html( (string) $last_duration );
+			echo '</p>';
+		}
 	}
 }
 

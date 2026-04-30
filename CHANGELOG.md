@@ -5,6 +5,17 @@ All notable changes to Smart Image Matcher will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.2] - 30/04/2026
+
+### Fixed
+- **WPCS Compliance Hardening** - Normalized WordPress coding standards in core touched files (`smart-image-matcher.php`, `class-sim-settings.php`, `settings-page.php`, and `uninstall.php`), including brace/spacing consistency and safer `$_POST` handling with `wp_unslash()` + sanitization in settings save flow.
+
+## [2.6.1] - 30/04/2026
+
+### Fixed
+- **Featured Auto-Assigner Integration Gaps** - Integrated featured image auto-assignment controls into SIM settings (upload toggle, post type scope, cron controls), moved the tool under the SIM menu, and applied runtime guards so upload matching obeys saved settings.
+- **Uninstall Cleanup Gap** - Added removal of the `sim_fiaa_cron_run` scheduled hook during uninstall/deactivation cleanup flow.
+
 ## [2.6.0] - 30/04/2026
 
 ### Added
@@ -16,6 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Attachment Lookup Caching** - Added transient-backed attachment slug map caching for bulk runs, plus automatic cache invalidation on upload/edit/delete attachment events.
 - **Cron Auto-Run** - Added daily scheduled run (`sim_fiaa_cron_run`) for featured-image assignment with configurable options for enable/disable, post types, and overwrite behavior.
 - **Run Summary Persistence** - Cron runs now persist summary metrics (matched/skipped/unmatched/total/duration) to `sim_fiaa_last_run_summary`.
+- **SIM Settings Integration** - Featured image auto-assign options are now managed from the main SIM settings page (upload auto-assign toggle, upload post types, cron controls, and last-run summary), and the tool is linked under the SIM admin menu.
+- **Uninstall Hook Coverage** - Added cleanup for the `sim_fiaa_cron_run` scheduled hook during uninstall.
 
 ### Documentation
 - Added `FEATURED_IMAGE_AUTO_ASSIGNER_ROADMAP.md` with proposed low-risk enhancements: dry-run mode, settings toggles for auto-assign scope, WP-CLI runner, and run-summary history.
