@@ -3,7 +3,7 @@
  * Plugin Name: Smart Image Matcher
  * Plugin URI: https://kraftysprouts.com
  * Description: Automatically scans the media library and intelligently attaches relevant images to headings within posts and pages. Offers keyword-based and AI-powered matching.
- * Version: 2.4.1
+ * Version: 2.6.0
  * Author: Krafty Sprouts Media, LLC
  * Author URI: https://kraftysprouts.com
  * License: GPL v2 or later
@@ -15,8 +15,8 @@
  * Filename: smart-image-matcher.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 2.4.1
- * Last Modified: 26/10/2025
+ * Version: 2.6.0
+ * Last Modified: 30/04/2026
  * Description: Main plugin file with Gutenberg toolbar integration and custom SVG icon
  */
 
@@ -24,7 +24,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('SIM_VERSION', '2.4.1');
+define('SIM_VERSION', '2.6.0');
 define('SIM_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('SIM_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('SIM_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -41,6 +41,7 @@ require_once SIM_PLUGIN_DIR . 'includes/class-sim-ajax.php';
 require_once SIM_PLUGIN_DIR . 'includes/class-sim-bulk.php';
 require_once SIM_PLUGIN_DIR . 'includes/class-sim-settings.php';
 require_once SIM_PLUGIN_DIR . 'includes/class-sim-cache.php';
+require_once SIM_PLUGIN_DIR . 'includes/class-sim-featured-image-auto-assigner.php';
 
 register_activation_hook(__FILE__, 'sim_activate_plugin');
 register_deactivation_hook(__FILE__, 'sim_deactivate_plugin');
@@ -60,12 +61,17 @@ function sim_activate_plugin() {
     if (!wp_next_scheduled('sim_daily_cleanup')) {
         wp_schedule_event(time(), 'daily', 'sim_daily_cleanup');
     }
+
+    if (!wp_next_scheduled('sim_fiaa_cron_run')) {
+        wp_schedule_event(time(), 'daily', 'sim_fiaa_cron_run');
+    }
     
     flush_rewrite_rules();
 }
 
 function sim_deactivate_plugin() {
     wp_clear_scheduled_hook('sim_daily_cleanup');
+    wp_clear_scheduled_hook('sim_fiaa_cron_run');
     
     SIM_Cache::clear_all_transients();
 }
@@ -133,6 +139,11 @@ function sim_set_default_options() {
         'sim_enable_stemming' => true,
         'sim_enable_spelling_variants' => true,
         'sim_whitelisted_short_words' => 'io',
+        'sim_debug_mode' => false,
+        'sim_fiaa_cron_enabled' => 1,
+        'sim_fiaa_cron_post_types' => 'post',
+        'sim_fiaa_cron_overwrite' => 0,
+        'sim_fiaa_last_run_summary' => array(),
     );
     
     foreach ($defaults as $option => $value) {
@@ -144,6 +155,7 @@ function sim_set_default_options() {
 
 function sim_init() {
     SIM_Core::get_instance();
+    SIM_Featured_Image_Auto_Assigner::get_instance();
 }
 add_action('plugins_loaded', 'sim_init');
 

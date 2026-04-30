@@ -3,7 +3,7 @@
  * Filename: class-sim-settings.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.2.1
+ * Version: 1.3.0
  * Last Modified: 21/10/2025
  * Description: Settings page with linguistic enhancement options (stemming, spelling variants)
  */
@@ -35,7 +35,7 @@ class SIM_Settings {
             'sim_heading_overlap_threshold' => isset($_POST['sim_heading_overlap_threshold']) ? intval($_POST['sim_heading_overlap_threshold']) : 70,
             'sim_max_matches_per_heading' => isset($_POST['sim_max_matches_per_heading']) ? intval($_POST['sim_max_matches_per_heading']) : 5,
             'sim_minimum_image_spacing' => isset($_POST['sim_minimum_image_spacing']) ? intval($_POST['sim_minimum_image_spacing']) : 300,
-            'sim_claude_api_key' => isset($_POST['sim_claude_api_key']) ? sanitize_text_field($_POST['sim_claude_api_key']) : '',
+            'sim_claude_api_key' => isset($_POST['sim_claude_api_key']) ? SIM_Core::encrypt_data(sanitize_text_field($_POST['sim_claude_api_key'])) : '',
             'sim_claude_model' => isset($_POST['sim_claude_model']) ? sanitize_text_field($_POST['sim_claude_model']) : 'claude-sonnet-4-20250514',
             'sim_daily_spending_limit' => isset($_POST['sim_daily_spending_limit']) ? floatval($_POST['sim_daily_spending_limit']) : 10.00,
             'sim_batch_size_limit' => isset($_POST['sim_batch_size_limit']) ? intval($_POST['sim_batch_size_limit']) : 50,
@@ -46,6 +46,7 @@ class SIM_Settings {
             'sim_enable_stemming' => isset($_POST['sim_enable_stemming']) ? 1 : 0,
             'sim_enable_spelling_variants' => isset($_POST['sim_enable_spelling_variants']) ? 1 : 0,
             'sim_whitelisted_short_words' => isset($_POST['sim_whitelisted_short_words']) ? sanitize_text_field($_POST['sim_whitelisted_short_words']) : 'io',
+            'sim_debug_mode' => isset($_POST['sim_debug_mode']) ? 1 : 0,
         );
         
         foreach ($settings as $option => $value) {

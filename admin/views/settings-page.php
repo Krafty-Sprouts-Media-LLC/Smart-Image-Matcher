@@ -3,7 +3,7 @@
  * Filename: settings-page.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.2.1
+ * Version: 1.3.0
  * Last Modified: 21/10/2025
  * Description: Settings page with enhanced linguistic options (stemming, spelling variants)
  */
@@ -17,7 +17,8 @@ $confidence_threshold = get_option('sim_confidence_threshold', 70);
 $hierarchy_mode = get_option('sim_hierarchy_mode', 'smart');
 $heading_overlap_threshold = get_option('sim_heading_overlap_threshold', 70);
 $max_matches_per_heading = get_option('sim_max_matches_per_heading', 3);
-$claude_api_key = get_option('sim_claude_api_key', '');
+    $claude_api_key_encrypted = get_option('sim_claude_api_key', '');
+    $claude_api_key = !empty($claude_api_key_encrypted) ? SIM_Core::decrypt_data($claude_api_key_encrypted) : '';
 $claude_model = get_option('sim_claude_model', 'claude-sonnet-4-20250514');
 $daily_spending_limit = get_option('sim_daily_spending_limit', 10.00);
 $batch_size_limit = get_option('sim_batch_size_limit', 50);
@@ -27,7 +28,8 @@ $auto_fallback_keyword = get_option('sim_auto_fallback_keyword', true);
 $delete_on_uninstall = get_option('sim_delete_on_uninstall', true);
 $enable_stemming = get_option('sim_enable_stemming', true);
 $enable_spelling_variants = get_option('sim_enable_spelling_variants', true);
-$whitelisted_short_words = get_option('sim_whitelisted_short_words', 'io');
+    $whitelisted_short_words = get_option('sim_whitelisted_short_words', 'io');
+    $debug_mode = get_option('sim_debug_mode', false);
 ?>
 
 <div class="wrap">
@@ -177,6 +179,22 @@ $whitelisted_short_words = get_option('sim_whitelisted_short_words', 'io');
                         <?php esc_html_e('Comma-separated list of short words that should never be filtered out (e.g., "io, id, ok"). These are typically species names or important identifiers that are only 2 characters long.', 'smart-image-matcher'); ?>
                         <br>
                         <em style="color: #666;"><?php esc_html_e('Example: "Io Moth Caterpillar" will now match "io-moth-caterpillar.jpg" because "io" is whitelisted', 'smart-image-matcher'); ?></em>
+                    </p>
+                </td>
+            </tr>
+            <tr>
+                <th scope="row">
+                    <label for="sim_debug_mode"><?php esc_html_e('Debug Mode', 'smart-image-matcher'); ?></label>
+                </th>
+                <td>
+                    <label>
+                        <input type="checkbox" name="sim_debug_mode" id="sim_debug_mode" value="1" <?php checked($debug_mode, true); ?> />
+                        <?php esc_html_e('Enable debug logging', 'smart-image-matcher'); ?>
+                    </label>
+                    <p class="description">
+                        <?php esc_html_e('Enable detailed logging for troubleshooting. Only enable when needed as it may impact performance.', 'smart-image-matcher'); ?>
+                        <br>
+                        <em style="color: #666;"><?php esc_html_e('Debug logs will appear in your WordPress error log when enabled', 'smart-image-matcher'); ?></em>
                     </p>
                 </td>
             </tr>

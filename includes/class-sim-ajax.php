@@ -3,8 +3,8 @@
  * Filename: class-sim-ajax.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.4.1
- * Last Modified: 12/10/2025
+ * Version: 1.5.1
+ * Last Modified: 02/04/2026
  * Description: AJAX handlers for editor modal and bulk processing
  * Includes comprehensive error logging for debugging insertion issues
  * Optimized bulk insert to create ONE revision instead of multiple
@@ -23,29 +23,34 @@ class SIM_AJAX {
     }
     
     public static function find_matches() {
-        error_log('SIM AJAX: find_matches called');
-        error_log('SIM AJAX: POST data: ' . print_r($_POST, true));
+        SIM_Core::debug_log('find_matches called', 'AJAX');
+        // PERFORMANCE FIX (02/04/2026): Only log POST data when debug mode is
+        // active. print_r($_POST) serialises the full request on every AJAX call
+        // in production, adding unnecessary CPU and log overhead.
+        if ( SIM_Core::is_debug_mode() ) {
+            SIM_Core::debug_log( 'POST data: ' . print_r( $_POST, true ), 'AJAX' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions
+        }
         
         try {
             check_ajax_referer('sim_editor_nonce', 'nonce');
-            error_log('SIM AJAX: Nonce verification passed');
+            SIM_Core::debug_log('Nonce verification passed', 'AJAX');
         } catch (Exception $e) {
-            error_log('SIM AJAX: Nonce verification failed: ' . $e->getMessage());
+            SIM_Core::debug_log('Nonce verification failed: ' . $e->getMessage(), 'AJAX');
             wp_send_json_error(array('message' => __('Security check failed', 'smart-image-matcher')));
         }
         
         if (!current_user_can('edit_posts')) {
-            error_log('SIM AJAX: User lacks edit_posts capability');
+            SIM_Core::debug_log('User lacks edit_posts capability', 'AJAX');
             wp_send_json_error(array('message' => __('Permission denied', 'smart-image-matcher')));
         }
         
         $post_id = isset($_POST['post_id']) ? intval($_POST['post_id']) : 0;
         $mode = isset($_POST['mode']) ? sanitize_text_field($_POST['mode']) : 'keyword';
         
-        error_log('SIM AJAX: Post ID: ' . $post_id . ', Mode: ' . $mode);
+        SIM_Core::debug_log('Post ID: ' . $post_id . ', Mode: ' . $mode, 'AJAX');
         
         if (!$post_id) {
-            error_log('SIM AJAX: Invalid post ID');
+            SIM_Core::debug_log('Invalid post ID', 'AJAX');
             wp_send_json_error(array('message' => __('Invalid post ID', 'smart-image-matcher')));
         }
         
@@ -95,35 +100,35 @@ class SIM_AJAX {
         $image_id = isset($_POST['image_id']) ? intval($_POST['image_id']) : 0;
         $heading_position = isset($_POST['heading_position']) ? intval($_POST['heading_position']) : 0;
         
-        error_log('SIM: Insert image request - Post ID: ' . $post_id . ', Image ID: ' . $image_id . ', Position: ' . $heading_position);
+        SIM_Core::debug_log('Insert image request - Post ID: ' . $post_id . ', Image ID: ' . $image_id . ', Position: ' . $heading_position, 'AJAX');
         
         if (!$post_id || !$image_id) {
-            error_log('SIM: Invalid parameters - Post ID or Image ID missing');
+            SIM_Core::debug_log('Invalid parameters - Post ID or Image ID missing', 'AJAX');
             wp_send_json_error(array('message' => __('Invalid parameters', 'smart-image-matcher')));
         }
         
         // Verify post exists
         $post = get_post($post_id);
         if (!$post) {
-            error_log('SIM: Post not found - ID: ' . $post_id);
+            SIM_Core::debug_log('Post not found - ID: ' . $post_id, 'AJAX');
             wp_send_json_error(array('message' => __('Post not found', 'smart-image-matcher')));
         }
         
         // Verify image exists
         $image = get_post($image_id);
         if (!$image || $image->post_type !== 'attachment') {
-            error_log('SIM: Image not found - ID: ' . $image_id);
+            SIM_Core::debug_log('Image not found - ID: ' . $image_id, 'AJAX');
             wp_send_json_error(array('message' => __('Image not found', 'smart-image-matcher')));
         }
         
         $result = self::insert_image_after_heading($post_id, $image_id, $heading_position);
         
         if (is_wp_error($result)) {
-            error_log('SIM: Insert failed - ' . $result->get_error_message());
+            SIM_Core::debug_log('Insert failed - ' . $result->get_error_message(), 'AJAX');
             wp_send_json_error(array('message' => $result->get_error_message()));
         }
         
-        error_log('SIM: Image inserted successfully');
+        SIM_Core::debug_log('Image inserted successfully', 'AJAX');
         
         global $wpdb;
         $matches_table = $wpdb->prefix . 'sim_matches';
@@ -142,16 +147,19 @@ class SIM_AJAX {
         
         SIM_Cache::clear_post_cache($post_id);
         
-        // Final verification - get fresh copy from database
-        wp_cache_flush();
-        $final_post = get_post($post_id);
+        // PERFORMANCE FIX (02/04/2026): Replaced wp_cache_flush() with a
+        // targeted clean_post_cache() call. wp_cache_flush() invalidates the
+        // ENTIRE object cache — flushing data cached by every other plugin —
+        // on every single image insertion. We only need to evict this one post.
+        clean_post_cache( $post_id );
+        $final_post = get_post( $post_id );
         $final_content = $final_post->post_content;
         
         // Check if image block is actually in the content
         $image_block_exists = (strpos($final_content, 'wp:image') !== false && strpos($final_content, 'wp-image-' . $image_id) !== false);
         
-        error_log('SIM: Final verification - Image block exists in DB: ' . ($image_block_exists ? 'YES' : 'NO'));
-        error_log('SIM: Final content length: ' . strlen($final_content));
+        SIM_Core::debug_log('Final verification - Image block exists in DB: ' . ($image_block_exists ? 'YES' : 'NO'), 'AJAX');
+        SIM_Core::debug_log('Final content length: ' . strlen($final_content), 'AJAX');
         
         wp_send_json_success(array(
             'message' => __('Image inserted successfully', 'smart-image-matcher'),
@@ -194,7 +202,7 @@ class SIM_AJAX {
         $original_content = $content;
         $has_blocks = has_blocks($content);
         
-        error_log('SIM: Bulk insert - Processing ' . count($insertions) . ' images in ONE update');
+        SIM_Core::debug_log('Bulk insert - Processing ' . count($insertions) . ' images in ONE update', 'AJAX');
         
         // Filter out duplicates before processing
         $valid_insertions = array();
@@ -202,7 +210,7 @@ class SIM_AJAX {
             if (!self::image_exists_in_content($content, $insertion['image_id'], $insertion['heading_position'])) {
                 $valid_insertions[] = $insertion;
             } else {
-                error_log('SIM: Skipping duplicate image ID ' . $insertion['image_id'] . ' at position ' . $insertion['heading_position']);
+                SIM_Core::debug_log('Skipping duplicate image ID ' . $insertion['image_id'] . ' at position ' . $insertion['heading_position'], 'AJAX');
             }
         }
         
@@ -218,11 +226,11 @@ class SIM_AJAX {
         }
         
         if (empty($content) || $content === $original_content) {
-            error_log('SIM: Bulk insert failed - content unchanged');
+            SIM_Core::debug_log('Bulk insert failed - content unchanged', 'AJAX');
             wp_send_json_error(array('message' => __('Failed to insert images', 'smart-image-matcher')));
         }
         
-        error_log('SIM: Content updated, calling wp_update_post ONCE for ' . count($valid_insertions) . ' images');
+        SIM_Core::debug_log('Content updated, calling wp_update_post ONCE for ' . count($valid_insertions) . ' images', 'AJAX');
         
         // ONE update for all images - creates ONE revision
         $update_result = wp_update_post(array(
@@ -231,7 +239,7 @@ class SIM_AJAX {
         ), true);
         
         if (is_wp_error($update_result)) {
-            error_log('SIM: wp_update_post failed: ' . $update_result->get_error_message());
+            SIM_Core::debug_log('wp_update_post failed: ' . $update_result->get_error_message(), 'AJAX');
             wp_send_json_error(array('message' => $update_result->get_error_message()));
         }
         
@@ -254,7 +262,7 @@ class SIM_AJAX {
         
         SIM_Cache::clear_post_cache($post_id);
         
-        error_log('SIM: Bulk insert succeeded - ONE revision created for ' . count($valid_insertions) . ' images');
+        SIM_Core::debug_log('Bulk insert succeeded - ONE revision created for ' . count($valid_insertions) . ' images', 'AJAX');
         
         wp_send_json_success(array(
             'message' => sprintf(__('Inserted %d images', 'smart-image-matcher'), count($valid_insertions)),
@@ -268,27 +276,27 @@ class SIM_AJAX {
         $post = get_post($post_id);
         
         if (!$post) {
-            error_log('SIM: insert_image_after_heading - Post not found: ' . $post_id);
+            SIM_Core::debug_log('insert_image_after_heading - Post not found: ' . $post_id, 'AJAX');
             return new WP_Error('invalid_post', __('Invalid post ID', 'smart-image-matcher'));
         }
         
         $content = $post->post_content;
-        error_log('SIM: Original content length: ' . strlen($content));
+        SIM_Core::debug_log('Original content length: ' . strlen($content), 'AJAX');
         
         // Check for duplicate - if image already exists in content, skip insertion
         if (self::image_exists_in_content($content, $image_id, $heading_position)) {
-            error_log('SIM: Image ID ' . $image_id . ' already exists in content near position ' . $heading_position . ' - skipping duplicate');
+            SIM_Core::debug_log('Image ID ' . $image_id . ' already exists in content near position ' . $heading_position . ' - skipping duplicate', 'AJAX');
             return new WP_Error('duplicate_image', __('Image already exists in this location', 'smart-image-matcher'));
         }
         
         // Parse blocks if this is Gutenberg content
         $has_blocks = has_blocks($content);
-        error_log('SIM: Content has Gutenberg blocks: ' . ($has_blocks ? 'YES' : 'NO'));
+        SIM_Core::debug_log('Content has Gutenberg blocks: ' . ($has_blocks ? 'YES' : 'NO'), 'AJAX');
         
         if ($has_blocks) {
             // Use WordPress block parser for Gutenberg
             $blocks = parse_blocks($content);
-            error_log('SIM: Parsed ' . count($blocks) . ' blocks');
+            SIM_Core::debug_log('Parsed ' . count($blocks) . ' blocks', 'AJAX');
             
             // Find the heading block and insert image after it
             $inserted = false;
@@ -307,7 +315,7 @@ class SIM_AJAX {
                         $image_block = self::create_gutenberg_image_block($image_id);
                         $new_blocks[] = $image_block;
                         $inserted = true;
-                        error_log('SIM: Inserted image block after Gutenberg heading');
+                        SIM_Core::debug_log('Inserted image block after Gutenberg heading', 'AJAX');
                     }
                 }
             }
@@ -316,21 +324,21 @@ class SIM_AJAX {
                 // Serialize blocks back to content
                 $new_content = serialize_blocks($new_blocks);
             } else {
-                error_log('SIM: Could not find Gutenberg heading, falling back to HTML insertion');
+                SIM_Core::debug_log('Could not find Gutenberg heading, falling back to HTML insertion');
                 $new_content = self::insert_via_html($content, $image_id, $heading_position);
             }
         } else {
             // Classic editor or HTML content
-            error_log('SIM: Using HTML insertion for Classic Editor');
+            SIM_Core::debug_log('Using HTML insertion for Classic Editor');
             $new_content = self::insert_via_html($content, $image_id, $heading_position);
         }
         
         if (empty($new_content) || $new_content === $content) {
-            error_log('SIM: Content unchanged after insertion attempt');
+            SIM_Core::debug_log('Content unchanged after insertion attempt');
             return new WP_Error('insertion_failed', __('Failed to insert image', 'smart-image-matcher'));
         }
         
-        error_log('SIM: New content length: ' . strlen($new_content));
+        SIM_Core::debug_log('New content length: ' . strlen($new_content));
         
         // Update post with WordPress function
         $update_result = wp_update_post(array(
@@ -339,11 +347,11 @@ class SIM_AJAX {
         ), true);
         
         if (is_wp_error($update_result)) {
-            error_log('SIM: wp_update_post failed: ' . $update_result->get_error_message());
+            SIM_Core::debug_log('wp_update_post failed: ' . $update_result->get_error_message(), 'AJAX');
             return $update_result;
         }
         
-        error_log('SIM: wp_update_post succeeded');
+        SIM_Core::debug_log('wp_update_post succeeded');
         
         // Clear caches using WordPress functions
         clean_post_cache($post_id);
@@ -407,7 +415,7 @@ class SIM_AJAX {
             'innerContent' => array($innerHTML),
         );
         
-        error_log('SIM: Created Gutenberg block array without width/height in attrs or img');
+        SIM_Core::debug_log('Created Gutenberg block array without width/height in attrs or img');
         
         return $block;
     }
@@ -416,7 +424,7 @@ class SIM_AJAX {
         $image = get_post($image_id);
         
         if (!$image) {
-            error_log('SIM: Image not found for ID: ' . $image_id);
+            SIM_Core::debug_log('Image not found for ID: ' . $image_id);
             return '';
         }
         
@@ -455,7 +463,7 @@ class SIM_AJAX {
         $block .= '</figure>';
         $block .= "\n" . '<!-- /wp:image -->';
         
-        error_log('SIM: Created Gutenberg block without width/height');
+        SIM_Core::debug_log('Created Gutenberg block without width/height');
         
         return $block;
     }
@@ -479,7 +487,7 @@ class SIM_AJAX {
         
         // Check if image exists in this section
         if (strpos($content_section, $image_class) !== false) {
-            error_log('SIM: Found image ' . $image_id . ' near heading at position ' . $heading_position);
+            SIM_Core::debug_log('Found image ' . $image_id . ' near heading at position ' . $heading_position);
             return true;
         }
         
@@ -488,7 +496,7 @@ class SIM_AJAX {
     
     private static function bulk_insert_gutenberg($content, $insertions) {
         $blocks = parse_blocks($content);
-        error_log('SIM: Bulk Gutenberg - Parsed ' . count($blocks) . ' blocks');
+        SIM_Core::debug_log('Bulk Gutenberg - Parsed ' . count($blocks) . ' blocks');
         
         // Create a map of positions to images for quick lookup
         $insertion_map = array();
@@ -511,7 +519,7 @@ class SIM_AJAX {
                     if ($block_position !== false && abs($block_position - $heading_pos) < 50) {
                         $image_block = self::create_gutenberg_image_block($image_id);
                         $new_blocks[] = $image_block;
-                        error_log('SIM: Bulk Gutenberg - Inserted image ' . $image_id . ' after heading at position ' . $block_position);
+                        SIM_Core::debug_log('Bulk Gutenberg - Inserted image ' . $image_id . ' after heading at position ' . $block_position);
                         unset($insertion_map[$heading_pos]); // Remove so we don't insert twice
                         break;
                     }
@@ -546,7 +554,7 @@ class SIM_AJAX {
         foreach ($insertion_points as $position => $image_id) {
             $image_block = self::create_image_block($image_id);
             $content = substr($content, 0, $position) . "\n\n" . $image_block . "\n\n" . substr($content, $position);
-            error_log('SIM: Bulk HTML - Inserted image ' . $image_id . ' at position ' . $position);
+            SIM_Core::debug_log('Bulk HTML - Inserted image ' . $image_id . ' at position ' . $position);
         }
         
         return $content;

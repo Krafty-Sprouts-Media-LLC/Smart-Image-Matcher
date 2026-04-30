@@ -5,6 +5,53 @@ All notable changes to Smart Image Matcher will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.0] - 30/04/2026
+
+### Added
+- **Featured Image Auto-Assigner Module** - Added `SIM_Featured_Image_Auto_Assigner` to provide slug-to-filename featured image assignment inside Smart Image Matcher. Includes a Media admin page for manual bulk matching, optional overwrite mode, unmatched reporting, and post coverage stats.
+- **On-Upload Auto Assignment Hook** - Added automatic assignment on `add_attachment` so newly uploaded images are matched to posts with the same slug when no featured image is currently set.
+
+### Changed
+- **Performance for Manual Runs** - Updated featured-image assignment processing to run in paged batches instead of loading all posts in one query, reducing memory pressure and timeout risk on large sites.
+- **Attachment Lookup Caching** - Added transient-backed attachment slug map caching for bulk runs, plus automatic cache invalidation on upload/edit/delete attachment events.
+- **Cron Auto-Run** - Added daily scheduled run (`sim_fiaa_cron_run`) for featured-image assignment with configurable options for enable/disable, post types, and overwrite behavior.
+- **Run Summary Persistence** - Cron runs now persist summary metrics (matched/skipped/unmatched/total/duration) to `sim_fiaa_last_run_summary`.
+
+### Documentation
+- Added `FEATURED_IMAGE_AUTO_ASSIGNER_ROADMAP.md` with proposed low-risk enhancements: dry-run mode, settings toggles for auto-assign scope, WP-CLI runner, and run-summary history.
+
+## [2.5.2] - 02/04/2026
+
+### Fixed
+- **HIGH — Unbounded Media Library Query:** `SIM_Cache::get_cached_media_library()` in `class-sim-cache.php` was fetching all attachment IDs in a single `get_posts()` call with `posts_per_page => -1`. On a media library with thousands of images this could exhaust PHP memory and cause a fatal error on first cache population. **Fix:** Replaced with a paginated batch loader (500 IDs per page) using a `do/while` loop. Also added `no_found_rows => true` (skips the SQL_CALC_FOUND_ROWS count query) and disabled `update_post_meta_cache` / `update_post_term_cache` since only IDs are needed at this stage. The result is cached in the same 24-hour transient, so subsequent requests are unaffected.
+- **MEDIUM — `wp_cache_flush()` on Every Image Insertion:** `SIM_AJAX::insert_image()` in `class-sim-ajax.php` called `wp_cache_flush()` after each individual image insertion to ensure a fresh database read. This flushed the entire WordPress object cache — invalidating data cached by every active plugin — on every single insert click. **Fix:** Replaced with `clean_post_cache( $post_id )`, which evicts only the specific post from the cache and is the correct WordPress API for this use case.
+- **MEDIUM — Unconditional `print_r($_POST)` in Production AJAX:** `SIM_AJAX::find_matches()` was serialising the full AJAX POST payload to the debug log on every invocation regardless of whether debug mode was enabled. **Fix:** The `print_r($_POST)` call is now gated behind `SIM_Core::is_debug_mode()`, so it only runs when the user explicitly enables debug mode in SIM settings.
+
+## [2.5.1] - 30/12/2025
+
+### Documentation
+- **Future Enhancements** - Added detailed strategy for "Hybrid Search (Embeddings + LLM)" to `FUTURE_ENHANCEMENTS.md`, outlining the RAG workflow for the upcoming Bulk Feature.
+
+## [2.5.0] - 27/10/2025
+
+### Security Enhancements
+- **API Key Encryption** - Claude API keys are now encrypted using WordPress salts
+- **Debug Mode Toggle** - Added user-controllable debug logging setting
+- **Conditional Logging** - Debug logs only appear when debug mode is enabled
+- **Enhanced Security** - All sensitive data now uses proper encryption/decryption
+
+### Added
+- **Debug Mode Setting** - New setting in Linguistic Enhancements section
+- **Encryption Functions** - `encrypt_data()` and `decrypt_data()` methods in SIM_Core
+- **Debug Logging System** - `debug_log()` method with context-aware logging
+- **Security Best Practices** - Follows WordPress security standards for sensitive data
+
+### Changed
+- **API Key Storage** - Keys are encrypted before database storage
+- **Logging Behavior** - All debug logs are now conditional based on user setting
+- **Settings Page** - Added debug mode toggle with clear descriptions
+- **Performance** - Reduced logging overhead in production environments
+
 ## [2.4.1] - 27/10/2025
 
 ### Fixed

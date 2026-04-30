@@ -3,7 +3,7 @@
  * Filename: class-sim-core.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.1.0
+ * Version: 1.2.0
  * Last Modified: 27/10/2025
  * Description: Core functionality with Gutenberg toolbar integration using custom SVG icons
  */
@@ -15,6 +15,64 @@ if (!defined('ABSPATH')) {
 class SIM_Core {
     
     private static $instance = null;
+    
+    /**
+     * Encrypt sensitive data using WordPress salts
+     * 
+     * @param string $data Data to encrypt
+     * @return string Encrypted data
+     */
+    public static function encrypt_data($data) {
+        if (empty($data)) {
+            return '';
+        }
+        
+        $key = wp_salt('AUTH_KEY') . wp_salt('SECURE_AUTH_KEY');
+        $iv = wp_salt('NONCE_SALT');
+        
+        $encrypted = openssl_encrypt($data, 'AES-256-CBC', $key, 0, substr($iv, 0, 16));
+        return base64_encode($encrypted);
+    }
+    
+    /**
+     * Decrypt sensitive data using WordPress salts
+     * 
+     * @param string $encrypted_data Encrypted data
+     * @return string Decrypted data
+     */
+    public static function decrypt_data($encrypted_data) {
+        if (empty($encrypted_data)) {
+            return '';
+        }
+        
+        $key = wp_salt('AUTH_KEY') . wp_salt('SECURE_AUTH_KEY');
+        $iv = wp_salt('NONCE_SALT');
+        
+        $decrypted = openssl_decrypt(base64_decode($encrypted_data), 'AES-256-CBC', $key, 0, substr($iv, 0, 16));
+        return $decrypted ?: '';
+    }
+    
+    /**
+     * Check if debug mode is enabled
+     * 
+     * @return bool True if debug mode is enabled
+     */
+    public static function is_debug_mode() {
+        return (bool) get_option('sim_debug_mode', false);
+    }
+    
+    /**
+     * Log debug message if debug mode is enabled
+     * 
+     * @param string $message Debug message
+     * @param string $context Optional context
+     */
+    public static function debug_log($message, $context = '') {
+        if (self::is_debug_mode()) {
+            $prefix = $context ? "[SIM {$context}] " : "[SIM] ";
+            error_log($prefix . $message);
+        }
+    }
     
     public static function get_instance() {
         if (null === self::$instance) {

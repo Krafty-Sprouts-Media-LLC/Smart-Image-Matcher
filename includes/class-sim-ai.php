@@ -3,7 +3,7 @@
  * Filename: class-sim-ai.php
  * Author: Krafty Sprouts Media, LLC
  * Created: 12/10/2025
- * Version: 1.0.1
+ * Version: 1.1.0
  * Last Modified: 12/10/2025
  * Description: Claude API integration for AI-powered image matching
  * 
@@ -18,7 +18,8 @@ if (!defined('ABSPATH')) {
 class SIM_AI {
     
     public static function find_ai_matches($heading, $media_library, $candidate_count = 10) {
-        $api_key = get_option('sim_claude_api_key', '');
+        $api_key_encrypted = get_option('sim_claude_api_key', '');
+        $api_key = !empty($api_key_encrypted) ? SIM_Core::decrypt_data($api_key_encrypted) : '';
         
         if (empty($api_key)) {
             return SIM_Matcher::find_keyword_matches($heading, $media_library);
@@ -52,7 +53,8 @@ class SIM_AI {
     }
     
     public static function call_claude_api($heading, $candidates) {
-        $api_key = get_option('sim_claude_api_key', '');
+        $api_key_encrypted = get_option('sim_claude_api_key', '');
+        $api_key = !empty($api_key_encrypted) ? SIM_Core::decrypt_data($api_key_encrypted) : '';
         $model = get_option('sim_claude_model', 'claude-sonnet-4-20250514');
         
         $candidate_list = array();
