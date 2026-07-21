@@ -1,451 +1,50 @@
 /**
- * Filename: sim-admin.css
- * Author: Krafty Sprouts Media, LLC
- * Created: 12/10/2025
- * Version: 1.0.1
- * Last Modified: 27/10/2025
- * Description: Admin styles for Smart Image Matcher modal and UI with carousel controls and transitions
+ * sim-admin.css - always-loaded admin styles.
+ *
+ * Contains only global SIM admin essentials. Page layouts live in
+ * sim-pages.css and feature-specific stylesheets.
+ *
+ * @package SmartImageMatcher
+ * @since   3.0.0
  */
 
-/* Admin Bar Button */
-#wp-admin-bar-smart-image-matcher .ab-icon:before {
-    content: '\f128';
-    top: 2px;
-}
-
-#wp-admin-bar-smart-image-matcher .ab-label {
-    margin-left: 5px;
-}
-
-#wp-admin-bar-smart-image-matcher:hover {
-    background-color: #1d2327;
-}
-
-#wp-admin-bar-smart-image-matcher a {
-    cursor: pointer;
-}
-
-/* Gutenberg Button */
-#sim-gutenberg-button {
-    white-space: nowrap;
-}
-
-#sim-button-container {
-    flex-shrink: 0;
-}
-
-
-.sim-modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 100000;
-}
-
-.sim-modal-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.7);
-}
-
-.sim-modal-content {
-    position: relative;
-    max-width: 800px;
-    max-height: 80vh;
-    margin: 5% auto;
-    background: #fff;
-    border-radius: 8px;
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-    display: flex;
-    flex-direction: column;
-}
-
-.sim-modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 20px;
-    border-bottom: 1px solid #ddd;
-}
-
-.sim-modal-header h2 {
-    margin: 0;
-    font-size: 20px;
-}
-
-.sim-modal-close {
-    background: none;
-    border: none;
-    font-size: 28px;
-    cursor: pointer;
-    color: #666;
-    line-height: 1;
-    padding: 0;
-    width: 30px;
-    height: 30px;
-}
-
-.sim-modal-close:hover {
-    color: #000;
-}
-
-.sim-modal-body {
-    padding: 20px;
-    overflow-y: auto;
-    max-height: calc(80vh - 150px);
-}
-
-.sim-modal-footer {
-    padding: 15px 20px;
-    border-top: 1px solid #ddd;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.sim-progress-bar {
-    width: 100%;
-    height: 24px;
-    background: #f0f0f0;
-    border-radius: 12px;
-    overflow: hidden;
-    margin: 15px 0;
-}
-
-.sim-progress-fill {
-    height: 100%;
-    background: #0073aa;
-    transition: width 0.3s ease;
-    width: 0%;
-}
-
-.sim-loading-info {
-    color: #666;
-    font-size: 14px;
-    margin: 10px 0;
-}
-
-.sim-results-summary {
-    padding: 15px;
-    background: #f0f6fc;
-    border-left: 4px solid #0073aa;
-    margin-bottom: 20px;
-    font-size: 15px;
-}
-
-.sim-match-item {
-    border: 1px solid #ddd;
-    border-radius: 6px;
-    padding: 15px;
-    margin-bottom: 15px;
-    background: #fff;
-}
-
-/* Carousel Controls */
-.sim-carousel-controls {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 12px;
-    margin: 10px 0;
-    background: #f8f9fa;
-    border: 1px solid #e1e4e8;
-    border-radius: 6px;
-}
-
-.sim-carousel-prev,
-.sim-carousel-next {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    min-width: 80px;
-}
-
-.sim-carousel-prev .dashicons,
-.sim-carousel-next .dashicons {
-    font-size: 16px;
-    width: 16px;
-    height: 16px;
-    vertical-align: middle;
-    margin-top: -2px;
-}
-
-.sim-carousel-prev:disabled,
-.sim-carousel-next:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-.sim-carousel-counter {
-    font-size: 14px;
-    color: #333;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.sim-best-match-badge {
-    display: inline-block;
-    background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
-    color: #333;
-    padding: 3px 10px;
-    border-radius: 12px;
-    font-size: 12px;
-    font-weight: 600;
-    box-shadow: 0 2px 4px rgba(255, 215, 0, 0.3);
-    margin-right: 5px;
-}
-
-.sim-match-item.no-match {
-    background: #fff8e5;
-    border-color: #ffb900;
-}
-
-.sim-match-heading {
-    font-size: 16px;
-    font-weight: 600;
-    margin-bottom: 12px;
-    display: flex;
-    align-items: center;
-}
-
-.sim-match-heading .dashicons,
-.sim-match-heading .sim-svg-icon {
-    margin-right: 8px;
-}
-
-/* SVG Icon Styles */
-.sim-svg-icon {
-    display: inline-block;
-    vertical-align: middle;
-    flex-shrink: 0;
-}
-
-.sim-svg-icon.sim-icon-check {
-    color: #46b450;
-}
-
-.sim-svg-icon.sim-icon-check.unselected {
-    color: #dc3232;
-}
-
-.sim-svg-icon.sim-icon-close {
-    color: #dc3232;
-}
-
-.sim-svg-icon.sim-icon-warning {
-    color: #ffb900;
-}
-
-.sim-svg-icon.sim-icon-image {
-    color: #2271b1;
-}
-
-.sim-svg-icon.sim-icon-lightbulb {
-    color: #2271b1;
-}
-
-.sim-svg-icon.sim-icon-info {
-    color: #2271b1;
-}
-
-.sim-svg-icon.sim-icon-post {
-    color: #666;
-}
-
-.sim-svg-icon.sim-icon-settings {
-    color: #666;
-}
-
-.sim-svg-icon.sim-icon-chart {
-    color: #666;
-}
-
-.sim-svg-icon.sim-icon-success {
-    color: #46b450;
-}
-
-/* Gutenberg Toolbar Button Styles - Now using proper ToolbarButton API */
-
-.sim-match-heading .dashicons-yes {
-    color: #46b450;
-}
-
-.sim-match-heading .dashicons-yes.unselected {
-    color: #dc3232;
-}
-
-.sim-match-heading .dashicons-no {
-    color: #dc3232;
-}
-
-.sim-image-preview-container {
-    display: flex;
-    align-items: flex-start;
-    gap: 15px;
-    margin-top: 10px;
-}
-
-.sim-image-preview {
-    width: 200px;
-    height: 200px;
-    object-fit: cover;
-    border-radius: 4px;
-    border: 1px solid #ddd;
-    transition: opacity 0.15s ease-in-out;
-}
-
-.sim-image-preview.sim-transitioning {
-    opacity: 0.5;
-}
-
-.sim-image-info {
-    flex: 1;
-    transition: opacity 0.15s ease-in-out;
-}
-
-.sim-image-info.sim-transitioning {
-    opacity: 0.5;
-}
-
-.sim-confidence-score {
-    font-size: 14px;
-    margin: 8px 0;
-}
-
-.sim-confidence-high {
-    color: #46b450;
-    font-weight: 600;
-}
-
-.sim-confidence-medium {
-    color: #ffb900;
-    font-weight: 600;
-}
-
-.sim-confidence-low {
-    color: #dc3232;
-    font-weight: 600;
-}
-
-.sim-filename {
-    font-size: 13px;
-    color: #666;
-    margin: 5px 0;
-    word-break: break-all;
-}
-
-.sim-ai-reasoning {
-    font-size: 13px;
-    color: #555;
-    margin: 10px 0;
-    padding: 10px;
-    background: #f9f9f9;
-    border-radius: 4px;
-    font-style: italic;
-}
-
-.sim-match-actions {
-    margin-top: 12px;
-    display: flex;
-    gap: 10px;
-    align-items: center;
-}
-
-.sim-select-checkbox {
-    margin: 0 5px 0 0;
-}
-
-.sim-error-state {
-    padding: 20px;
-    text-align: center;
-}
-
-.sim-error-message {
-    color: #dc3232;
-    font-size: 15px;
-    padding: 15px;
-    background: #ffebee;
-    border-radius: 4px;
-    border-left: 4px solid #dc3232;
-}
-
-.sim-success-message {
-    color: #46b450;
-    font-size: 15px;
-    padding: 15px;
-    background: #ecf7ed;
-    border-radius: 4px;
-    border-left: 4px solid #46b450;
-    margin-bottom: 15px;
-}
-
-.sim-undo-timer {
-    font-size: 13px;
-    color: #666;
-    margin-top: 8px;
-}
-
-.sim-no-match-warning {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    color: #856404;
-}
-
-#sim-open-modal {
-    margin-top: 10px;
-}
-
-.sim-bulk-container {
-    max-width: 1200px;
-    margin: 20px auto;
-}
-
-.sim-bulk-step {
-    background: #fff;
-    padding: 25px;
-    margin-bottom: 20px;
-    border-radius: 8px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.sim-bulk-step h3 {
-    margin-top: 0;
-    font-size: 18px;
-    border-bottom: 2px solid #0073aa;
-    padding-bottom: 10px;
-}
-
-.sim-form-row {
-    margin-bottom: 20px;
-}
-
-.sim-form-row label {
-    display: block;
-    font-weight: 600;
-    margin-bottom: 8px;
-}
-
-.sim-form-row input[type="text"],
-.sim-form-row select {
-    width: 100%;
-    max-width: 400px;
-}
-
-.sim-form-row input[type="number"] {
-    width: 100px;
-}
-
-.sim-help-text {
-    font-size: 13px;
-    color: #666;
-    margin-top: 5px;
-    font-style: italic;
-}
-
+/* ---- Admin menu icon ---- */
+#adminmenu .toplevel_page_smart-image-matcher .wp-menu-image img {
+	width: 20px;
+	padding-top: 6px;
+}
+
+/* ---- Premium badge ---- */
+.sim-premium-badge {
+	display: inline-block;
+	background: #3858e9;
+	color: #fff;
+	font-size: 11px;
+	font-weight: 600;
+	padding: 1px 7px;
+	border-radius: 10px;
+	vertical-align: middle;
+	margin-right: 6px;
+	text-transform: uppercase;
+}
+
+/* ---- Locked premium fields ---- */
+.sim-premium-locked-content {
+	opacity: 0.45;
+	pointer-events: none;
+	user-select: none;
+}
+
+/* ---- SVG icon defaults ---- */
+.sim-icon {
+	display: inline-block;
+	vertical-align: middle;
+	flex-shrink: 0;
+}
+
+.sim-icon-check { color: #00a32a; }
+.sim-icon-cross { color: #d63638; }
+.sim-icon-warning { color: #dba617; }
+.sim-icon-star { color: #dba617; }
+.sim-icon-image { color: #2271b1; }
+.sim-icon-info { color: #2271b1; }

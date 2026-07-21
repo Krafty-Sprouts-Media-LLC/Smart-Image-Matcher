@@ -1,0 +1,110 @@
+/**
+ * sim-bulk.css — Bulk Processor admin page styles.
+ *
+ * Enqueued only on the Bulk Processor admin page.
+ *
+ * @package SmartImageMatcher
+ * @since   3.0.0
+ */
+
+/* ---- Step panels ---- */
+.sim-bulk-step-wrap {
+	margin-top: 16px;
+}
+
+.sim-bulk-step {
+	padding: 0;
+	background: transparent;
+	border: 0;
+}
+
+.sim-bulk-step h2 {
+	margin-top: 0;
+	font-size: 18px;
+}
+
+.sim-bulk-form-grid {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	max-width: 1100px;
+}
+
+.sim-field-wide {
+	grid-column: 1 / -1;
+}
+
+.sim-checkbox-grid,
+.sim-date-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 8px 14px;
+}
+
+.sim-saved-segment-row,
+.sim-step-actions {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin: 14px 0;
+}
+
+.sim-saved-segment-row select {
+	min-width: 220px;
+}
+
+.sim-bulk-step textarea,
+.sim-bulk-step input[type="search"],
+.sim-bulk-step input[type="number"],
+.sim-bulk-step select {
+	width: 100%;
+	max-width: 100%;
+}
+
+/* ---- Review toolbar ---- */
+.sim-review-toolbar {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 14px;
+	padding-bottom: 12px;
+	border-bottom: 1px solid #f0f0f0;
+}
+
+/* ---- Job meta ---- */
+#sim-job-meta {
+	font-size: 13px;
+	color: #50575e;
+	margin-bottom: 8px;
+}
+
+/* ---- Activity log ---- */
+#sim-bulk-activity {
+	font-family: monospace;
+	font-size: 12px;
+	background: #f9f9f9;
+	border: 1px solid #dcdcde;
+	padding: 10px;
+	max-height: 200px;
+	overflow-y: auto;
+	margin: 10px 0;
+	border-radius: 4px;
+}
+
+/* ---- Review table tweaks ---- */
+#sim-review-table-wrap .widefat td {
+	vertical-align: middle;
+}
+
+#sim-review-table-wrap img {
+	display: block;
+	object-fit: cover;
+	border-radius: 3px;
+}
+
+@media (max-width: 782px) {
+	.sim-bulk-form-grid,
+	.sim-checkbox-grid,
+	.sim-date-grid {
+		grid-template-columns: 1fr;
+	}
+}

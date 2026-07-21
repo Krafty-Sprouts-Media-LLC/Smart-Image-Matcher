@@ -1,0 +1,99 @@
+# Release workflow — tag push creates a public GitHub Release with zip asset.
+#
+# Tag format: semver WITHOUT a required "v" prefix.
+#   Correct:  git tag 3.0.8 && git push origin 3.0.8
+#   Also OK:  git tag v3.0.8  (PUC strips a leading v)
+#
+# The attached smart-image-matcher.zip is what Plugin Update Checker downloads.
+#
+# @package SmartImageMatcher
+# @since   3.0.8
+
+name: Release
+
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+      - '[0-9]+.[0-9]+.[0-9]+-*'
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build zip and publish release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          tools: composer:v2
+          coverage: none
+
+      - name: Normalize version from tag
+        id: version
+        run: |
+          RAW="${GITHUB_REF_NAME}"
+          VERSION="${RAW#v}"
+          echo "raw=${RAW}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify plugin header matches tag
+        run: |
+          HEADER="$(grep -E '^\s*\*\s*Version:\s*' smart-image-matcher.php | head -1 | sed -E 's/.*Version:\s*//')"
+          CONST="$(grep -E "define\(\s*'SMART_IMAGE_MATCHER_VERSION'" smart-image-matcher.php | sed -E "s/.*'([0-9][^']*)'.*/\1/")"
+          STABLE="$(grep -E '^Stable tag:' readme.txt | sed -E 's/^Stable tag:\s*//')"
+          echo "Header=${HEADER} Const=${CONST} Stable=${STABLE} Tag=${{ steps.version.outputs.version }}"
+          test "${HEADER}" = "${{ steps.version.outputs.version }}"
+          test "${CONST}" = "${{ steps.version.outputs.version }}"
+          test "${STABLE}" = "${{ steps.version.outputs.version }}"
+
+      - name: Install rsync
+        run: sudo apt-get update && sudo apt-get install -y rsync zip
+
+      - name: Build release zip
+        run: |
+          chmod +x bin/build-zip.sh
+          ./bin/build-zip.sh
+
+      - name: Extract changelog for this version
+        id: changelog
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          python3 <<'PY'
+          import pathlib, os, re
+          version = os.environ["VERSION"]
+          text = pathlib.Path("CHANGELOG.md").read_text(encoding="utf-8")
+          # Match ## [3.0.8] - date ... until next ## [
+          pattern = rf"(?ms)^## \[{re.escape(version)}\][^\n]*\n(.*?)(?=^## \[|\Z)"
+          m = re.search(pattern, text)
+          body = m.group(1).strip() if m else f"Release {version}."
+          pathlib.Path("release-notes.md").write_text(body + "\n", encoding="utf-8")
+          print(body[:500])
+          PY
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.raw }}
+          name: ${{ steps.version.outputs.version }}
+          body_path: release-notes.md
+          files: smart-image-matcher.zip
+          fail_on_unmatched_files: true
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

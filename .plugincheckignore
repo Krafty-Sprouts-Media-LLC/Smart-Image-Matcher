@@ -1,0 +1,12 @@
+# Folders excluded from Plugin Check scanning.
+# These are development/reference folders that are NOT shipped in the wp.org zip.
+
+.legacy/
+.wp-ai/
+.agent-skills/
+.cursor/
+.kiro/
+vendor/
+node_modules/
+tests/
+docs/

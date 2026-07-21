@@ -1,0 +1,49 @@
+<?xml version="1.0"?>
+<ruleset name="SmartImageMatcher">
+    <description>PHPCS ruleset for Smart Image Matcher.</description>
+
+    <file>src</file>
+    <file>admin</file>
+    <file>smart-image-matcher.php</file>
+    <file>uninstall.php</file>
+
+    <arg name="extensions" value="php"/>
+    <arg name="colors"/>
+    <arg value="sp"/>
+
+    <!-- WordPress coding standards. -->
+    <rule ref="WordPress"/>
+
+    <!--
+        PSR-4 uses PascalCase filenames (InsertionService.php), not kebab-case.
+        The WordPress.Files.FileName rule expects class-foo.php style.
+        We intentionally use PSR-4 — suppress this rule project-wide.
+    -->
+    <rule ref="WordPress.Files.FileName">
+        <exclude-pattern>src/*</exclude-pattern>
+    </rule>
+
+    <!-- PHP 7.4 is the minimum; allow short closures etc. -->
+    <config name="minimum_supported_wp_version" value="6.0"/>
+    <config name="testVersion" value="7.4-"/>
+
+    <!-- Text domain for this plugin. -->
+    <rule ref="WordPress.WP.I18n">
+        <properties>
+            <property name="text_domain" type="array">
+                <element value="smart-image-matcher"/>
+            </property>
+        </properties>
+    </rule>
+
+    <!-- Exclude legacy reference directory — read-only, no new code goes here. -->
+    <exclude-pattern>.legacy/*</exclude-pattern>
+    <!-- Exclude WP AI reference plugin — documentation only, not part of this plugin. -->
+    <exclude-pattern>.wp-ai/*</exclude-pattern>
+    <!-- Exclude agent skills and cursor config — dev tooling only. -->
+    <exclude-pattern>.agent-skills/*</exclude-pattern>
+    <exclude-pattern>.cursor/*</exclude-pattern>
+    <exclude-pattern>vendor/*</exclude-pattern>
+    <exclude-pattern>node_modules/*</exclude-pattern>
+    <exclude-pattern>tests/*</exclude-pattern>
+</ruleset>

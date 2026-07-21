@@ -1,0 +1,43 @@
+{
+    "name": "kraftysprouts/smart-image-matcher",
+    "description": "Smart Image Matcher WordPress plugin",
+    "type": "wordpress-plugin",
+    "license": "GPL-2.0-or-later",
+    "require": {
+        "php": ">=7.4",
+        "woocommerce/action-scheduler": "^3.8 || ^4.0",
+        "yahnis-elsts/plugin-update-checker": "^5.7"
+    },
+    "require-dev": {
+        "wp-coding-standards/wpcs": "^3.0",
+        "phpcsstandards/phpcsutils": "^1.0",
+        "phpunit/phpunit": "^9.0 || ^10.0",
+        "phpstan/phpstan": "^1.10",
+        "szepeviktor/phpstan-wordpress": "^1.3",
+        "wp-cli/i18n-command": "^2.5"
+    },
+    "autoload": {
+        "psr-4": {
+            "SmartImageMatcher\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "SmartImageMatcher\\Tests\\": "tests/phpunit/"
+        }
+    },
+    "scripts": {
+        "test":        "phpunit --configuration phpunit.xml.dist",
+        "phpcs":       "phpcs --standard=phpcs.xml.dist",
+        "phpcbf":      "phpcbf --standard=phpcs.xml.dist",
+        "phpstan":     "phpstan analyse --configuration phpstan.neon.dist",
+        "pot":         "wp i18n make-pot . languages/smart-image-matcher.pot",
+        "build-prod":  "composer install --no-dev --optimize-autoloader",
+        "build-zip":   "composer run build-prod && php -r \"echo 'Ready for zip — exclude: .git .legacy .cursor .kiro .wp-ai .agent-skills tests docs/audit node_modules\\n';\""
+    },
+    "config": {
+        "allow-plugins": {
+            "dealerdirect/phpcodesniffer-composer-installer": true
+        }
+    }
+}

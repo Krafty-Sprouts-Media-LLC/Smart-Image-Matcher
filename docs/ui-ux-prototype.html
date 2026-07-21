@@ -1,0 +1,1308 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Smart Image Matcher UI Prototype</title>
+	<style>
+		:root {
+			--ink: #1d2327;
+			--muted: #646970;
+			--line: #dcdcde;
+			--soft: #f6f7f7;
+			--panel: #ffffff;
+			--blue: #2271b1;
+			--blue-dark: #135e96;
+			--green: #008a20;
+			--amber: #996800;
+			--red: #b32d2e;
+			--violet: #5b4bb7;
+			--teal: #087d80;
+			--shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 8px 24px rgba(0, 0, 0, 0.06);
+		}
+
+		* {
+			box-sizing: border-box;
+		}
+
+		body {
+			margin: 0;
+			color: var(--ink);
+			background: #f0f0f1;
+			font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+			letter-spacing: 0;
+		}
+
+		button,
+		input,
+		select,
+		textarea {
+			font: inherit;
+		}
+
+		button {
+			cursor: pointer;
+		}
+
+		.app {
+			min-height: 100vh;
+			display: grid;
+			grid-template-columns: 236px minmax(0, 1fr);
+		}
+
+		.sidebar {
+			background: #1d2327;
+			color: #f0f0f1;
+			padding: 18px 14px;
+			display: flex;
+			flex-direction: column;
+			gap: 18px;
+		}
+
+		.brand {
+			display: flex;
+			align-items: center;
+			gap: 10px;
+			padding: 2px 4px 14px;
+			border-bottom: 1px solid rgba(255,255,255,0.12);
+		}
+
+		.brand-mark {
+			width: 34px;
+			height: 34px;
+			border-radius: 7px;
+			background: #f0f0f1;
+			color: #1d2327;
+			display: grid;
+			place-items: center;
+			font-weight: 800;
+		}
+
+		.brand strong {
+			display: block;
+			font-size: 15px;
+		}
+
+		.brand span {
+			display: block;
+			color: #c3c4c7;
+			font-size: 12px;
+		}
+
+		.nav {
+			display: grid;
+			gap: 4px;
+		}
+
+		.nav button {
+			width: 100%;
+			min-height: 40px;
+			border: 0;
+			border-radius: 6px;
+			background: transparent;
+			color: #f0f0f1;
+			display: grid;
+			grid-template-columns: 22px 1fr auto;
+			align-items: center;
+			gap: 10px;
+			padding: 9px 10px;
+			text-align: left;
+		}
+
+		.nav button:hover,
+		.nav button.active {
+			background: #2c3338;
+		}
+
+		.nav svg {
+			width: 18px;
+			height: 18px;
+			stroke: currentColor;
+			fill: none;
+			stroke-width: 2;
+			stroke-linecap: round;
+			stroke-linejoin: round;
+		}
+
+		.badge {
+			border-radius: 999px;
+			background: #e8f2ff;
+			color: var(--blue-dark);
+			font-size: 12px;
+			padding: 2px 7px;
+			font-weight: 700;
+		}
+
+		.nav .badge {
+			background: #3858e9;
+			color: #fff;
+		}
+
+		.sidebar-foot {
+			margin-top: auto;
+			padding: 12px 10px;
+			color: #c3c4c7;
+			border-top: 1px solid rgba(255,255,255,0.12);
+			font-size: 12px;
+		}
+
+		.main {
+			min-width: 0;
+			display: flex;
+			flex-direction: column;
+		}
+
+		.topbar {
+			height: 56px;
+			background: var(--panel);
+			border-bottom: 1px solid var(--line);
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			padding: 0 28px;
+			position: sticky;
+			top: 0;
+			z-index: 4;
+		}
+
+		.search {
+			width: min(480px, 45vw);
+			height: 36px;
+			border: 1px solid var(--line);
+			border-radius: 6px;
+			background: var(--soft);
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			padding: 0 10px;
+		}
+
+		.search input {
+			width: 100%;
+			border: 0;
+			outline: 0;
+			background: transparent;
+		}
+
+		.userbar {
+			display: flex;
+			align-items: center;
+			gap: 12px;
+			color: var(--muted);
+		}
+
+		.avatar {
+			width: 30px;
+			height: 30px;
+			border-radius: 50%;
+			background: linear-gradient(135deg, #3858e9, #008a20);
+		}
+
+		.content {
+			padding: 26px 28px 42px;
+			max-width: 1500px;
+			width: 100%;
+		}
+
+		.page {
+			display: none;
+		}
+
+		.page.active {
+			display: block;
+		}
+
+		.page-head {
+			display: flex;
+			align-items: flex-start;
+			justify-content: space-between;
+			gap: 20px;
+			margin-bottom: 20px;
+		}
+
+		h1,
+		h2,
+		h3,
+		p {
+			margin-top: 0;
+		}
+
+		h1 {
+			font-size: 25px;
+			line-height: 1.2;
+			margin-bottom: 4px;
+			font-weight: 650;
+		}
+
+		h2 {
+			font-size: 17px;
+			margin-bottom: 14px;
+		}
+
+		h3 {
+			font-size: 14px;
+			margin-bottom: 8px;
+		}
+
+		.description {
+			color: var(--muted);
+			margin-bottom: 0;
+		}
+
+		.grid {
+			display: grid;
+			gap: 16px;
+		}
+
+		.grid.cols-4 {
+			grid-template-columns: repeat(4, minmax(0, 1fr));
+		}
+
+		.grid.cols-3 {
+			grid-template-columns: repeat(3, minmax(0, 1fr));
+		}
+
+		.grid.cols-2 {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+
+		.panel {
+			background: var(--panel);
+			border: 1px solid var(--line);
+			border-radius: 6px;
+			padding: 18px;
+			box-shadow: 0 1px 1px rgba(0,0,0,0.02);
+		}
+
+		.metric {
+			min-height: 126px;
+			display: grid;
+			align-content: space-between;
+		}
+
+		.metric strong {
+			font-size: 30px;
+			letter-spacing: 0;
+		}
+
+		.metric span {
+			color: var(--muted);
+		}
+
+		.delta {
+			font-size: 12px;
+			font-weight: 700;
+			width: fit-content;
+			padding: 3px 7px;
+			border-radius: 999px;
+		}
+
+		.delta.good {
+			color: var(--green);
+			background: #edfaef;
+		}
+
+		.delta.warn {
+			color: var(--amber);
+			background: #fff8e5;
+		}
+
+		.toolbar {
+			display: flex;
+			align-items: center;
+			flex-wrap: wrap;
+			gap: 10px;
+		}
+
+		.btn {
+			min-height: 36px;
+			border: 1px solid #8c8f94;
+			border-radius: 4px;
+			background: #fff;
+			color: var(--ink);
+			padding: 7px 12px;
+			display: inline-flex;
+			align-items: center;
+			gap: 7px;
+			font-weight: 600;
+		}
+
+		.btn.primary {
+			background: var(--blue);
+			border-color: var(--blue);
+			color: #fff;
+		}
+
+		.btn.primary:hover {
+			background: var(--blue-dark);
+		}
+
+		.btn.danger {
+			color: var(--red);
+			border-color: #dba7a7;
+		}
+
+		.btn:disabled {
+			cursor: not-allowed;
+			opacity: 0.55;
+		}
+
+		.btn svg,
+		.icon {
+			width: 17px;
+			height: 17px;
+			stroke: currentColor;
+			fill: none;
+			stroke-width: 2;
+			stroke-linecap: round;
+			stroke-linejoin: round;
+		}
+
+		.field {
+			display: grid;
+			gap: 6px;
+			min-width: 0;
+		}
+
+		.field label {
+			font-weight: 650;
+		}
+
+		.field .hint {
+			color: var(--muted);
+			font-size: 12px;
+		}
+
+		input[type="text"],
+		input[type="number"],
+		input[type="date"],
+		select,
+		textarea {
+			width: 100%;
+			min-height: 36px;
+			border: 1px solid #8c8f94;
+			border-radius: 4px;
+			background: #fff;
+			color: var(--ink);
+			padding: 7px 9px;
+		}
+
+		textarea {
+			min-height: 84px;
+			resize: vertical;
+		}
+
+		.segmented {
+			display: inline-grid;
+			grid-auto-flow: column;
+			border: 1px solid #8c8f94;
+			border-radius: 4px;
+			overflow: hidden;
+			background: #fff;
+		}
+
+		.segmented button {
+			border: 0;
+			background: #fff;
+			padding: 8px 12px;
+			border-right: 1px solid var(--line);
+		}
+
+		.segmented button:last-child {
+			border-right: 0;
+		}
+
+		.segmented button.active {
+			background: var(--blue);
+			color: #fff;
+		}
+
+		.switch {
+			position: relative;
+			width: 42px;
+			height: 24px;
+			display: inline-block;
+		}
+
+		.switch input {
+			position: absolute;
+			opacity: 0;
+		}
+
+		.switch span {
+			position: absolute;
+			inset: 0;
+			background: #c3c4c7;
+			border-radius: 999px;
+			transition: 0.18s;
+		}
+
+		.switch span:before {
+			content: "";
+			position: absolute;
+			width: 18px;
+			height: 18px;
+			left: 3px;
+			top: 3px;
+			background: #fff;
+			border-radius: 50%;
+			transition: 0.18s;
+			box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+		}
+
+		.switch input:checked + span {
+			background: var(--green);
+		}
+
+		.switch input:checked + span:before {
+			transform: translateX(18px);
+		}
+
+		.form-grid {
+			display: grid;
+			grid-template-columns: repeat(3, minmax(0, 1fr));
+			gap: 14px;
+		}
+
+		.table {
+			width: 100%;
+			border-collapse: collapse;
+		}
+
+		.table th,
+		.table td {
+			text-align: left;
+			padding: 10px 9px;
+			border-bottom: 1px solid var(--line);
+			vertical-align: middle;
+		}
+
+		.table th {
+			font-size: 12px;
+			text-transform: uppercase;
+			color: var(--muted);
+			font-weight: 750;
+		}
+
+		.table tr:last-child td {
+			border-bottom: 0;
+		}
+
+		code {
+			background: var(--soft);
+			border: 1px solid var(--line);
+			border-radius: 4px;
+			padding: 2px 5px;
+			font-size: 12px;
+		}
+
+		.status {
+			display: inline-flex;
+			align-items: center;
+			gap: 6px;
+			border-radius: 999px;
+			font-size: 12px;
+			font-weight: 750;
+			padding: 3px 8px;
+		}
+
+		.status.good {
+			color: var(--green);
+			background: #edfaef;
+		}
+
+		.status.warn {
+			color: var(--amber);
+			background: #fff8e5;
+		}
+
+		.status.bad {
+			color: var(--red);
+			background: #fcf0f1;
+		}
+
+		.status.info {
+			color: var(--blue-dark);
+			background: #e8f2ff;
+		}
+
+		.progress {
+			height: 12px;
+			border-radius: 999px;
+			background: #e5e5e5;
+			overflow: hidden;
+		}
+
+		.progress > span {
+			display: block;
+			height: 100%;
+			width: var(--value, 0%);
+			background: linear-gradient(90deg, var(--blue), var(--teal));
+			transition: width 0.25s ease;
+		}
+
+		.stepper {
+			display: grid;
+			grid-template-columns: repeat(4, minmax(0, 1fr));
+			border-bottom: 1px solid var(--line);
+			margin-bottom: 18px;
+		}
+
+		.stepper button {
+			border: 0;
+			background: transparent;
+			padding: 12px 10px;
+			text-align: left;
+			color: var(--muted);
+			border-bottom: 3px solid transparent;
+			display: flex;
+			align-items: center;
+			gap: 10px;
+		}
+
+		.stepper button.active {
+			color: var(--ink);
+			border-color: var(--blue);
+			font-weight: 750;
+		}
+
+		.step-num {
+			width: 24px;
+			height: 24px;
+			border-radius: 50%;
+			background: #e5e5e5;
+			display: grid;
+			place-items: center;
+			font-weight: 800;
+			font-size: 12px;
+		}
+
+		.stepper button.active .step-num {
+			background: var(--blue);
+			color: #fff;
+		}
+
+		.step-pane {
+			display: none;
+		}
+
+		.step-pane.active {
+			display: block;
+		}
+
+		.split {
+			display: grid;
+			grid-template-columns: minmax(0, 1fr) 360px;
+			gap: 16px;
+			align-items: start;
+		}
+
+		.match-card {
+			border: 1px solid var(--line);
+			border-radius: 6px;
+			display: grid;
+			grid-template-columns: 88px minmax(0, 1fr) auto;
+			gap: 12px;
+			padding: 12px;
+			align-items: center;
+			background: #fff;
+		}
+
+		.thumb {
+			width: 88px;
+			aspect-ratio: 4 / 3;
+			border-radius: 4px;
+			background:
+				linear-gradient(135deg, rgba(34,113,177,0.24), rgba(0,138,32,0.18)),
+				repeating-linear-gradient(45deg, #f6f7f7, #f6f7f7 9px, #fff 9px, #fff 18px);
+			border: 1px solid var(--line);
+		}
+
+		.match-list {
+			display: grid;
+			gap: 10px;
+		}
+
+		.notice {
+			border-left: 4px solid var(--blue);
+			background: #fff;
+			padding: 12px 14px;
+			box-shadow: var(--shadow);
+			border-radius: 4px;
+		}
+
+		.notice.good {
+			border-left-color: var(--green);
+		}
+
+		.notice.warn {
+			border-left-color: var(--amber);
+		}
+
+		.notice.bad {
+			border-left-color: var(--red);
+		}
+
+		.locked {
+			opacity: 0.72;
+		}
+
+		.lock-row {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			gap: 12px;
+			padding: 11px 0;
+			border-bottom: 1px solid var(--line);
+		}
+
+		.lock-row:last-child {
+			border-bottom: 0;
+		}
+
+		.settings-layout {
+			display: grid;
+			grid-template-columns: 220px minmax(0, 1fr);
+			gap: 20px;
+			align-items: start;
+		}
+
+		.settings-menu {
+			border: 1px solid var(--line);
+			border-radius: 6px;
+			background: #fff;
+			padding: 8px;
+			position: sticky;
+			top: 76px;
+		}
+
+		.settings-menu a {
+			display: block;
+			color: var(--ink);
+			text-decoration: none;
+			padding: 9px 10px;
+			border-radius: 4px;
+			font-weight: 600;
+		}
+
+		.settings-menu a:hover {
+			background: var(--soft);
+			color: var(--blue-dark);
+		}
+
+		.settings-sections {
+			display: grid;
+			gap: 16px;
+		}
+
+		.settings-section {
+			scroll-margin-top: 86px;
+		}
+
+		.toast {
+			position: fixed;
+			right: 22px;
+			bottom: 22px;
+			width: min(380px, calc(100vw - 44px));
+			background: #1d2327;
+			color: #fff;
+			border-radius: 6px;
+			padding: 13px 15px;
+			box-shadow: var(--shadow);
+			display: none;
+			z-index: 10;
+		}
+
+		.toast.show {
+			display: block;
+		}
+
+		.mobile-nav {
+			display: none;
+		}
+
+		@media (max-width: 1100px) {
+			.grid.cols-4,
+			.grid.cols-3,
+			.form-grid,
+			.split,
+			.settings-layout {
+				grid-template-columns: repeat(2, minmax(0, 1fr));
+			}
+		}
+
+		@media (max-width: 760px) {
+			.app {
+				grid-template-columns: 1fr;
+			}
+
+			.sidebar {
+				display: none;
+			}
+
+			.mobile-nav {
+				display: block;
+				width: 100%;
+			}
+
+			.topbar {
+				height: auto;
+				padding: 12px 16px;
+				gap: 10px;
+				flex-wrap: wrap;
+			}
+
+			.search {
+				order: 2;
+				width: 100%;
+			}
+
+			.content {
+				padding: 18px 16px 34px;
+			}
+
+			.page-head {
+				display: grid;
+			}
+
+			.grid.cols-4,
+			.grid.cols-3,
+			.grid.cols-2,
+			.form-grid,
+			.split,
+			.settings-layout {
+				grid-template-columns: 1fr;
+			}
+
+			.settings-menu {
+				position: static;
+			}
+
+			.stepper {
+				grid-template-columns: 1fr 1fr;
+			}
+
+			.match-card {
+				grid-template-columns: 72px minmax(0, 1fr);
+			}
+
+			.match-card .toolbar {
+				grid-column: 1 / -1;
+			}
+		}
+	</style>
+</head>
+<body>
+	<svg aria-hidden="true" width="0" height="0" style="position:absolute">
+		<symbol id="i-dashboard" viewBox="0 0 24 24"><path d="M3 13h8V3H3z"></path><path d="M13 21h8V11h-8z"></path><path d="M13 3v6h8V3z"></path><path d="M3 21h8v-6H3z"></path></symbol>
+		<symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"></rect><circle cx="8" cy="10" r="2"></circle><path d="M21 16l-5-5L5 19"></path></symbol>
+		<symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 2l9 5-9 5-9-5z"></path><path d="M3 12l9 5 9-5"></path><path d="M3 17l9 5 9-5"></path></symbol>
+		<symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"></path></symbol>
+		<symbol id="i-settings" viewBox="0 0 24 24"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"></path><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.6-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1A2 2 0 1 1 7.1 4.3l.1.1A1.7 1.7 0 0 0 9 4.7a1.7 1.7 0 0 0 1-1.6V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8 1.7 1.7 0 0 0 1.6 1h.1a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"></path></symbol>
+		<symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"></path></symbol>
+		<symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1"></rect></symbol>
+		<symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></symbol>
+		<symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="10" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></symbol>
+	</svg>
+
+	<div class="app">
+		<aside class="sidebar">
+			<div class="brand">
+				<div class="brand-mark">SIM</div>
+				<div>
+					<strong>Smart Image Matcher</strong>
+					<span>Admin console prototype</span>
+				</div>
+			</div>
+			<nav class="nav" aria-label="Primary">
+				<button class="active" data-page="dashboard"><svg><use href="#i-dashboard"></use></svg><span>Dashboard</span></button>
+				<button data-page="featured"><svg><use href="#i-image"></use></svg><span>Featured Images</span><span class="badge">Free</span></button>
+				<button data-page="bulk"><svg><use href="#i-layers"></use></svg><span>Bulk Processor</span><span class="badge">Pro</span></button>
+				<button data-page="review"><svg><use href="#i-check"></use></svg><span>Review Queue</span><span class="badge">18</span></button>
+				<button data-page="settings"><svg><use href="#i-settings"></use></svg><span>Settings</span></button>
+			</nav>
+			<div class="sidebar-foot">v3.0.0 layout draft<br>Free plus Pro boundaries</div>
+		</aside>
+
+		<main class="main">
+			<header class="topbar">
+				<select class="mobile-nav" aria-label="Section">
+					<option value="dashboard">Dashboard</option>
+					<option value="featured">Featured Images</option>
+					<option value="bulk">Bulk Processor</option>
+					<option value="review">Review Queue</option>
+					<option value="settings">Settings</option>
+				</select>
+				<div class="search">
+					<svg class="icon"><use href="#i-search"></use></svg>
+					<input type="text" placeholder="Search posts, slugs, image filenames">
+				</div>
+				<div class="userbar">
+					<span class="status good">Action Scheduler ready</span>
+					<div class="avatar" aria-hidden="true"></div>
+				</div>
+			</header>
+
+			<div class="content">
+				<section class="page active" id="page-dashboard">
+					<div class="page-head">
+						<div>
+							<h1>Dashboard</h1>
+							<p class="description">Site coverage, queue health, and matching safety.</p>
+						</div>
+						<div class="toolbar">
+							<button class="btn" data-page-jump="settings"><svg><use href="#i-settings"></use></svg>Settings</button>
+							<button class="btn primary" data-page-jump="featured"><svg><use href="#i-play"></use></svg>Run Matcher</button>
+						</div>
+					</div>
+
+					<div class="grid cols-4">
+						<div class="panel metric"><span>Featured coverage</span><strong>74%</strong><div class="delta good">+114 matched</div></div>
+						<div class="panel metric"><span>Missing featured images</span><strong>86</strong><div class="delta warn">Needs review</div></div>
+						<div class="panel metric"><span>Pending content matches</span><strong>18</strong><div class="delta good">12 high confidence</div></div>
+						<div class="panel metric"><span>Ambiguity holds</span><strong>7</strong><div class="delta warn">Manual only</div></div>
+					</div>
+
+					<div class="grid cols-2" style="margin-top:16px">
+						<div class="panel">
+							<h2>Queue Health</h2>
+							<table class="table">
+								<tr><th>Job</th><th>Status</th><th>Progress</th></tr>
+								<tr><td>Featured Image Run</td><td><span class="status good">Completed</span></td><td>200 / 200</td></tr>
+								<tr><td>Media Index Backfill</td><td><span class="status info">Scheduled</span></td><td>Runs in 1 minute</td></tr>
+								<tr><td>Bulk Match</td><td><span class="status warn">Review</span></td><td>822 / 822</td></tr>
+							</table>
+						</div>
+						<div class="panel">
+							<h2>Safety Rules</h2>
+							<div class="lock-row"><span>Exact and prefix matches</span><span class="status good">Auto</span></div>
+							<div class="lock-row"><span>Generic one-word filenames</span><span class="status bad">Blocked</span></div>
+							<div class="lock-row"><span>Close competing candidates</span><span class="status warn">Review</span></div>
+							<div class="lock-row"><span>Overwrite existing featured image</span><span class="status info">Manual</span></div>
+						</div>
+					</div>
+				</section>
+
+				<section class="page" id="page-featured">
+					<div class="page-head">
+						<div>
+							<h1>Featured Images</h1>
+							<p class="description">Manual slug matching with progress, cancellation, and review holds.</p>
+						</div>
+						<div class="toolbar">
+							<button class="btn primary" id="runFeatured"><svg><use href="#i-play"></use></svg>Run Matcher</button>
+							<button class="btn danger" id="cancelFeatured" disabled><svg><use href="#i-stop"></use></svg>Cancel</button>
+						</div>
+					</div>
+
+					<div class="grid cols-3">
+						<div class="panel metric"><span>Total posts</span><strong>200</strong><div class="delta good">publish + draft</div></div>
+						<div class="panel metric"><span>With featured image</span><strong id="featuredWith">148</strong><div class="delta good">74%</div></div>
+						<div class="panel metric"><span>Missing</span><strong id="featuredMissing">52</strong><div class="delta warn">safe candidates first</div></div>
+					</div>
+
+					<div class="panel" style="margin-top:16px">
+						<div class="form-grid">
+							<div class="field">
+								<label for="featuredPostType">Post Type</label>
+								<select id="featuredPostType">
+									<option>Post</option>
+									<option>Page</option>
+									<option>Recipe</option>
+								</select>
+							</div>
+							<div class="field">
+								<label for="featuredMode">Auto-assign Safety</label>
+								<select id="featuredMode">
+									<option>Strict: exact and prefix</option>
+									<option>Balanced: include strong token overlap</option>
+									<option>Review-first: no auto assignment</option>
+								</select>
+							</div>
+							<div class="field">
+								<label>Overwrite Existing</label>
+								<label style="display:flex;align-items:center;gap:10px">
+									<span class="switch"><input type="checkbox"><span></span></span>
+									<span class="hint">Off</span>
+								</label>
+							</div>
+						</div>
+
+						<div style="margin-top:18px">
+							<div class="progress" aria-label="Featured image progress"><span id="featuredBar"></span></div>
+							<p class="description" id="featuredStatus" style="margin-top:8px">Idle. Last run matched 114, skipped 0, unmatched 86.</p>
+						</div>
+					</div>
+
+					<div class="grid cols-2" style="margin-top:16px">
+						<div class="panel">
+							<h2>Recent Activity</h2>
+							<table class="table" id="featuredActivity">
+								<tr><th>Post</th><th>Image</th><th>Result</th></tr>
+								<tr><td>Kansas poultry owner guide</td><td><code>avian-flu-regulations-in-kansas</code></td><td><span class="status good">Prefix 96%</span></td></tr>
+								<tr><td>Wyoming poultry owner guide</td><td><code>avian-flu-regulations-in-wyoming</code></td><td><span class="status good">Prefix 96%</span></td></tr>
+							</table>
+						</div>
+						<div class="panel">
+							<h2>Held For Review</h2>
+							<div class="match-list">
+								<div class="match-card">
+									<div class="thumb"></div>
+									<div><strong>Backyard flock permit update</strong><br><code>avian-flu.jpg</code><br><span class="description">Filename is broad for this post family.</span></div>
+									<span class="status warn">Hold</span>
+								</div>
+								<div class="match-card">
+									<div class="thumb"></div>
+									<div><strong>Poultry transport rules</strong><br><code>kansas-regulations.jpg</code><br><span class="description">Two candidates within 8 points.</span></div>
+									<span class="status warn">Hold</span>
+								</div>
+							</div>
+						</div>
+					</div>
+				</section>
+
+				<section class="page" id="page-bulk">
+					<div class="page-head">
+						<div>
+							<h1>Bulk Processor</h1>
+							<p class="description">Select posts, match headings, review candidates, then insert approved images.</p>
+						</div>
+						<span class="status info">Pro workflow</span>
+					</div>
+
+					<div class="panel">
+						<div class="stepper">
+							<button class="active" data-step="1"><span class="step-num">1</span>Select Posts</button>
+							<button data-step="2"><span class="step-num">2</span>Configure</button>
+							<button data-step="3"><span class="step-num">3</span>Find Matches</button>
+							<button data-step="4"><span class="step-num">4</span>Review & Insert</button>
+						</div>
+
+						<div class="step-pane active" data-step-pane="1">
+							<div class="form-grid">
+								<div class="field"><label>Post Type</label><select><option>Post</option><option>Page</option></select></div>
+								<div class="field"><label>Status</label><select><option>Published, Draft, Scheduled</option><option>Published only</option><option>Draft only</option></select></div>
+								<div class="field"><label>Featured Image</label><select><option>Missing featured image</option><option>Any</option><option>Has featured image</option></select></div>
+								<div class="field"><label>Search</label><input type="text" value="avian flu"></div>
+								<div class="field"><label>Taxonomy Filter</label><input type="text" value="category:poultry"></div>
+								<div class="field"><label>Max Posts</label><input type="number" value="500"></div>
+								<div class="field" style="grid-column:1 / -1"><label>Import IDs or Slugs</label><textarea>123, 456, backyard-flock-safety</textarea></div>
+							</div>
+							<div class="toolbar" style="margin-top:16px">
+								<button class="btn primary" data-next-step="2">Next: Configure</button>
+								<button class="btn">Save Selection</button>
+							</div>
+						</div>
+
+						<div class="step-pane" data-step-pane="2">
+							<div class="form-grid">
+								<div class="field"><label>Matching Mode</label><select><option>Keyword fast</option><option>AI assisted</option></select></div>
+								<div class="field"><label>Minimum Confidence</label><input type="number" value="70"></div>
+								<div class="field"><label>Hierarchy</label><select><option>Smart heading hierarchy</option><option>All headings</option><option>Primary headings only</option></select></div>
+								<div class="field"><label>Max Matches Per Heading</label><input type="number" value="3"></div>
+								<div class="field"><label>Image Spacing</label><input type="number" value="300"></div>
+								<div class="field"><label>Review Policy</label><select><option>Hold ambiguous matches</option><option>Auto-approve high confidence</option></select></div>
+							</div>
+							<div class="toolbar" style="margin-top:16px">
+								<button class="btn" data-next-step="1">Back</button>
+								<button class="btn primary" id="startBulk" data-next-step="3">Find Matches</button>
+							</div>
+						</div>
+
+						<div class="step-pane" data-step-pane="3">
+							<div class="split">
+								<div>
+									<h2>Finding Matches</h2>
+									<div class="progress"><span id="bulkBar" style="--value:0%"></span></div>
+									<p class="description" id="bulkStatus" style="margin-top:8px">Queued.</p>
+									<div class="toolbar" style="margin-top:14px">
+										<button class="btn danger" id="cancelBulk">Cancel</button>
+										<button class="btn primary" data-next-step="4">Open Review</button>
+									</div>
+								</div>
+								<div class="notice warn">
+									<strong>Review required</strong>
+									<p class="description" style="margin-top:4px">Ambiguous and low-confidence results stay out of insertion until approved.</p>
+								</div>
+							</div>
+						</div>
+
+						<div class="step-pane" data-step-pane="4">
+							<div class="split">
+								<div class="match-list">
+									<div class="match-card">
+										<div class="thumb"></div>
+										<div><strong>Signs of avian flu in small flocks</strong><br><code>signs-avian-flu-small-flocks.jpg</code><br><span class="description">Heading: Symptoms poultry owners should watch</span></div>
+										<div class="toolbar"><button class="btn primary small-approve">Approve</button><button class="btn small-reject">Reject</button></div>
+									</div>
+									<div class="match-card">
+										<div class="thumb"></div>
+										<div><strong>Cleaning coop equipment</strong><br><code>coop-disinfection-checklist.jpg</code><br><span class="description">Heading: Disinfecting boots and feeders</span></div>
+										<div class="toolbar"><button class="btn primary small-approve">Approve</button><button class="btn small-reject">Reject</button></div>
+									</div>
+								</div>
+								<div class="panel" style="box-shadow:none">
+									<h2>Insertion Summary</h2>
+									<div class="lock-row"><span>Approved</span><strong id="approvedCount">0</strong></div>
+									<div class="lock-row"><span>Rejected</span><strong id="rejectedCount">0</strong></div>
+									<div class="lock-row"><span>Pending</span><strong id="pendingCount">2</strong></div>
+									<button class="btn primary" style="margin-top:14px;width:100%;justify-content:center" id="insertApproved">Insert Approved</button>
+									<button class="btn" style="margin-top:8px;width:100%;justify-content:center" data-next-step="2">Cancel Review</button>
+								</div>
+							</div>
+						</div>
+					</div>
+				</section>
+
+				<section class="page" id="page-review">
+					<div class="page-head">
+						<div>
+							<h1>Review Queue</h1>
+							<p class="description">Probable featured images and in-content matches waiting for approval.</p>
+						</div>
+						<div class="segmented">
+							<button class="active">Pending</button>
+							<button>Approved</button>
+							<button>Rejected</button>
+						</div>
+					</div>
+
+					<div class="panel">
+						<table class="table">
+							<tr><th>Post</th><th>Candidate</th><th>Score</th><th>Guard</th><th>Action</th></tr>
+							<tr><td>Kansas poultry permit checklist</td><td><code>kansas-poultry-regulations.jpg</code></td><td>91%</td><td><span class="status warn">Close candidate</span></td><td><button class="btn primary">Approve</button></td></tr>
+							<tr><td>Backyard flock outbreak rules</td><td><code>avian-flu.jpg</code></td><td>74%</td><td><span class="status bad">Generic slug</span></td><td><button class="btn">Keep held</button></td></tr>
+							<tr><td>Wyoming coop inspection update</td><td><code>wyoming-coop-inspection.jpg</code></td><td>96%</td><td><span class="status good">Prefix</span></td><td><button class="btn primary">Approve</button></td></tr>
+						</table>
+					</div>
+				</section>
+
+				<section class="page" id="page-settings">
+					<div class="page-head">
+						<div>
+							<h1>Settings</h1>
+							<p class="description">Free controls, Pro locks, and safety defaults.</p>
+						</div>
+						<button class="btn primary" id="saveSettings"><svg><use href="#i-check"></use></svg>Save Changes</button>
+					</div>
+
+					<div class="settings-layout">
+						<nav class="settings-menu" aria-label="Settings sections">
+							<a href="#settings-matching">Matching</a>
+							<a href="#settings-featured">Featured Images</a>
+							<a href="#settings-automation">Automation</a>
+							<a href="#settings-developer">Developer</a>
+						</nav>
+
+						<div class="settings-sections">
+							<div class="panel settings-section" id="settings-matching">
+								<h2>Matching</h2>
+								<p class="description" style="margin-bottom:14px">Controls for heading matching, scoring, and result caching.</p>
+								<div class="form-grid">
+									<div class="field"><label>Default Mode</label><select><option>Keyword</option><option>AI</option></select></div>
+									<div class="field"><label>Confidence Threshold</label><input type="number" value="70"></div>
+									<div class="field"><label>Heading Mode</label><select><option>Smart</option><option>All</option><option>Primary only</option></select></div>
+									<div class="field"><label>Maximum Alternatives</label><input type="number" value="3"></div>
+									<div class="field"><label>Cache Duration</label><input type="number" value="3600"></div>
+									<div class="field"><label>Whitelisted Short Words</label><input type="text" value="io"></div>
+								</div>
+							</div>
+
+							<div class="panel settings-section" id="settings-featured">
+								<h2>Featured Images</h2>
+								<p class="description" style="margin-bottom:14px">Free upload-time assignment plus safety rules for manual runs.</p>
+								<div class="form-grid">
+									<div class="field">
+										<label>Upload-Time Assignment</label>
+										<label style="display:flex;align-items:center;gap:10px"><span class="switch"><input type="checkbox" checked><span></span></span>Enabled</label>
+									</div>
+									<div class="field"><label>Post Types</label><input type="text" value="post,page"></div>
+									<div class="field"><label>Auto-Assign Safety</label><select><option>Strict</option><option>Balanced</option><option>Review-first</option></select></div>
+									<div class="field"><label>Ambiguity Gap</label><input type="number" value="8"></div>
+									<div class="field"><label>Minimum Score</label><input type="number" value="70"></div>
+									<div class="field"><label>Minimum Shared Terms</label><input type="number" value="2"></div>
+								</div>
+							</div>
+
+							<div class="panel settings-section" id="settings-automation">
+								<h2>Automation</h2>
+								<p class="description" style="margin-bottom:14px">Self-running scheduled jobs are locked until the Pro feature flag is active.</p>
+								<div class="grid cols-2">
+									<div>
+										<div class="lock-row locked"><span>Scheduled featured-image runs</span><span class="status info"><svg class="icon"><use href="#i-lock"></use></svg>Pro</span></div>
+										<div class="lock-row locked"><span>Run interval</span><select disabled><option>Daily</option></select></div>
+										<div class="lock-row locked"><span>Scheduled overwrite</span><span class="switch"><input type="checkbox" disabled><span></span></span></div>
+									</div>
+									<div class="notice">
+										<strong>Current boundary</strong>
+										<p class="description" style="margin-top:4px">Manual runs are available. Self-running automation requires the Pro feature flag.</p>
+									</div>
+								</div>
+							</div>
+
+							<div class="panel settings-section" id="settings-developer">
+								<h2>Developer</h2>
+								<p class="description" style="margin-bottom:14px">Diagnostics and cleanup behavior.</p>
+								<div class="form-grid">
+									<div class="field">
+										<label>Debug Logging</label>
+										<label style="display:flex;align-items:center;gap:10px"><span class="switch"><input type="checkbox"><span></span></span>Disabled</label>
+									</div>
+									<div class="field">
+										<label>Delete Data On Uninstall</label>
+										<label style="display:flex;align-items:center;gap:10px"><span class="switch"><input type="checkbox" checked><span></span></span>Enabled</label>
+									</div>
+									<div class="field"><label>Queue Batch Size</label><input type="number" value="20"></div>
+								</div>
+							</div>
+						</div>
+					</div>
+				</section>
+			</div>
+		</main>
+	</div>
+
+	<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+	<script>
+		(function () {
+			"use strict";
+
+			const pages = Array.from(document.querySelectorAll(".page"));
+			const navButtons = Array.from(document.querySelectorAll(".nav button"));
+			const mobileNav = document.querySelector(".mobile-nav");
+			const toast = document.getElementById("toast");
+			let featuredTimer = null;
+			let bulkTimer = null;
+			let approved = 0;
+			let rejected = 0;
+
+			function showToast(message) {
+				toast.textContent = message;
+				toast.classList.add("show");
+				window.clearTimeout(showToast.timer);
+				showToast.timer = window.setTimeout(() => toast.classList.remove("show"), 2600);
+			}
+
+			function showPage(name) {
+				pages.forEach(page => page.classList.toggle("active", page.id === "page-" + name));
+				navButtons.forEach(button => button.classList.toggle("active", button.dataset.page === name));
+				if (mobileNav) mobileNav.value = name;
+			}
+
+			navButtons.forEach(button => button.addEventListener("click", () => showPage(button.dataset.page)));
+			document.querySelectorAll("[data-page-jump]").forEach(button => {
+				button.addEventListener("click", () => showPage(button.dataset.pageJump));
+			});
+			if (mobileNav) mobileNav.addEventListener("change", () => showPage(mobileNav.value));
+
+			document.querySelectorAll(".stepper button, [data-next-step]").forEach(button => {
+				button.addEventListener("click", () => {
+					const step = button.dataset.step || button.dataset.nextStep;
+					if (!step) return;
+					document.querySelectorAll("[data-step]").forEach(item => item.classList.toggle("active", item.dataset.step === step));
+					document.querySelectorAll("[data-step-pane]").forEach(item => item.classList.toggle("active", item.dataset.stepPane === step));
+				});
+			});
+
+			document.getElementById("runFeatured").addEventListener("click", () => {
+				const bar = document.getElementById("featuredBar");
+				const status = document.getElementById("featuredStatus");
+				const run = document.getElementById("runFeatured");
+				const cancel = document.getElementById("cancelFeatured");
+				let done = 0;
+				let matched = 0;
+				let unmatched = 0;
+
+				window.clearInterval(featuredTimer);
+				run.disabled = true;
+				cancel.disabled = false;
+				showToast("Featured image matcher queued.");
+
+				featuredTimer = window.setInterval(() => {
+					done = Math.min(200, done + 13);
+					matched = Math.min(114, Math.floor(done * 0.57));
+					unmatched = Math.max(0, done - matched);
+					bar.style.setProperty("--value", Math.round((done / 200) * 100) + "%");
+					status.textContent = "Processing - " + done + " of 200 posts. Matched: " + matched + " | Skipped: 0 | Unmatched: " + unmatched;
+
+					if (done >= 200) {
+						window.clearInterval(featuredTimer);
+						run.disabled = false;
+						cancel.disabled = true;
+						document.getElementById("featuredWith").textContent = "162";
+						document.getElementById("featuredMissing").textContent = "38";
+						status.textContent = "Run complete. Matched: 114 | Skipped: 0 | Unmatched: 86";
+						showToast("Run complete. 114 matches assigned.");
+					}
+				}, 320);
+			});
+
+			document.getElementById("cancelFeatured").addEventListener("click", () => {
+				window.clearInterval(featuredTimer);
+				document.getElementById("runFeatured").disabled = false;
+				document.getElementById("cancelFeatured").disabled = true;
+				document.getElementById("featuredStatus").textContent = "Run cancelled.";
+				showToast("Featured image run cancelled.");
+			});
+
+			document.getElementById("startBulk").addEventListener("click", () => {
+				const bar = document.getElementById("bulkBar");
+				const status = document.getElementById("bulkStatus");
+				let done = 0;
+				window.clearInterval(bulkTimer);
+				bulkTimer = window.setInterval(() => {
+					done = Math.min(822, done + 47);
+					bar.style.setProperty("--value", Math.round((done / 822) * 100) + "%");
+					status.textContent = "Queued job sim_demo_bulk - " + done + " / 822 posts scanned.";
+					if (done >= 822) {
+						window.clearInterval(bulkTimer);
+						status.textContent = "Matching complete. 18 posts need review.";
+						showToast("Bulk matching complete.");
+					}
+				}, 260);
+			});
+
+			document.getElementById("cancelBulk").addEventListener("click", () => {
+				window.clearInterval(bulkTimer);
+				document.getElementById("bulkStatus").textContent = "Bulk job cancelled.";
+				showToast("Bulk job cancelled.");
+			});
+
+			function updateReviewCounts() {
+				document.getElementById("approvedCount").textContent = String(approved);
+				document.getElementById("rejectedCount").textContent = String(rejected);
+				document.getElementById("pendingCount").textContent = String(Math.max(0, 2 - approved - rejected));
+			}
+
+			document.querySelectorAll(".small-approve").forEach(button => {
+				button.addEventListener("click", () => {
+					if (button.disabled) return;
+					approved += 1;
+					button.disabled = true;
+					button.closest(".match-card").querySelector(".small-reject").disabled = true;
+					updateReviewCounts();
+				});
+			});
+
+			document.querySelectorAll(".small-reject").forEach(button => {
+				button.addEventListener("click", () => {
+					if (button.disabled) return;
+					rejected += 1;
+					button.disabled = true;
+					button.closest(".match-card").querySelector(".small-approve").disabled = true;
+					updateReviewCounts();
+				});
+			});
+
+			document.getElementById("insertApproved").addEventListener("click", () => {
+				showToast(approved ? "Approved images queued for insertion." : "No approved images selected.");
+			});
+
+			document.getElementById("saveSettings").addEventListener("click", () => {
+				showToast("Settings saved in prototype.");
+			});
+		}());
+	</script>
+</body>
+</html>

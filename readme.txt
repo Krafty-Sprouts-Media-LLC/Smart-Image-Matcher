@@ -1,138 +1,138 @@
 === Smart Image Matcher ===
-Contributors: kraftysprouts
-Tags: images, media, automation, ai, matching
+Contributors: iamkingsleyf, kraftysprouts
+Tags: images, media library, alt text, featured image, automation
 Requires at least: 6.0
-Tested up to: 6.7
+Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.3.0
-License: GPLv2 or later
+Stable tag: 3.0.8
+License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Automatically scans the media library and intelligently attaches relevant images to headings within posts and pages.
+Automatically scans your media library and intelligently inserts relevant images next to headings in posts and pages.
 
 == Description ==
 
-Smart Image Matcher is a WordPress plugin that automatically scans the media library and intelligently attaches relevant images to headings within posts and pages. The plugin offers two modes: a fast keyword-based matching system and an AI-powered matching system using the Claude API for enhanced accuracy.
+Smart Image Matcher scans your posts and pages for headings (H2–H6) and matches relevant images from your media library to each heading using keyword-based analysis or AI-powered matching.
 
 **Key Features:**
 
-* Automatic image-to-heading matching
-* Two modes: Keyword (fast) and AI (accurate)
-* Modal interface for single post processing
-* Bulk processing for multiple posts (coming in future updates)
-* Smart hierarchy handling (H2, H3, H4)
-* Cache compatibility with major plugins
-* API rate limiting and cost controls
-* Complete uninstall cleanup
+* Keyword-based image-to-heading matching
+* AI-powered matching via any configured AI provider (Settings → Connectors, WordPress 7.0+)
+* Post editor modal with image previews and confidence scores
+* Image carousel — browse up to 10 alternative matches per heading
+* Smart hierarchy filtering — skip redundant sub-headings automatically
+* Advanced linguistics — stemming, US/British spelling variants, possessives
+* Featured Image Auto-Assigner — match post slugs to image filenames on upload
+* Scheduled featured-image assignment with overwrite control
+* Bulk Processor — match and review hundreds of posts at once
+* AI alt-text generation on upload
+* Vision-based content matching
+* Match analytics dashboard
+* Compatible with all major caching plugins
+* WordPress Abilities API integration — discoverable via command palette
 
 == Installation ==
 
-1. Upload the plugin files to the `/wp-content/plugins/smart-image-matcher` directory, or install the plugin through the WordPress plugins screen directly.
-2. Activate the plugin through the 'Plugins' screen in WordPress.
-3. Use the Settings->Smart Image Matcher screen to configure the plugin.
-4. (Optional) Enter your Claude API key for AI-powered matching.
+1. Upload the plugin to `/wp-content/plugins/smart-image-matcher/` or install via the WordPress plugin screen.
+2. Activate through the Plugins screen.
+3. Go to **SIM → Settings** to configure.
+4. Open any post or page and click **Smart Image Matcher** to start matching.
 
 == Frequently Asked Questions ==
 
-= Does this plugin work with Gutenberg? =
-
-Yes, Smart Image Matcher is fully compatible with the Gutenberg block editor.
-
 = Do I need an API key? =
 
-No, the keyword matching mode works without any API key. The AI mode requires a Claude API key from Anthropic.
+Keyword matching works with no external services. AI features require a provider configured in **Settings → Connectors** (WordPress 7.0+).
 
-= Will this work with my caching plugin? =
+= Does this work with Gutenberg? =
 
-Yes, Smart Image Matcher is compatible with all major WordPress caching plugins including WP Rocket, W3 Total Cache, WP Super Cache, and more.
+Yes. The insertion engine is built on the Gutenberg block tree.
+
+= Does this work with the Classic Editor? =
+
+Yes.
+
+= Is it multisite compatible? =
+
+Yes, on a per-site basis.
+
+== Integrations ==
+
+Smart Image Matcher registers the following WordPress Abilities (WordPress 6.9+), discoverable from the admin command palette, MCP-aware AI agents, and the `@wordpress/abilities` JS API:
+
+* `smart-image-matcher/find-matches-for-post` — find matching images for all headings in a post
+* `smart-image-matcher/insert-image-after-heading` — insert an image after a specific heading
+* `smart-image-matcher/score-image-against-heading` — score an image's relevance to a heading
+* `smart-image-matcher/assign-featured-image-by-slug` — assign a featured image by slug match
+* `smart-image-matcher/queue-bulk-match` — queue a bulk match job
+
+== External services ==
+
+**GitHub (plugin updates)**
+
+This plugin checks GitHub for new releases so sites installed from the public repository can update from the WordPress admin (via Plugin Update Checker).
+
+* Service: GitHub — https://github.com/
+* Repository: https://github.com/Krafty-Sprouts-Media-LLC/Smart-Image-Matcher/
+* Data sent: site URL / WordPress version metadata typical of update checks (no post content)
+* When: periodically on admin requests, same pattern as WordPress.org update checks
+
+Disable with `define( 'SMART_IMAGE_MATCHER_DISABLE_GITHUB_UPDATES', true );` if you distribute a build that should not phone home to GitHub.
+
+**AI providers (optional)**
+
+This plugin optionally connects to AI providers configured in **Settings → Connectors** (requires WordPress 7.0+). When AI features are used, the following data is sent to the configured provider:
+
+* Post heading text
+* Image metadata (filename, title, alt text)
+
+No AI data is sent automatically — only when you explicitly trigger AI matching. The plugin uses the WordPress AI Client API (`wp_ai_client_prompt()`) to communicate with whichever provider you configure.
+
+== Privacy ==
+
+The plugin stores match results and job metadata in your own database only. Update checks may contact GitHub (see External services). No post content leaves your server unless you explicitly use AI features with a configured provider.
 
 == Changelog ==
 
-= 1.3.0 =
-* Major simplification: Removed undo functionality and countdown timers
-* Added: Warning notice reminding users to review matches before inserting
-* Added: Clear in-modal notices - "Page will reload to show changes"
-* Changed: Both insert buttons show progress then reload automatically
-* Improved: No browser prompts, all messages shown in modal
-* Removed: 100+ lines of timer/undo code
+= 3.0.8 =
+* Fixed a flash of "Smart Image Matcher" text at the top-left when opening the block editor.
+* Classic Editor trigger button is only rendered on classic screens and mounted below the title.
+* Restored GitHub → WordPress automatic updates from public releases (tags without a required v prefix).
 
-= 1.1.1 =
-* Fixed: CRITICAL - Gutenberg validation by removing width/height from img tag
-* Fixed: Gutenberg expects exactly 3 img attributes (src, alt, class) - not 5
-* Fixed: Let Gutenberg's sizeSlug handle dimensions automatically
-* Changed: Clean block format matching Gutenberg schema exactly
+= 3.0.2 =
+* Improved scheduled Featured Image Auto-Assigner reporting with next action time, total processed, duration, statuses, and filter details.
+* Added manual Featured Image Auto-Assigner filters for multiple post statuses, featured image state, and max posts.
+* Changed manual matching defaults to target posts missing featured images instead of queueing every article.
+* Added scheduled-run controls for multiple post statuses and featured-image state.
+* Added clearer help text and notices for daily schedules, overwrite behavior, skipped posts, and unmatched posts.
+* Fixed the scheduled automation badge so it reflects enabled/disabled state instead of always appearing active.
 
-= 1.1.0 =
-* Fixed: CRITICAL - Proper Gutenberg support using WordPress Block Editor API
-* Fixed: Uses parse_blocks() and serialize_blocks() for Gutenberg content
-* Fixed: Separate code paths for Gutenberg vs Classic Editor  
-* Changed: 100% WordPress native functions - no manual HTML/block building
+= 3.0.1 =
+* wp.org compliance: removed all premium feature gating (Guideline 5) — all features now fully enabled
+* wp.org compliance: removed load_plugin_textdomain() (auto-loaded since WordPress 4.6)
+* wp.org compliance: excluded license-check and upgrade-link code from the build
+* wp.org compliance: documented AI external service usage in readme
+* Updated Action Scheduler from 3.9.3 to 4.0.0
+* Removed "Pro"/"Upgrade" labels from all admin pages
+* See CHANGELOG.md for full history
 
-= 1.0.9 =
-* Added: Enhanced diagnostics showing if image exists in DB after save
-* Improved: Browser console shows content length changes and verification results
-* Added: Warning alert if image not found in database after insertion
-
-= 1.0.8 =
-* Fixed: CRITICAL - Gutenberg auto-save conflict preventing insertions
-* Fixed: Images now properly save and appear after page reload
-* Improved: Force cache flush and auto-save deletion for Gutenberg compatibility
-
-= 1.0.7 =
-* Fixed: Added comprehensive error logging to debug insertion issues
-* Added: Verification checks for post and image existence
-* Debugging: Check wp-content/debug.log for detailed logs (all prefixed with "SIM:")
-
-= 1.0.6 =
-* Improved: Enhanced scoring with +10 bonus for intentionally-set titles
-* Changed: Removed caption from scoring (rarely used)
-* Improved: Simplified to 3-field scoring: Filename, Title, Alt Text
-* Improved: Better rewards for properly maintained media libraries
-
-= 1.0.5 =
-* Fixed: Page now auto-reloads after image insertions to show changes immediately
-* Fixed: Modal no longer stays open indefinitely - auto-closes or reloads
-* Added: 10-second countdown with auto-reload after bulk insertion
-* Added: "Reload Now" and "Cancel Auto-Reload" buttons for user control
-
-= 1.0.4 =
-* Fixed: Critical scoring algorithm bug - exact matches now properly prioritized
-* Fixed: "western-black-widow.jpg" now scores higher than "types-of-black-widow.jpg" for "Western Black Widow" heading
-* Improved: Phrase matching with bonus for exact heading text in filename/title
-* Improved: Penalty for overly verbose/generic filenames
-
-= 1.0.3 =
-* Fixed: Added button to WordPress Admin Bar (top black bar) - now ALWAYS visible
-* Fixed: Enhanced Gutenberg detection with retry logic and multiple selectors
-* Added: Admin Bar integration for 100% reliability across all editors
-
-= 1.0.2 =
-* Fixed: Critical fix for Gutenberg Block Editor support - button now appears in toolbar
-* Fixed: Button not visible on post edit screen for Gutenberg users
-* Changed: Added proper Gutenberg integration hooks
-
-= 1.0.1 =
-* Fixed: Corrected image matching priority to properly prioritize Title (90 points) and Alt Text (85 points)
-* Fixed: Increased Filename score to 100 points for better accuracy
-* Changed: Updated AI matching to send metadata in proper priority order
-
-= 1.0.0 =
-* Initial release
-* Keyword-based matching engine
-* AI-powered matching with Claude API
-* Post editor modal interface
-* Image insertion functionality
-* Settings page
-* Cache compatibility
+= 3.0.0 =
+* Complete rebuild on a clean PSR-4 architecture
+* Block-tree-based insertion engine (no more byte-offset drift)
+* REST API replaces admin-ajax.php
+* WordPress Abilities API integration
+* Action Scheduler for background processing
+* Single smart_image_matcher_settings option (no autoloaded option bloat)
+* Provider-agnostic AI via wp_ai_client_prompt()
+* Full Bulk Processor with find → queue → review → insert workflow
+* AI alt-text generation and vision-based matching
+* Scheduled featured-image assignment
+* See CHANGELOG.md for full history
 
 == Upgrade Notice ==
 
-= 1.0.2 =
-Critical fix: Adds Gutenberg Block Editor support. Button now appears for all users.
+= 3.0.2 =
+Featured-image scheduling and manual runs now include clearer targeting controls and reporting.
 
-= 1.0.1 =
-Critical update: Fixes image matching priority to better match real-world metadata usage.
-
-= 1.0.0 =
-Initial release of Smart Image Matcher.
-
+= 3.0.0 =
+Major rebuild. Settings are migrated automatically. Match history prior to 3.0.0 is not migrated (heading positions were unstable in prior versions).
