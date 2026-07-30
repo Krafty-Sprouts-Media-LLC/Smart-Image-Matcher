@@ -11,6 +11,7 @@ declare( strict_types=1 );
 namespace SmartImageMatcher\Settings;
 
 use SmartImageMatcher\Domain\PostStatuses;
+use SmartImageMatcher\Premium\FiaaCron;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -64,10 +65,11 @@ class Sanitizer {
 			'whitelisted_short_words'  => sanitize_text_field( wp_unslash( $raw['whitelisted_short_words'] ?? 'io' ) ),
 
 			// Featured Images.
-			'fiaa_auto_assign_on_upload' => ! empty( $raw['fiaa_auto_assign_on_upload'] ),
-			'fiaa_upload_post_types'     => $this->postTypeList( $raw['fiaa_upload_post_types'] ?? 'post,page' ),
-			'fiaa_cron_enabled'          => ! empty( $raw['fiaa_cron_enabled'] ),
-			'fiaa_cron_interval' => in_array( $raw['fiaa_cron_interval'] ?? 'daily', array( 'hourly', 'twicedaily', 'daily' ), true )
+			'fiaa_auto_assign_on_upload'  => ! empty( $raw['fiaa_auto_assign_on_upload'] ),
+			'fiaa_upload_post_types'      => $this->postTypeList( $raw['fiaa_upload_post_types'] ?? 'post,page' ),
+			'fiaa_excluded_image_slugs'   => $this->excludedImageSlugs( $raw['fiaa_excluded_image_slugs'] ?? '' ),
+			'fiaa_cron_enabled'           => ! empty( $raw['fiaa_cron_enabled'] ),
+			'fiaa_cron_interval' => in_array( $raw['fiaa_cron_interval'] ?? 'daily', FiaaCron::ALLOWED_INTERVALS, true )
 				? $raw['fiaa_cron_interval']
 				: 'daily',
 			'fiaa_cron_post_types'      => $this->postTypeList( $raw['fiaa_cron_post_types'] ?? 'post' ),
@@ -90,6 +92,54 @@ class Sanitizer {
 			'ai_vision_match_enabled' => ! empty( $raw['ai_vision_match_enabled'] ),
 			'ai_featured_image_enabled' => ! empty( $raw['ai_featured_image_enabled'] ),
 		);
+	}
+
+	/**
+	 * Sanitize excluded image filenames/slugs into a newline-separated list.
+	 *
+	 * Accepts newlines, commas, or spaces. Strips extensions and normalizes
+	 * to attachment-style slugs (e.g. fly-fishing.jpg → fly-fishing).
+	 *
+	 * @since 3.0.9
+	 * @param mixed $value Raw value.
+	 * @return string
+	 */
+	public function excludedImageSlugs( $value ): string {
+		if ( ! is_string( $value ) ) {
+			return '';
+		}
+
+		$raw = (string) wp_unslash( $value );
+		$raw = str_replace( array( "\r\n", "\r" ), "\n", $raw );
+		$parts = preg_split( '/[\n,]+/', $raw );
+		if ( ! is_array( $parts ) ) {
+			return '';
+		}
+
+		$slugs = array();
+		foreach ( $parts as $part ) {
+			$slug = $this->normalizeImageSlug( (string) $part );
+			if ( '' === $slug ) {
+				continue;
+			}
+			$slugs[ $slug ] = $slug;
+		}
+
+		return implode( "\n", array_values( $slugs ) );
+	}
+
+	/**
+	 * Normalize a filename or slug the same way FIAA compares attachment slugs.
+	 *
+	 * @since 3.0.9
+	 * @param string $slug Raw filename or slug.
+	 * @return string
+	 */
+	public function normalizeImageSlug( string $slug ): string {
+		$slug = strtolower( trim( $slug ) );
+		$slug = (string) preg_replace( '/\.[a-z0-9]{2,5}$/', '', $slug );
+		$slug = (string) preg_replace( '/[^a-z0-9]+/', '-', $slug );
+		return trim( $slug, '-' );
 	}
 
 	/**

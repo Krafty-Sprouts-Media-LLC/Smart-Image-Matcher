@@ -54,8 +54,9 @@ class Settings {
 		'enable_spelling_variants'   => true,
 		'whitelisted_short_words'    => 'io',
 		// Featured Images (free scope).
-		'fiaa_auto_assign_on_upload' => true,
-		'fiaa_upload_post_types'     => 'post,page',
+		'fiaa_auto_assign_on_upload'  => true,
+		'fiaa_upload_post_types'      => 'post,page',
+		'fiaa_excluded_image_slugs'   => '',
 		// Premium placeholders (read by premium classes).
 		'fiaa_cron_enabled'          => false,
 		'fiaa_cron_interval'         => 'daily',
@@ -316,6 +317,7 @@ class Settings {
 
 		$this->addField( 'smart_image_matcher_fiaa_free', 'fiaa_auto_assign_on_upload', __( 'Auto-Assign on Upload', 'smart-image-matcher' ), 'renderCheckbox' );
 		$this->addField( 'smart_image_matcher_fiaa_free', 'fiaa_upload_post_types', __( 'Post Types (upload)', 'smart-image-matcher' ), 'renderPostTypeList' );
+		$this->addField( 'smart_image_matcher_fiaa_free', 'fiaa_excluded_image_slugs', __( 'Excluded Image Filenames', 'smart-image-matcher' ), 'renderFiaaExcludedSlugs' );
 
 		// ---- Featured Images scheduled cron section ----
 		add_settings_section(
@@ -643,6 +645,27 @@ class Settings {
 	}
 
 	/**
+	 * Render FIAA excluded image slug textarea.
+	 *
+	 * @since 3.0.9
+	 * @param array<string,string> $args Field args.
+	 * @return void
+	 */
+	public function renderFiaaExcludedSlugs( array $args ): void {
+		$key   = $args['key'];
+		$value = (string) self::get( $key );
+		$name  = self::OPTION . '[' . esc_attr( $key ) . ']';
+
+		printf(
+			'<textarea name="%s" id="smart_image_matcher_%s" rows="5" class="large-text code">%s</textarea>',
+			esc_attr( $name ),
+			esc_attr( $key ),
+			esc_textarea( $value )
+		);
+		echo '<p class="description">' . esc_html__( 'One filename or slug per line (commas also accepted). Example: fly-fishing or fly-fishing.jpg. These images are never used for featured-image auto-assign. Existing assignments that use them are flagged by Fix Incorrect Featured Images.', 'smart-image-matcher' ) . '</p>';
+	}
+
+	/**
 	 * Render a post-type comma-list text input.
 	 *
 	 * @since 3.0.0
@@ -708,9 +731,12 @@ class Settings {
 		$current  = (string) self::get( $key );
 		$name     = self::OPTION . '[' . esc_attr( $key ) . ']';
 		$options  = array(
-			'hourly'     => __( 'Hourly', 'smart-image-matcher' ),
-			'twicedaily' => __( 'Twice daily', 'smart-image-matcher' ),
-			'daily'      => __( 'Daily', 'smart-image-matcher' ),
+			'hourly'        => __( 'Hourly', 'smart-image-matcher' ),
+			'every_4_hours' => __( 'Every 4 hours', 'smart-image-matcher' ),
+			'every_6_hours' => __( 'Every 6 hours', 'smart-image-matcher' ),
+			'every_8_hours' => __( 'Every 8 hours', 'smart-image-matcher' ),
+			'twicedaily'    => __( 'Twice daily', 'smart-image-matcher' ),
+			'daily'         => __( 'Daily', 'smart-image-matcher' ),
 		);
 		$disabled = '';
 
@@ -729,7 +755,7 @@ class Settings {
 			);
 		}
 		echo '</select>';
-		echo '<p class="description">' . esc_html__( 'Daily is recommended for most sites. Hourly can be useful during cleanup, but it creates more background work.', 'smart-image-matcher' ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'Each scheduled run only processes a bounded batch of posts at a time and resumes automatically, so more frequent intervals are safe even on large libraries. Daily is a good default; use a shorter interval if you want the backlog to clear faster.', 'smart-image-matcher' ) . '</p>';
 	}
 
 	/**

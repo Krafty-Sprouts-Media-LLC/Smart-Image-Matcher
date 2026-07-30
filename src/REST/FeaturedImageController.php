@@ -29,7 +29,7 @@ class FeaturedImageController extends Controller {
 	/**
 	 * Supported featured-image queue job types.
 	 */
-	private const JOB_TYPES = array( 'fiaa_manual', 'fiaa_audit_clear' );
+	private const JOB_TYPES = array( 'fiaa_manual', 'fiaa_audit_clear', 'fiaa_scheduled' );
 
 	/**
 	 * Register routes.
@@ -157,6 +157,30 @@ class FeaturedImageController extends Controller {
 
 		register_rest_route(
 			self::NAMESPACE,
+			'/featured-image-exclusions',
+			array(
+				array(
+					'methods'             => \WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'getExclusions' ),
+					'permission_callback' => array( $this, 'checkAdminPermission' ),
+				),
+				array(
+					'methods'             => \WP_REST_Server::EDITABLE,
+					'callback'            => array( $this, 'saveExclusions' ),
+					'permission_callback' => array( $this, 'checkAdminPermission' ),
+					'args'                => array(
+						'excluded_image_slugs' => array(
+							'type'     => 'string',
+							'required' => false,
+							'default'  => '',
+						),
+					),
+				),
+			)
+		);
+
+		register_rest_route(
+			self::NAMESPACE,
 			'/featured-image-audit',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -265,6 +289,44 @@ class FeaturedImageController extends Controller {
 		Settings::save( $all );
 
 		return rest_ensure_response( $this->buildManualSettingsPayload() );
+	}
+
+	/**
+	 * Get FIAA excluded image slugs.
+	 *
+	 * @since 3.0.9
+	 * @return \WP_REST_Response
+	 */
+	public function getExclusions(): \WP_REST_Response {
+		return rest_ensure_response(
+			array(
+				'excluded_image_slugs' => (string) Settings::get( 'fiaa_excluded_image_slugs' ),
+			)
+		);
+	}
+
+	/**
+	 * Persist FIAA excluded image slugs.
+	 *
+	 * @since 3.0.9
+	 * @param \WP_REST_Request $request Request.
+	 * @return \WP_REST_Response
+	 */
+	public function saveExclusions( \WP_REST_Request $request ) {
+		$body    = $request->get_json_params();
+		$payload = is_array( $body ) ? $body : array();
+		$raw     = (string) ( $payload['excluded_image_slugs'] ?? $request->get_param( 'excluded_image_slugs' ) ?? '' );
+
+		$sanitizer = new Sanitizer();
+		$all       = Settings::all();
+		$all['fiaa_excluded_image_slugs'] = $sanitizer->excludedImageSlugs( $raw );
+		Settings::save( $all );
+
+		return rest_ensure_response(
+			array(
+				'excluded_image_slugs' => (string) Settings::get( 'fiaa_excluded_image_slugs' ),
+			)
+		);
 	}
 
 	/**

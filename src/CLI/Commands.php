@@ -240,6 +240,78 @@ class Commands {
 	}
 
 	/**
+	 * (Re)build the media library inverted index used by the matcher.
+	 *
+	 * Runs synchronously in this CLI process rather than via Action
+	 * Scheduler, since WP-CLI is not bound by the web server's request
+	 * timeout the way an AS async-request or wp-cron execution is. Still
+	 * processes in bounded batches and reports progress, so an interrupted
+	 * run (Ctrl-C, SSH drop) can be resumed with `wp sim reindex` again —
+	 * it picks up from the last saved cursor unless --fresh is passed.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--fresh]
+	 * : Ignore any existing progress and reindex the entire library from
+	 * the beginning.
+	 *
+	 * [--batch-size=<size>]
+	 * : Attachments indexed per batch. Default: 200.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *   wp sim reindex
+	 *   wp sim reindex --fresh
+	 *   wp sim reindex --batch-size=500
+	 *
+	 * @since 3.1.0
+	 * @param string[] $args       Positional args.
+	 * @param string[] $assocArgs  Named args.
+	 * @return void
+	 */
+	public function reindex( array $args, array $assocArgs ): void {
+		$repo      = new ImageRepository();
+		$batchSize = absint( $assocArgs['batch-size'] ?? 200 );
+		$batchSize = $batchSize > 0 ? $batchSize : 200;
+
+		if ( isset( $assocArgs['fresh'] ) ) {
+			$repo->resetBackfillState();
+			\WP_CLI::log( 'Cleared previous backfill progress — starting from the beginning.' );
+		}
+
+		$state  = $repo->getBackfillState();
+		$offset = (int) ( $state['offset'] ?? 0 );
+
+		if ( ! empty( $state['done'] ) ) {
+			\WP_CLI::success( 'Media library is already fully indexed. Use --fresh to reindex anyway.' );
+			return;
+		}
+
+		if ( $offset > 0 ) {
+			\WP_CLI::log( "Resuming from offset {$offset}." );
+		}
+
+		$totalIndexed = 0;
+
+		do {
+			$result = $repo->backfillBatch( $offset, $batchSize );
+
+			$totalIndexed += $result['indexed'];
+			$offset        = $result['next_offset'];
+
+			$repo->saveBackfillState( array(
+				'offset'     => $offset,
+				'done'       => $result['done'],
+				'updated_at' => current_time( 'mysql' ),
+			) );
+
+			\WP_CLI::log( "Indexed batch: {$result['indexed']} images (offset now {$offset})." );
+		} while ( ! $result['done'] );
+
+		\WP_CLI::success( "Reindex complete. {$totalIndexed} images processed in this run." );
+	}
+
+	/**
 	 * Fetch post IDs in bounded batches for the bulk CLI command.
 	 *
 	 * @since 3.0.0

@@ -4,8 +4,40 @@ All notable changes to Smart Image Matcher are documented here.
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
+=================================================================================
 
-## [Unreleased]
+
+## [3.1.0] - 30/07/2026
+
+### Fixed - Media library index backfill on large libraries
+
+- Replaced the unchunked `ImageRepository::backfillAll()` loop (which paginated the entire media library inside a single Action Scheduler execution) with a resumable `backfillBatch()` that processes one page per execution and persists a cursor. On libraries of 5,000+ images the old loop could exceed PHP's `max_execution_time` / Action Scheduler's async-request watchdog and be killed partway through, permanently leaving the rest of the library unindexed and therefore invisible to the matcher even though the images existed and were searchable in Media Library.
+- `JobRunner::runIndexBackfill()` now runs one batch and self-enqueues the next instead of looping internally.
+- Added `Queue::maybeResumeIndexBackfill()`, called on every request via `Migrator::maybeRun()`, which re-enqueues an incomplete backfill that has no pending/in-progress action — self-healing after a killed or abandoned run with no manual intervention required.
+- Added `wp sim reindex` (`--fresh`, `--batch-size`) for manually resuming or restarting the backfill outside of Action Scheduler.
+
+### Fixed - Scheduled Featured Image Auto-Assigner reliability
+
+- `FiaaCron::runScheduledAssignment()` no longer calls `FeaturedImageService::run()` synchronously inside a single Action Scheduler execution (which scored every candidate post against the entire attachment slug map in one PHP process and could fail outright on large sites). It now collects candidate post IDs and queues a batched job through the same resumable pipeline (`Queue::enqueueFiaaRun()` / `JobRunner::runFiaaRunJob()`) the manual "Run Matcher" button already used safely.
+- Added an overlap guard so a new scheduled tick is skipped while a previous scheduled run is still queued or processing, instead of starting a second concurrent pass over the same posts.
+- The "Last Scheduled Run" summary on the Featured Images admin page is now written when the batched job completes (`JobRunner::finalizeScheduledFiaaRun()`), preserving the same fields the old synchronous run used to report.
+
+### Fixed - Orphaned Action Scheduler hooks after the sim_* rename
+
+- Actions still scheduled under the pre-rename `sim_*` hook names (e.g. `sim_queue_index_backfill`, `sim_fiaa_scheduled_run`) failed forever with "no callbacks registered" since nothing listens for those names anymore. Added a one-time migration (`Migrator::migration4ClearLegacyActionHooks()`) plus cleanup on deactivation and uninstall to cancel them.
+
+### Added - More frequent scheduled run intervals
+
+- Added `every_4_hours`, `every_6_hours`, and `every_8_hours` options alongside hourly/twice-daily/daily for the Featured Image Auto-Assigner's scheduled run. Safe to use on large libraries now that each run is a bounded, resumable batch rather than a single synchronous pass.
+
+## [3.0.9] - 22/07/2026
+
+### Added - FIAA excluded image filenames
+
+- Added an **Excluded Image Filenames** setting (Settings + Featured Images page) so specific images can be blocked from featured-image auto-assign.
+- Accepts filenames or slugs (`fly-fishing` or `fly-fishing.jpg`), one per line (commas also accepted).
+- Excluded images are skipped on upload, Match Runner, and scheduled runs.
+- Existing featured images that use an excluded filename are flagged as unsafe by **Fix Incorrect Featured Images** (method: `excluded`) so they can be cleared without changing matching rules for other short stems.
 
 ## [3.0.8] - 21/07/2026
 

@@ -104,6 +104,60 @@ class ImageRepository {
 	}
 
 	// -------------------------------------------------------------------------
+	// Backfill cursor state
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Option name storing the resumable backfill cursor.
+	 */
+	const BACKFILL_STATE_OPTION = 'smart_image_matcher_index_backfill_state';
+
+	/**
+	 * Get the current backfill cursor state.
+	 *
+	 * @since 3.1.0
+	 * @return array<string, mixed> { offset: int, done: bool, updated_at?: string }
+	 */
+	public function getBackfillState(): array {
+		$state = get_option( self::BACKFILL_STATE_OPTION, array() );
+
+		if ( ! is_array( $state ) ) {
+			$state = array();
+		}
+
+		return array(
+			'offset' => (int) ( $state['offset'] ?? 0 ),
+			'done'   => (bool) ( $state['done'] ?? false ),
+		) + $state;
+	}
+
+	/**
+	 * Persist the backfill cursor state.
+	 *
+	 * @since 3.1.0
+	 * @param array<string, mixed> $state Cursor state to store.
+	 * @return void
+	 */
+	public function saveBackfillState( array $state ): void {
+		update_option( self::BACKFILL_STATE_OPTION, $state, false );
+	}
+
+	/**
+	 * Reset the backfill cursor so the next scheduled batch starts over
+	 * from the beginning of the media library.
+	 *
+	 * Used when an admin explicitly requests a full reindex, and by the
+	 * self-healing check in Migrator when a prior backfill run appears to
+	 * have stalled or never completed.
+	 *
+	 * @since 3.1.0
+	 * @return void
+	 */
+	public function resetBackfillState(): void {
+		delete_option( self::BACKFILL_STATE_OPTION );
+	}
+
+	// -------------------------------------------------------------------------
 	// Indexing
 	// -------------------------------------------------------------------------
 
@@ -178,43 +232,53 @@ class ImageRepository {
 	}
 
 	/**
-	 * Backfill the entire media library.
+	 * Index one batch of the media library, starting at a given offset.
 	 *
-	 * Called once from the activation backfill Action Scheduler job.
-	 * Processes in batches to stay within PHP time limits.
+	 * Deliberately does NOT loop over the whole library internally — on
+	 * large libraries (5,000+ images) a single unchunked pass reliably
+	 * exceeds PHP max_execution_time / Action Scheduler's async-request
+	 * watchdog and gets killed partway through, silently leaving the
+	 * remainder of the library unindexed (and therefore unmatchable)
+	 * with no retry. Callers (JobRunner::runIndexBackfill) are
+	 * responsible for persisting the returned cursor and re-invoking
+	 * this method for the next batch — see agents.md "the 30-second rule".
 	 *
-	 * @since 3.0.0
-	 * @param int $batchSize Attachments per batch. Default 200.
-	 * @return int Number of images indexed.
+	 * @since 3.1.0
+	 * @param int $offset    Number of image attachments already processed.
+	 * @param int $batchSize Attachments to index in this call. Default 200.
+	 * @return array{indexed: int, next_offset: int, done: bool}
 	 */
-	public function backfillAll( int $batchSize = 200 ): int {
-		$page     = 1;
-		$indexed  = 0;
+	public function backfillBatch( int $offset = 0, int $batchSize = 200 ): array {
+		$ids = get_posts( array(
+			'post_type'              => 'attachment',
+			'post_mime_type'         => 'image',
+			'post_status'            => 'inherit',
+			'posts_per_page'         => $batchSize,
+			'offset'                 => max( 0, $offset ),
+			'orderby'                => 'ID',
+			'order'                  => 'ASC',
+			'fields'                 => 'ids',
+			'no_found_rows'          => true,
+			'update_post_meta_cache' => false,
+			'update_post_term_cache' => false,
+		) );
 
-		do {
-			$ids = get_posts( array(
-				'post_type'              => 'attachment',
-				'post_mime_type'         => 'image',
-				'post_status'            => 'inherit',
-				'posts_per_page'         => $batchSize,
-				'paged'                  => $page,
-				'fields'                 => 'ids',
-				'no_found_rows'          => true,
-				'update_post_meta_cache' => false,
-				'update_post_term_cache' => false,
-			) );
+		foreach ( $ids as $id ) {
+			$this->indexImage( (int) $id );
+		}
 
-			foreach ( $ids as $id ) {
-				$this->indexImage( (int) $id );
-				$indexed++;
-			}
+		$count = count( $ids );
 
-			$page++;
-		} while ( count( $ids ) === $batchSize );
+		Logger::info( 'ImageRepository: backfill batch complete', array(
+			'offset'  => $offset,
+			'indexed' => $count,
+		) );
 
-		Logger::info( 'ImageRepository: backfill complete', array( 'count' => $indexed ) );
-
-		return $indexed;
+		return array(
+			'indexed'     => $count,
+			'next_offset' => $offset + $count,
+			'done'        => $count < $batchSize,
+		);
 	}
 
 	// -------------------------------------------------------------------------

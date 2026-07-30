@@ -34,10 +34,23 @@ if ( function_exists( 'as_unschedule_all_actions' ) ) {
 		'smart_image_matcher_queue_fiaa_run',
 		'smart_image_matcher_queue_fiaa_audit_clear',
 		'smart_image_matcher_fiaa_scheduled_run',
+		// Legacy pre-rename hook names (sim_* -> smart_image_matcher_*).
+		// Orphaned actions under these names fail forever with "no
+		// callbacks registered" if left behind on uninstall.
+		'sim_queue_index_backfill',
+		'sim_queue_ai_match',
+		'sim_queue_bulk_match',
+		'sim_queue_bulk_insert',
+		'sim_queue_fiaa_run',
+		'sim_queue_fiaa_audit_clear',
+		'sim_fiaa_scheduled_run',
+		'sim_fiaa_cron_run',
 	);
 
 	foreach ( $smart_image_matcher_action_hooks as $smart_image_matcher_action_hook ) {
 		as_unschedule_all_actions( $smart_image_matcher_action_hook, array(), 'smart-image-matcher' );
+		as_unschedule_all_actions( $smart_image_matcher_action_hook );
+		wp_clear_scheduled_hook( $smart_image_matcher_action_hook );
 	}
 }
 

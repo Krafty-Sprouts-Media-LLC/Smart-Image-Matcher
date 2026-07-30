@@ -181,6 +181,10 @@ class Plugin {
 			}
 		}
 
+		// Also clear any orphaned actions left under the pre-rename sim_*
+		// hook names so they don't keep failing while the plugin is off.
+		Queue::clearLegacyHooks( Migrator::LEGACY_ACTION_HOOKS );
+
 		Cache::clearAll();
 	}
 
@@ -451,6 +455,7 @@ class Plugin {
 						'max_posts'       => max( 1, min( 50000, (int) Settings::get( 'fiaa_manual_max_posts' ) ) ),
 						'overwrite'       => (bool) Settings::get( 'fiaa_manual_overwrite' ),
 					),
+					'excludedImageSlugs' => (string) Settings::get( 'fiaa_excluded_image_slugs' ),
 					'i18n'  => array(
 						'starting'   => __( 'Starting Match Runner...', 'smart-image-matcher' ),
 						'running'    => __( 'Running...', 'smart-image-matcher' ),
@@ -469,6 +474,9 @@ class Plugin {
 						'saved'      => __( 'Run settings saved.', 'smart-image-matcher' ),
 						'saveFailed' => __( 'Could not save run settings.', 'smart-image-matcher' ),
 						'noStatuses' => __( 'Select at least one post status before running.', 'smart-image-matcher' ),
+						'exclusionsSaving' => __( 'Saving exclusions...', 'smart-image-matcher' ),
+						'exclusionsSaved'  => __( 'Excluded image filenames saved.', 'smart-image-matcher' ),
+						'exclusionsFailed' => __( 'Could not save excluded image filenames.', 'smart-image-matcher' ),
 						'auditScanning'    => __( 'Scanning featured images...', 'smart-image-matcher' ),
 						'auditScanFailed'  => __( 'Could not scan featured images.', 'smart-image-matcher' ),
 						/* translators: 1: unsafe count, 2: total assigned count, 3: safe count */

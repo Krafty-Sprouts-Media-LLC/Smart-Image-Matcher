@@ -47,6 +47,7 @@ $manual_statuses      = PostStatuses::sanitizeList( (string) Settings::get( 'fia
 $manual_featured      = (string) Settings::get( 'fiaa_manual_featured_filter' );
 $manual_max_posts     = max( 1, min( 50000, (int) Settings::get( 'fiaa_manual_max_posts' ) ) );
 $manual_overwrite     = (bool) Settings::get( 'fiaa_manual_overwrite' );
+$excluded_image_slugs = (string) Settings::get( 'fiaa_excluded_image_slugs' );
 
 if ( ! post_type_exists( $manual_post_type ) || 'attachment' === $manual_post_type ) {
 	$manual_post_type = 'post';
@@ -197,6 +198,36 @@ unset( $post_types['attachment'] );
 							<tbody id="sim-fiaa-recent-body"></tbody>
 						</table>
 					</div>
+				</div>
+			</div>
+
+			<div id="sim-fiaa-exclusions" class="sim-card">
+				<div class="sim-card-head">
+					<div>
+						<h2><?php esc_html_e( 'Excluded Image Filenames', 'smart-image-matcher' ); ?></h2>
+						<p class="description">
+							<?php esc_html_e( 'Block specific images from featured-image auto-assign without changing matching rules for other short filenames.', 'smart-image-matcher' ); ?>
+						</p>
+					</div>
+					<span class="sim-status sim-status-warn"><?php esc_html_e( 'Optional', 'smart-image-matcher' ); ?></span>
+				</div>
+
+				<div class="sim-card-body">
+					<div class="sim-fiaa-notice-box">
+						<p><?php esc_html_e( 'Add one filename or slug per line. Example: fly-fishing or fly-fishing.jpg. Those images will not be auto-assigned on upload, Match Runner, or scheduled runs.', 'smart-image-matcher' ); ?></p>
+						<p><?php esc_html_e( 'After saving, use Fix Incorrect Featured Images below to find and clear posts that already use an excluded image.', 'smart-image-matcher' ); ?></p>
+					</div>
+
+					<label class="screen-reader-text" for="sim-fiaa-excluded-slugs"><?php esc_html_e( 'Excluded image filenames', 'smart-image-matcher' ); ?></label>
+					<textarea id="sim-fiaa-excluded-slugs" class="large-text code" rows="5" placeholder="<?php esc_attr_e( 'fly-fishing', 'smart-image-matcher' ); ?>"><?php echo esc_textarea( $excluded_image_slugs ); ?></textarea>
+
+					<div class="sim-form-actions">
+						<button type="button" id="sim-fiaa-exclusions-save-button" class="button button-secondary">
+							<?php esc_html_e( 'Save Exclusions', 'smart-image-matcher' ); ?>
+						</button>
+					</div>
+
+					<div id="sim-fiaa-exclusions-notice" aria-live="polite"></div>
 				</div>
 			</div>
 
@@ -398,6 +429,10 @@ unset( $post_types['attachment'] );
 						<div class="sim-held-rule">
 							<span><?php esc_html_e( 'Similar filenames with different key terms', 'smart-image-matcher' ); ?></span>
 							<span class="sim-held-badge sim-held-badge-warn"><?php esc_html_e( 'Hold', 'smart-image-matcher' ); ?></span>
+						</div>
+						<div class="sim-held-rule">
+							<span><?php esc_html_e( 'Excluded image filenames (blocklist)', 'smart-image-matcher' ); ?></span>
+							<span class="sim-held-badge sim-held-badge-warn"><?php esc_html_e( 'Blocked', 'smart-image-matcher' ); ?></span>
 						</div>
 						<div class="sim-held-rule">
 							<span><?php esc_html_e( 'Token overlap only (not exact/prefix)', 'smart-image-matcher' ); ?></span>

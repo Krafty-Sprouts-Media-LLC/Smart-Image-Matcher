@@ -18,6 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+use SmartImageMatcher\Domain\ImageRepository;
 use SmartImageMatcher\Logging\Logger;
 
 /**
@@ -114,7 +115,8 @@ class Queue {
 	 * Schedule the one-shot inverted-index backfill job.
 	 *
 	 * Safe to call multiple times — only creates the job if no pending
-	 * or in-progress backfill already exists.
+	 * or in-progress backfill already exists AND the backfill hasn't
+	 * already run to completion (per the persisted cursor state).
 	 *
 	 * Must be called from action_scheduler_init or later, not plugins_loaded.
 	 *
@@ -133,6 +135,11 @@ class Queue {
 			return;
 		}
 
+		// Already fully indexed — nothing to do.
+		if ( ( new ImageRepository() )->getBackfillState()['done'] ?? false ) {
+			return;
+		}
+
 		// Don't double-schedule.
 		if ( as_has_scheduled_action( self::HOOK_INDEX_BACKFILL, array(), self::GROUP ) ) {
 			return;
@@ -145,6 +152,74 @@ class Queue {
 		}
 
 		Logger::info( 'Queue: index backfill scheduled.' );
+	}
+
+	/**
+	 * Self-healing check: re-schedule the backfill if it never completed.
+	 *
+	 * Unlike scheduleIndexBackfill() (only ever called from Plugin::activate(),
+	 * so a plugin update without deactivate/reactivate never re-triggers it),
+	 * this is safe to call on every request. It is a no-op unless all of the
+	 * following are true:
+	 *   - the persisted cursor state says the backfill is not done, AND
+	 *   - there is no pending/in-progress backfill action already queued
+	 *     (i.e. the previous run failed, was abandoned, or was orphaned by
+	 *     a hook rename and Action Scheduler gave up on it).
+	 *
+	 * @since 3.1.0
+	 * @return void
+	 */
+	public function maybeResumeIndexBackfill(): void {
+		if ( ! self::isAvailable() ) {
+			return;
+		}
+
+		if ( class_exists( 'ActionScheduler' ) && ! \ActionScheduler::is_initialized() ) {
+			add_action( 'action_scheduler_init', array( $this, 'maybeResumeIndexBackfill' ) );
+			return;
+		}
+
+		$state = ( new ImageRepository() )->getBackfillState();
+
+		if ( ! empty( $state['done'] ) ) {
+			return;
+		}
+
+		if ( as_has_scheduled_action( self::HOOK_INDEX_BACKFILL, array(), self::GROUP ) ) {
+			return;
+		}
+
+		Logger::warn( 'Queue: index backfill was incomplete with no pending action — resuming.', array(
+			'offset' => (int) ( $state['offset'] ?? 0 ),
+		) );
+
+		as_enqueue_async_action( self::HOOK_INDEX_BACKFILL, array(), self::GROUP );
+	}
+
+	/**
+	 * Unschedule any Action Scheduler actions still registered under a
+	 * legacy hook name so they stop firing "no callbacks registered"
+	 * failures forever after a hook rename.
+	 *
+	 * @since 3.1.0
+	 * @param string[] $legacyHooks Legacy hook names (any group).
+	 * @return void
+	 */
+	public static function clearLegacyHooks( array $legacyHooks ): void {
+		if ( ! self::isAvailable() || ! function_exists( 'as_unschedule_all_actions' ) ) {
+			return;
+		}
+
+		if ( class_exists( 'ActionScheduler' ) && ! \ActionScheduler::is_initialized() ) {
+			return;
+		}
+
+		foreach ( $legacyHooks as $hook ) {
+			// No group filter: the whole point is to catch actions scheduled
+			// under a prior hook-naming scheme, whatever group they used.
+			as_unschedule_all_actions( $hook );
+			wp_clear_scheduled_hook( $hook );
+		}
 	}
 
 	/**

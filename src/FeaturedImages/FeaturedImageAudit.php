@@ -68,6 +68,19 @@ class FeaturedImageAudit {
 				continue;
 			}
 
+			if ( $this->matcher->isExcludedImageSlug( $imageSlug ) ) {
+				$unsafe[] = array(
+					'id'            => $postId,
+					'title'         => (string) ( $row['post_title'] ?? '' ),
+					'post_slug'     => $postSlug,
+					'image_slug'    => $imageSlug,
+					'score'         => 0,
+					'method'        => 'excluded',
+					'attachment_id' => (int) ( $row['attachment_id'] ?? 0 ),
+				);
+				continue;
+			}
+
 			$score = $this->matcher->scoreSlugMatch( $postSlug, $imageSlug );
 
 			$unsafe[] = array(

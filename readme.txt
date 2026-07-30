@@ -4,7 +4,7 @@ Tags: images, media library, alt text, featured image, automation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 3.0.8
+Stable tag: 3.1.0
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -93,6 +93,16 @@ No AI data is sent automatically — only when you explicitly trigger AI matchin
 The plugin stores match results and job metadata in your own database only. Update checks may contact GitHub (see External services). No post content leaves your server unless you explicitly use AI features with a configured provider.
 
 == Changelog ==
+
+= 3.1.0 =
+* Fixed the media library index backfill silently failing to finish on large libraries (5,000+ images), leaving newer/later images unmatchable even though they were searchable in Media Library. The backfill now runs in resumable batches and self-heals if interrupted. Added `wp sim reindex` for manual reindexing.
+* Fixed the scheduled Featured Image Auto-Assigner failing on large sites because it ran synchronously in one background job. It now runs in the same safe batched queue as the manual Match Runner.
+* Fixed orphaned background jobs left over from an internal naming change that failed forever with "no callbacks registered" errors.
+* Added more frequent scheduled run options: every 4, 6, or 8 hours (in addition to hourly/twice daily/daily).
+
+= 3.0.9 =
+* Added Excluded Image Filenames for Featured Image Auto-Assigner (blocklist for images like fly-fishing.jpg).
+* Excluded images are skipped on upload, Match Runner, and scheduled runs, and flagged by Fix Incorrect Featured Images.
 
 = 3.0.8 =
 * Fixed a flash of "Smart Image Matcher" text at the top-left when opening the block editor.

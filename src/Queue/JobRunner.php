@@ -99,17 +99,47 @@ class JobRunner {
 	}
 
 	/**
-	 * Run the one-shot inverted-index backfill job.
+	 * Run one batch of the inverted-index backfill job.
 	 *
-	 * Hooked to Queue::HOOK_INDEX_BACKFILL.
+	 * Hooked to Queue::HOOK_INDEX_BACKFILL. Processes a single bounded batch
+	 * (see ImageRepository::backfillBatch()) and, if the library is not
+	 * fully indexed yet, enqueues a fresh async action for the next batch
+	 * instead of looping internally. This keeps each individual Action
+	 * Scheduler execution short (avoids PHP max_execution_time and AS's
+	 * async-request watchdog killing a single long-running job on large
+	 * libraries) and makes the backfill resumable: if one batch's action
+	 * fails or is abandoned, Queue::maybeResumeIndexBackfill() detects the
+	 * incomplete cursor on the next request and re-enqueues from where it
+	 * left off, rather than leaving the rest of the library unindexed.
 	 *
-	 * @since 3.0.0
+	 * @since 3.1.0
 	 * @return void
 	 */
 	public static function runIndexBackfill(): void {
-		Logger::info( 'JobRunner: index backfill started' );
-		$count = ( new ImageRepository() )->backfillAll( 200 );
-		Logger::info( 'JobRunner: index backfill done', array( 'count' => $count ) );
+		$repo   = new ImageRepository();
+		$state  = $repo->getBackfillState();
+		$offset = (int) ( $state['offset'] ?? 0 );
+
+		Logger::info( 'JobRunner: index backfill batch started', array( 'offset' => $offset ) );
+
+		$result = $repo->backfillBatch( $offset, 200 );
+
+		$repo->saveBackfillState( array(
+			'offset'     => $result['next_offset'],
+			'done'       => $result['done'],
+			'updated_at' => current_time( 'mysql' ),
+		) );
+
+		if ( $result['done'] ) {
+			Logger::info( 'JobRunner: index backfill complete', array( 'total_indexed' => $result['next_offset'] ) );
+			return;
+		}
+
+		// More images remain. Enqueue the next batch as a fresh async
+		// action rather than recursing/looping in this execution.
+		if ( function_exists( 'as_enqueue_async_action' ) ) {
+			as_enqueue_async_action( Queue::HOOK_INDEX_BACKFILL, array(), Queue::GROUP );
+		}
 	}
 
 	/**
@@ -256,7 +286,14 @@ class JobRunner {
 		$offset = isset( $totals['offset'] ) ? (int) $totals['offset'] : 0;
 		$offset = max( 0, min( $offset, $total ) );
 
-		$totals['type']      = 'fiaa_manual';
+		// Preserve the job type set at creation time (e.g. 'fiaa_scheduled')
+		// rather than stomping it — this used to be hardcoded to
+		// 'fiaa_manual' on every batch, which meant a scheduled run's job
+		// row always reported itself as manual and finalizeScheduledFiaaRun()
+		// could never recognise it as a scheduled job to summarise.
+		$totals['type']      = ( isset( $totals['type'] ) && is_string( $totals['type'] ) && '' !== $totals['type'] )
+			? $totals['type']
+			: 'fiaa_manual';
 		$totals['total']     = $total;
 		$totals['done']      = isset( $totals['done'] ) ? (int) $totals['done'] : 0;
 		$totals['matched']   = isset( $totals['matched'] ) ? (int) $totals['matched'] : 0;
@@ -267,6 +304,11 @@ class JobRunner {
 		if ( 0 === $total || $offset >= $total ) {
 			$totals['done']   = $total;
 			$totals['offset'] = $total;
+
+			if ( 'fiaa_scheduled' === $totals['type'] ) {
+				self::finalizeScheduledFiaaRun( $totals, $config );
+			}
+
 			self::saveFiaaJobTotals( $jobId, $totals, 'completed' );
 			return;
 		}
@@ -328,6 +370,10 @@ class JobRunner {
 		$totals['recent'] = array_slice( $totals['recent'], -30 );
 
 		if ( $totals['done'] >= $total ) {
+			if ( 'fiaa_scheduled' === $totals['type'] ) {
+				self::finalizeScheduledFiaaRun( $totals, $config );
+			}
+
 			self::saveFiaaJobTotals( $jobId, $totals, 'completed' );
 			return;
 		}
@@ -341,6 +387,47 @@ class JobRunner {
 				Queue::GROUP
 			);
 		}
+	}
+
+	/**
+	 * Persist the "last scheduled run" summary once a scheduled FIAA job
+	 * (job type 'fiaa_scheduled') finishes its final batch.
+	 *
+	 * Mirrors the summary shape FiaaCron::runScheduledAssignment() used to
+	 * write synchronously, so the Featured Images admin page's "Last
+	 * Scheduled Run" card keeps working unchanged.
+	 *
+	 * @since 3.1.0
+	 * @param array<string, mixed> $totals Final job totals.
+	 * @param array<string, mixed> $config Job config captured at creation time.
+	 * @return void
+	 */
+	private static function finalizeScheduledFiaaRun( array $totals, array $config ): void {
+		$summary = array(
+			'ran_at'                 => current_time( 'mysql' ),
+			'matched'                => (int) ( $totals['matched'] ?? 0 ),
+			'skipped'                => (int) ( $totals['skipped'] ?? 0 ),
+			'unmatched'              => (int) ( $totals['unmatched'] ?? 0 ),
+			'total'                  => (int) ( $totals['total'] ?? 0 ),
+			'post_types'             => isset( $config['post_types'] ) && is_array( $config['post_types'] ) ? $config['post_types'] : array(),
+			'duration_ms'            => isset( $totals['started_at_ms'] ) ? (int) round( microtime( true ) * 1000 - (int) $totals['started_at_ms'] ) : 0,
+			'fiaa_schedule_interval' => isset( $config['interval'] ) ? (string) $config['interval'] : '',
+			'post_statuses'          => isset( $config['post_statuses'] ) && is_array( $config['post_statuses'] ) ? $config['post_statuses'] : array(),
+			'featured_filter'        => isset( $config['featured_filter'] ) ? (string) $config['featured_filter'] : '',
+			'overwrite'              => ! empty( $config['overwrite'] ),
+		);
+
+		// Preserve the previously remembered scheduled interval so
+		// FiaaCron::maybeReschedule() can still detect interval changes.
+		$runtime = get_option( Settings::RUNTIME_OPTION, array() );
+		$runtime = is_array( $runtime ) ? $runtime : array();
+		if ( isset( $runtime['fiaa_schedule_interval'] ) && '' === $summary['fiaa_schedule_interval'] ) {
+			$summary['fiaa_schedule_interval'] = (string) $runtime['fiaa_schedule_interval'];
+		}
+
+		update_option( Settings::RUNTIME_OPTION, $summary, false );
+
+		Logger::info( 'JobRunner: scheduled FIAA run complete', $summary );
 	}
 
 	/**

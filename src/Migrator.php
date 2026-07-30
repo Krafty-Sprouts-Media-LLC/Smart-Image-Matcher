@@ -12,6 +12,8 @@ declare( strict_types=1 );
 
 namespace SmartImageMatcher;
 
+use SmartImageMatcher\Queue\Queue;
+
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
@@ -28,7 +30,27 @@ class Migrator {
 	 *
 	 * Bump this constant whenever a new migration is added.
 	 */
-	const SCHEMA_VERSION = 3;
+	const SCHEMA_VERSION = 4;
+
+	/**
+	 * Action Scheduler hook names used by prior versions of this plugin
+	 * before the `sim_*` → `smart_image_matcher_*` hook rename. Any action
+	 * still scheduled under these names will fire forever with "no
+	 * callbacks registered" failures since nothing listens for them anymore.
+	 *
+	 * @since 3.1.0
+	 * @var string[]
+	 */
+	const LEGACY_ACTION_HOOKS = array(
+		'sim_queue_index_backfill',
+		'sim_queue_ai_match',
+		'sim_queue_bulk_match',
+		'sim_queue_bulk_insert',
+		'sim_queue_fiaa_run',
+		'sim_queue_fiaa_audit_clear',
+		'sim_fiaa_scheduled_run',
+		'sim_fiaa_cron_run',
+	);
 
 	/**
 	 * Run any outstanding migrations.
@@ -53,9 +75,18 @@ class Migrator {
 			$this->migration3CreateInvertedIndex();
 		}
 
+		if ( $installed < 4 ) {
+			$this->migration4ClearLegacyActionHooks();
+		}
+
 		// Always ensure the inverted index table exists, even on sites that
 		// were activated before Migration 3 was introduced.
 		$this->ensureInvertedIndexExists();
+
+		// Self-healing: on every request, detect an incomplete/orphaned
+		// index backfill (e.g. killed by a timeout, or abandoned after a
+		// hook rename) and re-enqueue it. Cheap no-op once fully indexed.
+		( new Queue() )->maybeResumeIndexBackfill();
 
 		update_option( 'smart_image_matcher_db_version', self::SCHEMA_VERSION, false );
 	}
@@ -70,6 +101,7 @@ class Migrator {
 		$this->migration1CreateTables();
 		$this->migration2AddHeadingHash();
 		$this->migration3CreateInvertedIndex();
+		$this->migration4ClearLegacyActionHooks();
 		update_option( 'smart_image_matcher_db_version', self::SCHEMA_VERSION, false );
 	}
 
@@ -257,6 +289,22 @@ class Migrator {
 
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		dbDelta( $sql );
+	}
+
+	/**
+	 * Migration 4 — Unschedule orphaned Action Scheduler actions left over
+	 * from the `sim_*` → `smart_image_matcher_*` hook rename.
+	 *
+	 * Sites that installed before the rename can have recurring actions
+	 * (e.g. the FIAA scheduled run) still queued under the old hook name.
+	 * Nothing listens for that name anymore, so every recurrence fails
+	 * with "no callbacks registered" forever. This removes them once.
+	 *
+	 * @since 3.1.0
+	 * @return void
+	 */
+	private function migration4ClearLegacyActionHooks(): void {
+		Queue::clearLegacyHooks( self::LEGACY_ACTION_HOOKS );
 	}
 
 	/**

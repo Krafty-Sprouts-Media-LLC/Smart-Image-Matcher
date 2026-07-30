@@ -29,6 +29,9 @@
 		saved: 'Run settings saved.',
 		saveFailed: 'Could not save run settings.',
 		noStatuses: 'Select at least one post status before running.',
+		exclusionsSaving: 'Saving exclusions...',
+		exclusionsSaved: 'Excluded image filenames saved.',
+		exclusionsFailed: 'Could not save excluded image filenames.',
 		auditScanning: 'Scanning featured images...',
 		auditScanFailed: 'Could not scan featured images.',
 		auditScanSummary: 'Found %1$d unsafe featured image(s) out of %2$d assigned posts (%3$d safe).',
@@ -126,7 +129,13 @@
 	}
 
 	function noticeSelector( target ) {
-		return 'audit' === target ? '#sim-fiaa-audit-notice' : '#sim-fiaa-notice';
+		if ( 'audit' === target ) {
+			return '#sim-fiaa-audit-notice';
+		}
+		if ( 'exclusions' === target ) {
+			return '#sim-fiaa-exclusions-notice';
+		}
+		return '#sim-fiaa-notice';
 	}
 
 	function showNotice( type, message, target ) {
@@ -406,6 +415,45 @@
 		}
 	}
 
+	async function saveExclusions() {
+		const textarea = q( '#sim-fiaa-excluded-slugs' );
+		const saveButton = q( '#sim-fiaa-exclusions-save-button' );
+
+		if ( ! textarea ) {
+			return false;
+		}
+
+		if ( saveButton ) {
+			saveButton.disabled = true;
+		}
+
+		showNotice( 'info', i18n.exclusionsSaving, 'exclusions' );
+
+		try {
+			const saved = await apiFetch( {
+				path: '/smart-image-matcher/v1/featured-image-exclusions',
+				method: 'POST',
+				data: {
+					excluded_image_slugs: textarea.value || '',
+				},
+			} );
+
+			if ( saved && 'string' === typeof saved.excluded_image_slugs ) {
+				textarea.value = saved.excluded_image_slugs;
+			}
+
+			showNotice( 'success', i18n.exclusionsSaved, 'exclusions' );
+			return true;
+		} catch ( err ) {
+			showNotice( 'error', err.message || i18n.exclusionsFailed, 'exclusions' );
+			return false;
+		} finally {
+			if ( saveButton ) {
+				saveButton.disabled = false;
+			}
+		}
+	}
+
 	function renderAuditResults( result ) {
 		const summary = q( '#sim-fiaa-audit-summary' );
 		const table = q( '#sim-fiaa-audit-table' );
@@ -676,9 +724,15 @@
 		const cancelButton = q( '#sim-fiaa-cancel-button' );
 		const auditScanButton = q( '#sim-fiaa-audit-scan-button' );
 		const auditClearButton = q( '#sim-fiaa-audit-clear-button' );
+		const exclusionsSaveButton = q( '#sim-fiaa-exclusions-save-button' );
+		const exclusionsField = q( '#sim-fiaa-excluded-slugs' );
 
 		if ( auditClearButton ) {
 			auditClearButton.dataset.defaultLabel = auditClearButton.textContent.trim();
+		}
+
+		if ( exclusionsField && 'string' === typeof config.excludedImageSlugs ) {
+			exclusionsField.value = config.excludedImageSlugs;
 		}
 
 		if ( runButton ) {
@@ -695,6 +749,9 @@
 		}
 		if ( auditClearButton ) {
 			auditClearButton.addEventListener( 'click', startAuditClear );
+		}
+		if ( exclusionsSaveButton ) {
+			exclusionsSaveButton.addEventListener( 'click', saveExclusions );
 		}
 
 		const overwrite = q( 'input[name="smart_image_matcher_fiaa_overwrite"]' );

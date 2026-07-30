@@ -45,6 +45,13 @@ class FeaturedImageService {
 	private SlugMapBuilder $slugMap;
 
 	/**
+	 * Request-local cache of normalized excluded image slugs.
+	 *
+	 * @var string[]|null
+	 */
+	private ?array $excludedImageSlugsCache = null;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param SlugMapBuilder $slugMap Attachment slug map builder.
@@ -89,6 +96,10 @@ class FeaturedImageService {
 
 		$attachment = get_post( $attachmentId );
 		if ( ! $attachment instanceof \WP_Post || empty( $attachment->post_name ) ) {
+			return;
+		}
+
+		if ( $this->isExcludedImageSlug( (string) $attachment->post_name ) ) {
 			return;
 		}
 
@@ -306,9 +317,29 @@ class FeaturedImageService {
 	 * @return bool
 	 */
 	public function isAutoAssignSafePair( string $postSlug, string $imageSlug ): bool {
+		if ( $this->isExcludedImageSlug( $imageSlug ) ) {
+			return false;
+		}
+
 		$score = $this->scoreSlugMatch( $postSlug, $imageSlug );
 
 		return $this->canAutoAssign( $score ) && (int) $score['score'] >= self::MIN_SMART_SCORE;
+	}
+
+	/**
+	 * Whether an image filename/slug is excluded from FIAA auto-assign.
+	 *
+	 * @since 3.0.9
+	 * @param string $imageSlug Attachment slug or filename.
+	 * @return bool
+	 */
+	public function isExcludedImageSlug( string $imageSlug ): bool {
+		$normalized = $this->normalizeSlug( $imageSlug );
+		if ( '' === $normalized ) {
+			return false;
+		}
+
+		return in_array( $normalized, $this->getExcludedImageSlugs(), true );
 	}
 
 	/**
@@ -436,6 +467,10 @@ class FeaturedImageService {
 		$suggestions    = array();
 
 		foreach ( $slugMap as $imageSlug => $attachmentId ) {
+			if ( $this->isExcludedImageSlug( (string) $imageSlug ) ) {
+				continue;
+			}
+
 			$score = $this->scoreSlugMatch( $postSlug, (string) $imageSlug );
 			$entry = array(
 				'attachment_id' => (int) $attachmentId,
@@ -547,6 +582,37 @@ class FeaturedImageService {
 		}
 
 		return __( 'Similar filename held for review; only exact and prefix matches are auto-assigned.', 'smart-image-matcher' );
+	}
+
+	/**
+	 * Normalized excluded image slugs from settings.
+	 *
+	 * @since 3.0.9
+	 * @return string[]
+	 */
+	private function getExcludedImageSlugs(): array {
+		if ( null !== $this->excludedImageSlugsCache ) {
+			return $this->excludedImageSlugsCache;
+		}
+
+		$raw   = (string) Settings::get( 'fiaa_excluded_image_slugs' );
+		$parts = preg_split( '/\R+/', $raw );
+		if ( ! is_array( $parts ) ) {
+			$this->excludedImageSlugsCache = array();
+			return $this->excludedImageSlugsCache;
+		}
+
+		$slugs = array();
+		foreach ( $parts as $part ) {
+			$slug = $this->normalizeSlug( (string) $part );
+			if ( '' === $slug ) {
+				continue;
+			}
+			$slugs[ $slug ] = $slug;
+		}
+
+		$this->excludedImageSlugsCache = array_values( $slugs );
+		return $this->excludedImageSlugsCache;
 	}
 
 	/**
