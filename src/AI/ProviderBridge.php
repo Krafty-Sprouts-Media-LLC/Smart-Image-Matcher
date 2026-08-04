@@ -25,6 +25,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 use SmartImageMatcher\Logging\Logger;
+use SmartImageMatcher\Settings\Settings;
 
 /**
  * Class ProviderBridge
@@ -38,7 +39,7 @@ class ProviderBridge {
 	// -------------------------------------------------------------------------
 
 	/**
-	 * Whether the WP 7.0 AI Client is present and has a configured provider.
+	 * Whether the WP 7.0 AI Client is present and has a configured text provider.
 	 *
 	 * @since 3.0.0
 	 * @return bool
@@ -55,12 +56,47 @@ class ProviderBridge {
 			return false;
 		}
 
-		// withText('') + is_supported() returns false when no provider is
-		// configured, allowing clean "AI unavailable" UI without an API call.
 		try {
-			return (bool) $probe->withText( '' )->is_supported();
+			if ( is_callable( array( $probe, 'is_supported_for_text_generation' ) ) ) {
+				return (bool) $probe->with_text( 'x' )->is_supported_for_text_generation();
+			}
+
+			return (bool) $probe->with_text( 'x' )->is_supported();
 		} catch ( \Throwable $e ) {
 			Logger::warn( 'ProviderBridge::isAvailable() threw', array( 'error' => $e->getMessage() ) );
+			return false;
+		}
+	}
+
+	/**
+	 * Whether curated image models are reachable via the AI Client / Connectors.
+	 *
+	 * @since 3.1.2
+	 * @return bool
+	 */
+	public static function isImageGenerationAvailable(): bool {
+		if ( ! function_exists( 'wp_ai_client_prompt' ) ) {
+			return false;
+		}
+
+		$wp_ai_client_prompt = 'wp_ai_client_prompt';
+		$probe               = $wp_ai_client_prompt();
+
+		if ( is_wp_error( $probe ) ) {
+			return false;
+		}
+
+		try {
+			$prefs   = ImageModelCatalog::preferenceList( (string) Settings::get( 'ai_image_model' ) );
+			$builder = $probe->with_text( 'x' )->using_model_preference( ...$prefs );
+
+			if ( is_callable( array( $builder, 'is_supported_for_image_generation' ) ) ) {
+				return (bool) $builder->is_supported_for_image_generation();
+			}
+
+			return (bool) $builder->is_supported();
+		} catch ( \Throwable $e ) {
+			Logger::warn( 'ProviderBridge::isImageGenerationAvailable() threw', array( 'error' => $e->getMessage() ) );
 			return false;
 		}
 	}
@@ -99,10 +135,10 @@ class ProviderBridge {
 			}
 
 			$result = $builder
-				->withSystemMessage( $systemPrompt )
-				->withText( $userPrompt )
-				->usingTemperature( $temperature )
-				->generateText();
+				->using_system_instruction( $systemPrompt )
+				->with_text( $userPrompt )
+				->using_temperature( $temperature )
+				->generate_text();
 
 			if ( is_wp_error( $result ) ) {
 				Logger::warn( 'ProviderBridge::generateText() error', array( 'error' => $result->get_error_message() ) );
@@ -128,15 +164,17 @@ class ProviderBridge {
 	/**
 	 * Generate an image via the configured AI provider.
 	 *
+	 * Uses SIM's preferred image model, then the other curated fal model IDs.
+	 *
 	 * @since 3.0.0
 	 * @param string $prompt      Image description prompt.
 	 * @return mixed|\WP_Error    Generation result object or error.
 	 */
 	public static function generateImage( string $prompt ) {
-		if ( ! self::isAvailable() ) {
+		if ( ! self::isImageGenerationAvailable() ) {
 			return new \WP_Error(
-				'smart_image_matcher_ai_unavailable',
-				__( 'No AI provider configured.', 'smart-image-matcher' )
+				'smart_image_matcher_ai_image_unavailable',
+				__( 'No image-capable AI provider configured for the preferred models. Connect fal.ai under Settings → Connectors.', 'smart-image-matcher' )
 			);
 		}
 
@@ -148,9 +186,12 @@ class ProviderBridge {
 				return $builder;
 			}
 
+			$prefs = ImageModelCatalog::preferenceList( (string) Settings::get( 'ai_image_model' ) );
+
 			$result = $builder
-				->withText( $prompt )
-				->generateImage();
+				->with_text( $prompt )
+				->using_model_preference( ...$prefs )
+				->generate_image();
 
 			if ( is_wp_error( $result ) ) {
 				Logger::warn( 'ProviderBridge::generateImage() error', array( 'error' => $result->get_error_message() ) );
@@ -199,12 +240,11 @@ class ProviderBridge {
 				return $builder;
 			}
 
-			// withImage() is the WP 7.0 vision API surface.
 			$result = $builder
-				->withImage( $imageUrl )
-				->withText( $prompt )
-				->usingTemperature( 0 )
-				->generateText();
+				->with_file( $imageUrl )
+				->with_text( $prompt )
+				->using_temperature( 0 )
+				->generate_text();
 
 			if ( is_wp_error( $result ) ) {
 				return $result;

@@ -79,6 +79,11 @@ class Settings {
 		'ai_alt_text_on_upload'      => false,
 		'ai_vision_match_enabled'    => false,
 		'ai_featured_image_enabled'  => false,
+		'ai_image_generation_enabled' => false,
+		'ai_image_model'             => \SmartImageMatcher\AI\ImageModelCatalog::DEFAULT_MODEL_ID,
+		'ai_image_subject_gate'      => true,
+		'ai_image_verify_vision'     => false,
+		'ai_image_alt_mode'          => 'keyword',
 	);
 
 	// -------------------------------------------------------------------------
@@ -356,6 +361,10 @@ class Settings {
 		$this->addField( 'smart_image_matcher_ai', 'ai_alt_text_on_upload', __( 'Auto-generate alt text on upload', 'smart-image-matcher' ), 'renderAiAltTextToggle' );
 		$this->addField( 'smart_image_matcher_ai', 'ai_vision_match_enabled', __( 'Vision-based matching', 'smart-image-matcher' ), 'renderAiVisionToggle' );
 		$this->addField( 'smart_image_matcher_ai', 'ai_featured_image_enabled', __( 'Generate featured images (FIAA fallback)', 'smart-image-matcher' ), 'renderAiFeaturedImageToggle' );
+		$this->addField( 'smart_image_matcher_ai', 'ai_image_generation_enabled', __( 'On-demand image generation', 'smart-image-matcher' ), 'renderAiImageGenToggle' );
+		$this->addField( 'smart_image_matcher_ai', 'ai_image_model', __( 'Preferred image model', 'smart-image-matcher' ), 'renderAiImageModelSelect' );
+		$this->addField( 'smart_image_matcher_ai', 'ai_image_subject_gate', __( 'Subject gate', 'smart-image-matcher' ), 'renderAiSubjectGateToggle' );
+		$this->addField( 'smart_image_matcher_ai', 'ai_image_alt_mode', __( 'Generated image alt text', 'smart-image-matcher' ), 'renderAiAltModeSelect' );
 	}
 
 	/**
@@ -889,6 +898,80 @@ class Settings {
 	public function renderAiFeaturedImageToggle( array $args ): void {
 		$this->renderCheckbox( array( 'key' => 'ai_featured_image_enabled' ) );
 		echo '<p class="description">' . esc_html__( 'When the Featured Image Auto-Assigner finds no slug match, generate a relevant image using AI. Only runs during the scheduled FIAA cron.', 'smart-image-matcher' ) . '</p>';
+	}
+
+	/**
+	 * Render on-demand image generation toggle.
+	 *
+	 * @since 3.1.1
+	 * @param array<string,string> $args Field args.
+	 * @return void
+	 */
+	public function renderAiImageGenToggle( array $args ): void {
+		$this->renderCheckbox( array( 'key' => 'ai_image_generation_enabled' ) );
+		echo '<p class="description">' . esc_html__( 'When no suitable match is found for a heading, offer Generate in the modal. Uses image-generation credits via Settings → Connectors.', 'smart-image-matcher' ) . '</p>';
+	}
+
+	/**
+	 * Render preferred image model select.
+	 *
+	 * @since 3.1.2
+	 * @param array<string,string> $args Field args.
+	 * @return void
+	 */
+	public function renderAiImageModelSelect( array $args ): void {
+		$key   = $args['key'];
+		$value = (string) self::get( $key );
+		if ( ! \SmartImageMatcher\AI\ImageModelCatalog::isAllowed( $value ) ) {
+			$value = \SmartImageMatcher\AI\ImageModelCatalog::DEFAULT_MODEL_ID;
+		}
+		$name = self::OPTION . '[' . $key . ']';
+		echo '<select name="' . esc_attr( $name ) . '" id="' . esc_attr( 'smart_image_matcher_' . $key ) . '">';
+		foreach ( \SmartImageMatcher\AI\ImageModelCatalog::choices() as $id => $label ) {
+			printf(
+				'<option value="%s"%s>%s</option>',
+				esc_attr( $id ),
+				selected( $value, $id, false ),
+				esc_html( $label )
+			);
+		}
+		echo '</select>';
+		echo '<p class="description">' . esc_html__(
+			'Used for on-demand Generate and AI featured-image fallback. Requires fal.ai connected under Settings → Connectors. Visual briefs still need a separate text provider.',
+			'smart-image-matcher'
+		) . '</p>';
+	}
+
+	/**
+	 * Render subject gate toggle.
+	 *
+	 * @since 3.1.1
+	 * @param array<string,string> $args Field args.
+	 * @return void
+	 */
+	public function renderAiSubjectGateToggle( array $args ): void {
+		$this->renderCheckbox( array( 'key' => 'ai_image_subject_gate' ) );
+		echo '<p class="description">' . esc_html__( 'Skip generation for product names, branded items, and named people that AI cannot render well.', 'smart-image-matcher' ) . '</p>';
+	}
+
+	/**
+	 * Render alt text mode select.
+	 *
+	 * @since 3.1.1
+	 * @param array<string,string> $args Field args.
+	 * @return void
+	 */
+	public function renderAiAltModeSelect( array $args ): void {
+		$key   = $args['key'];
+		$value = (string) self::get( $key );
+		$name  = self::OPTION . '[' . $key . ']';
+		?>
+		<select name="<?php echo esc_attr( $name ); ?>" id="<?php echo esc_attr( 'smart_image_matcher_' . $key ); ?>">
+			<option value="keyword" <?php selected( $value, 'keyword' ); ?>><?php esc_html_e( 'Focus keyword / heading (SEO)', 'smart-image-matcher' ); ?></option>
+			<option value="descriptive" <?php selected( $value, 'descriptive' ); ?>><?php esc_html_e( 'Descriptive (accessibility)', 'smart-image-matcher' ); ?></option>
+		</select>
+		<p class="description"><?php esc_html_e( 'Keyword mode copies the focus keyword into alt text. Descriptive mode asks a text model for a short scene description.', 'smart-image-matcher' ); ?></p>
+		<?php
 	}
 
 	// -------------------------------------------------------------------------

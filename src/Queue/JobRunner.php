@@ -719,4 +719,105 @@ class JobRunner {
 			array( '%s' )
 		);
 	}
+
+	/**
+	 * Run an on-demand AI image generation job.
+	 *
+	 * @since 3.1.1
+	 * @param array<string, mixed> $payload Job payload from Queue::enqueueAiImageGen().
+	 * @return void
+	 */
+	public static function runAiImageGenJob( $payload ): void {
+		if ( ! is_array( $payload ) ) {
+			Logger::error( 'JobRunner: AI image gen payload invalid' );
+			return;
+		}
+
+		$post_id       = absint( $payload['post_id'] ?? 0 );
+		$heading_hash  = sanitize_text_field( (string) ( $payload['heading_hash'] ?? '' ) );
+		$heading_text  = sanitize_text_field( (string) ( $payload['heading_text'] ?? '' ) );
+		$section_text  = sanitize_textarea_field( (string) ( $payload['section_text'] ?? '' ) );
+		$focus_keyword = sanitize_text_field( (string) ( $payload['focus_keyword'] ?? '' ) );
+		$style         = sanitize_key( (string) ( $payload['style'] ?? 'photo' ) );
+		$force         = ! empty( $payload['force'] );
+
+		if ( $post_id <= 0 || '' === $heading_hash ) {
+			Logger::error( 'JobRunner: AI image gen missing post_id or heading_hash' );
+			return;
+		}
+
+		Logger::info(
+			'JobRunner: AI image gen started',
+			array(
+				'post_id'      => $post_id,
+				'heading_hash' => $heading_hash,
+			)
+		);
+
+		\SmartImageMatcher\Premium\AiImageGenerator::setStatus(
+			$post_id,
+			$heading_hash,
+			array(
+				'status' => 'processing',
+			)
+		);
+
+		$generator = new \SmartImageMatcher\Premium\AiImageGenerator();
+		$result    = $generator->generateForHeading(
+			$heading_hash,
+			$heading_text,
+			$section_text,
+			$post_id,
+			$focus_keyword,
+			$style,
+			$force
+		);
+
+		if ( is_wp_error( $result ) ) {
+			\SmartImageMatcher\Premium\AiImageGenerator::setStatus(
+				$post_id,
+				$heading_hash,
+				array(
+					'status' => 'failed',
+					'error'  => $result->get_error_message(),
+				)
+			);
+			Logger::warn(
+				'JobRunner: AI image gen failed',
+				array(
+					'post_id' => $post_id,
+					'error'   => $result->get_error_message(),
+				)
+			);
+			return;
+		}
+
+		$attachment_id  = (int) $result;
+		$attachment_url = (string) wp_get_attachment_url( $attachment_id );
+		$prompt         = (string) get_post_meta( $attachment_id, '_sim_generated_prompt', true );
+
+		\SmartImageMatcher\Premium\AiImageGenerator::setStatus(
+			$post_id,
+			$heading_hash,
+			array(
+				'status'         => 'done',
+				'attachment_id'  => $attachment_id,
+				'attachment_url' => $attachment_url,
+				'prompt_used'    => $prompt,
+				'image_html'     => $attachment_url
+					? '<img src="' . esc_url( $attachment_url ) . '" alt="" />'
+					: '',
+				'title'          => get_the_title( $attachment_id ),
+				'filename'       => basename( (string) get_attached_file( $attachment_id ) ),
+			)
+		);
+
+		Logger::info(
+			'JobRunner: AI image gen done',
+			array(
+				'post_id'       => $post_id,
+				'attachment_id' => $attachment_id,
+			)
+		);
+	}
 }

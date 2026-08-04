@@ -4,7 +4,7 @@ Tags: images, media library, alt text, featured image, automation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 3.1.0
+Stable tag: 3.1.2
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -83,16 +83,27 @@ Disable with `define( 'SMART_IMAGE_MATCHER_DISABLE_GITHUB_UPDATES', true );` if 
 
 This plugin optionally connects to AI providers configured in **Settings → Connectors** (requires WordPress 7.0+). When AI features are used, the following data is sent to the configured provider:
 
-* Post heading text
+* Post heading text and short section excerpts (for matching and on-demand image generation)
+* Focus keyword / SEO keyphrase when available
 * Image metadata (filename, title, alt text)
+* Visual brief prompts and optional subject-gate checks for image generation
 
-No AI data is sent automatically — only when you explicitly trigger AI matching. The plugin uses the WordPress AI Client API (`wp_ai_client_prompt()`) to communicate with whichever provider you configure.
+No AI data is sent automatically — only when you explicitly trigger AI matching or image generation. The plugin uses the WordPress AI Client API (`wp_ai_client_prompt()`) to communicate with whichever provider you configure.
 
 == Privacy ==
 
 The plugin stores match results and job metadata in your own database only. Update checks may contact GitHub (see External services). No post content leaves your server unless you explicitly use AI features with a configured provider.
 
 == Changelog ==
+
+= 3.1.2 =
+* Added Preferred image model setting (Seedream 5.0 Pro default; also GPT Image 2, Nano Banana Pro, Nano Banana 2). SIM selects models; Connectors only store provider credentials.
+* Image generation availability is checked separately from text AI so Generate only appears when curated image models can run.
+
+= 3.1.1 =
+* Added on-demand AI image generation from the matcher modal (Generate / Regenerate) when no suitable library match exists. Uses a configured image provider via Settings → Connectors and queues work in Action Scheduler.
+* Added settings for on-demand generation, subject gate, and generated-image alt text mode (keyword or descriptive).
+* Featured-image AI fallback now shares the same generator pipeline.
 
 = 3.1.0 =
 * Fixed the media library index backfill silently failing to finish on large libraries (5,000+ images), leaving newer/later images unmatchable even though they were searchable in Media Library. The backfill now runs in resumable batches and self-heals if interrupted. Added `wp sim reindex` for manual reindexing.

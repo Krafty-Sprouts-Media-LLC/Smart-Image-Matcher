@@ -36,6 +36,7 @@ use SmartImageMatcher\REST\MatchController;
 use SmartImageMatcher\REST\InsertController;
 use SmartImageMatcher\REST\FeaturedImageController;
 use SmartImageMatcher\REST\BulkController;
+use SmartImageMatcher\REST\ImageGenController;
 use SmartImageMatcher\Domain\PostStatuses;
 use SmartImageMatcher\Settings\Settings;
 use SmartImageMatcher\Update\GitHubUpdater;
@@ -173,6 +174,7 @@ class Plugin {
 				Queue::HOOK_BULK_INSERT,
 				Queue::HOOK_FIAA_RUN,
 				Queue::HOOK_FIAA_AUDIT_CLEAR,
+				Queue::HOOK_AI_IMAGE_GEN,
 				Premium\FiaaCron::HOOK,
 			);
 
@@ -211,6 +213,7 @@ class Plugin {
 			'ai_alt_text',
 			'ai_vision_match',
 			'ai_featured_image',
+			'ai_image_generation',
 			'bulk_processor',
 			'review_queue',
 			'analytics',
@@ -265,6 +268,11 @@ class Plugin {
 		$c->bind( 'rest.insert',         static fn() => new InsertController() );
 		$c->bind( 'rest.featured_image', static fn() => new FeaturedImageController() );
 		$c->bind( 'rest.bulk',           static fn() => new BulkController() );
+		$c->bind( 'rest.image_gen',      static fn() => new ImageGenController() );
+		$c->bind( 'ai.prompt_builder',   static fn() => new AI\PromptBuilder() );
+		$c->bind( 'ai.image_generator',  static fn( Container $c ) => new Premium\AiImageGenerator(
+			$c->get( 'ai.prompt_builder' )
+		) );
 	}
 
 	/**
@@ -341,6 +349,7 @@ class Plugin {
 		$this->container->get( 'rest.match' )->registerRoutes();
 		$this->container->get( 'rest.insert' )->registerRoutes();
 		$this->container->get( 'rest.featured_image' )->registerRoutes();
+		$this->container->get( 'rest.image_gen' )->registerRoutes();
 
 		if ( Premium::has( 'rest_premium_endpoints' ) ) {
 			$this->container->get( 'rest.bulk' )->registerRoutes();
@@ -429,6 +438,10 @@ class Plugin {
 					),
 					'postId'  => get_the_ID() ?: 0,
 					'debug'   => (bool) Settings::get( 'debug_mode' ),
+					'features' => array(
+						'aiImageGeneration' => (bool) Settings::get( 'ai_image_generation_enabled' )
+							&& \SmartImageMatcher\AI\ProviderBridge::isImageGenerationAvailable(),
+					),
 				)
 			);
 		}

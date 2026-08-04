@@ -7,6 +7,23 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.1.2] - 04/08/2026
+
+### Added - Preferred image model in SIM settings
+
+- Added **Preferred image model** (Seedream 5.0 Pro default, plus GPT Image 2, Nano Banana Pro, Nano Banana 2). Connectors still hold API keys only; SIM chooses the model via `using_model_preference()` against that closed list — no open-ended “first suitable” pick.
+- Generate / image readiness now probes image-capable models separately from text providers (PromptBuilder still needs a text connector).
+
+## [3.1.1] - 04/08/2026
+
+### Added - On-demand AI image generation in the modal
+
+- When keyword matches are missing or weak (confidence under 40%), the modal can queue an AI image for that heading via Settings → Connectors (image-capable provider required).
+- Generation runs in Action Scheduler: visual brief + optional subject gate inside the job, then sideload to the media library with `_sim_generated*` meta, alt mode (`keyword` / `descriptive`), and an “AI Generated” badge with Regenerate.
+- New REST routes: `POST …/posts/{id}/generate-image` and `GET …/generate-image/status` (section text re-extracted server-side by heading hash).
+- Settings: On-demand image generation, Subject gate, Generated image alt text.
+- Featured-image AI fallback (`AiFeaturedImage`) now uses the shared `AiImageGenerator`.
+
 ## [3.1.0] - 30/07/2026
 
 ### Fixed - Media library index backfill on large libraries

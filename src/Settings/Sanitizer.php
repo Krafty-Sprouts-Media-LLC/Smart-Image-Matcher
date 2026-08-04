@@ -91,6 +91,18 @@ class Sanitizer {
 			'ai_alt_text_on_upload'   => ! empty( $raw['ai_alt_text_on_upload'] ),
 			'ai_vision_match_enabled' => ! empty( $raw['ai_vision_match_enabled'] ),
 			'ai_featured_image_enabled' => ! empty( $raw['ai_featured_image_enabled'] ),
+			'ai_image_generation_enabled' => ! empty( $raw['ai_image_generation_enabled'] ),
+			'ai_image_model'             => ( static function () use ( $raw ) {
+				$id = sanitize_text_field( (string) ( $raw['ai_image_model'] ?? '' ) );
+				return \SmartImageMatcher\AI\ImageModelCatalog::isAllowed( $id )
+					? $id
+					: \SmartImageMatcher\AI\ImageModelCatalog::DEFAULT_MODEL_ID;
+			} )(),
+			'ai_image_subject_gate'      => ! empty( $raw['ai_image_subject_gate'] ),
+			'ai_image_verify_vision'     => ! empty( $raw['ai_image_verify_vision'] ),
+			'ai_image_alt_mode'          => in_array( sanitize_key( (string) ( $raw['ai_image_alt_mode'] ?? 'keyword' ) ), array( 'keyword', 'descriptive' ), true )
+				? sanitize_key( (string) $raw['ai_image_alt_mode'] )
+				: 'keyword',
 		);
 	}
 

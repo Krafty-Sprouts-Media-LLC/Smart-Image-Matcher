@@ -1,6 +1,6 @@
 # Smart Image Matcher
 
-**Version:** 3.1.0 | **License:** GPL-2.0-or-later | **PHP:** 7.4+ | **WordPress:** 6.0+
+**Version:** 3.1.2 | **License:** GPL-2.0-or-later | **PHP:** 7.4+ | **WordPress:** 6.0+
 
 Scans posts and pages for headings and inserts relevant media-library images next to each one.
 

@@ -237,6 +237,48 @@
 	gap: 8px;
 	color: #856404;
 	font-size: 13px;
+	padding: 10px 12px;
+	background: #fff8e5;
+	border-radius: 4px;
+}
+
+.sim-generate-wrap {
+	margin-top: 12px;
+}
+
+.sim-generate-hint {
+	margin: 6px 0 0;
+	font-size: 12px;
+	color: #646970;
+}
+
+.sim-ai-badge {
+	display: inline-block;
+	margin-left: 8px;
+	padding: 2px 8px;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	color: #1d2327;
+	background: #e2e8f0;
+	border-radius: 3px;
+	vertical-align: middle;
+}
+
+.sim-match-generated {
+	border-left: 3px solid #2271b1;
+}
+
+.sim-generate-status {
+	margin-top: 10px;
+	font-size: 13px;
+	color: #2271b1;
+}
+
+.sim-generate-error {
+	margin-top: 10px;
+	font-size: 13px;
+	color: #d63638;
 }
 
 /* ---- Progress state (during insert) ---- */

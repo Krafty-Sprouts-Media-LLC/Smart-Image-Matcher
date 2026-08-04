@@ -63,6 +63,11 @@ class Queue {
 	 */
 	const HOOK_FIAA_AUDIT_CLEAR = 'smart_image_matcher_queue_fiaa_audit_clear';
 
+	/**
+	 * Action hook: on-demand AI image generation.
+	 */
+	const HOOK_AI_IMAGE_GEN = 'smart_image_matcher_queue_ai_image_gen';
+
 	// -------------------------------------------------------------------------
 	// Registration
 	// -------------------------------------------------------------------------
@@ -82,6 +87,7 @@ class Queue {
 		add_action( self::HOOK_BULK_INSERT,    array( JobRunner::class, 'runBulkInsertJob' ), 10, 2 );
 		add_action( self::HOOK_FIAA_RUN,       array( JobRunner::class, 'runFiaaRunJob' ), 10, 1 );
 		add_action( self::HOOK_FIAA_AUDIT_CLEAR, array( JobRunner::class, 'runFiaaAuditClearJob' ), 10, 1 );
+		add_action( self::HOOK_AI_IMAGE_GEN, array( JobRunner::class, 'runAiImageGenJob' ), 10, 1 );
 	}
 
 	// -------------------------------------------------------------------------
@@ -307,6 +313,46 @@ class Queue {
 		);
 
 		return $actionId ? (string) $actionId : null;
+	}
+
+	/**
+	 * Enqueue an on-demand AI image generation job.
+	 *
+	 * @since 3.1.1
+	 * @param array<string, mixed> $args {
+	 *     @type string $heading_hash  Heading hash.
+	 *     @type string $heading_text  Heading text.
+	 *     @type string $section_text  Section excerpt.
+	 *     @type int    $post_id       Post ID.
+	 *     @type string $focus_keyword Focus keyword.
+	 *     @type string $style         photo|illustration.
+	 *     @type bool   $force         Bypass cache/dedup.
+	 * }
+	 * @return string|null AS action ID or null.
+	 */
+	public function enqueueAiImageGen( array $args ): ?string {
+		if ( ! self::isAvailable() ) {
+			Logger::warn( 'Queue::enqueueAiImageGen: Action Scheduler not available.' );
+			return null;
+		}
+
+		$payload = array(
+			'heading_hash'  => sanitize_text_field( (string) ( $args['heading_hash'] ?? '' ) ),
+			'heading_text'  => sanitize_text_field( (string) ( $args['heading_text'] ?? '' ) ),
+			'section_text'  => sanitize_textarea_field( (string) ( $args['section_text'] ?? '' ) ),
+			'post_id'       => absint( $args['post_id'] ?? 0 ),
+			'focus_keyword' => sanitize_text_field( (string) ( $args['focus_keyword'] ?? '' ) ),
+			'style'         => sanitize_key( (string) ( $args['style'] ?? 'photo' ) ),
+			'force'         => ! empty( $args['force'] ),
+		);
+
+		$action_id = as_enqueue_async_action(
+			self::HOOK_AI_IMAGE_GEN,
+			array( 'payload' => $payload ),
+			self::GROUP
+		);
+
+		return $action_id ? (string) $action_id : null;
 	}
 
 	// -------------------------------------------------------------------------

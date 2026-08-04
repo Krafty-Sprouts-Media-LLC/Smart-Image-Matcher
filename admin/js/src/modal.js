@@ -5,6 +5,8 @@
  *   POST /wp-json/smart-image-matcher/v1/posts/<id>/match
  *   POST /wp-json/smart-image-matcher/v1/posts/<id>/insert
  *   POST /wp-json/smart-image-matcher/v1/posts/<id>/insert-batch
+ *   POST /wp-json/smart-image-matcher/v1/posts/<id>/generate-image
+ *   GET  /wp-json/smart-image-matcher/v1/generate-image/status
  *
  * Uses stable heading_hash values — NEVER byte offsets.
  * Uses SimIcons SVG helpers — never emoji.
@@ -17,13 +19,16 @@
 	'use strict';
 
 	// Data injected by wp_localize_script().
-	const { ajaxUrl, nonces, postId, debug } = window.smartImageMatcherData || {};
+	const { ajaxUrl, nonces, postId, debug, features } = window.smartImageMatcherData || {};
 
 	// SVG icon helpers (loaded via svg-icons.js before this file).
 	const Icons = window.SimIcons || {};
 
 	// REST base URL.
 	const REST_BASE = '/wp-json/smart-image-matcher/v1';
+
+	/** Confidence below this shows Generate when AI gen is enabled. */
+	const GENERATE_SCORE_THRESHOLD = 40;
 
 	// -------------------------------------------------------------------------
 	// DOM helpers
@@ -55,6 +60,8 @@
 
 	let currentMatches = [];   // Array of { heading, matches[] }
 	let carouselIndices = {};  // headingHash → current carousel index
+	let focusKeyword = '';
+	let aiImageGeneration = !!( features && features.aiImageGeneration );
 
 	// -------------------------------------------------------------------------
 	// Open / close
@@ -97,6 +104,39 @@
 		return resp.json();
 	}
 
+	async function requestGet( url ) {
+		const resp = await fetch( url, {
+			credentials: 'same-origin',
+			headers: { 'X-WP-Nonce': nonces.wpRest },
+		} );
+		if ( ! resp.ok ) {
+			const err = await resp.json().catch( () => ( {} ) );
+			throw new Error( err.message || `HTTP ${ resp.status }` );
+		}
+		return resp.json();
+	}
+
+	function applyMatchMeta( data ) {
+		if ( typeof data.focus_keyword === 'string' ) {
+			focusKeyword = data.focus_keyword;
+		}
+		if ( data.features && typeof data.features.ai_image_generation === 'boolean' ) {
+			aiImageGeneration = data.features.ai_image_generation;
+		}
+	}
+
+	function canGenerateForMatches( matches ) {
+		if ( ! aiImageGeneration ) {
+			return false;
+		}
+		if ( ! matches || matches.length === 0 ) {
+			return true;
+		}
+		return matches.every( function( m ) {
+			return ( m.confidence_score || 0 ) < GENERATE_SCORE_THRESHOLD;
+		} );
+	}
+
 	async function findMatches() {
 		if ( ! postId ) {
 			showError( 'No post ID available.' );
@@ -118,6 +158,7 @@
 				return;
 			}
 
+			applyMatchMeta( data );
 			currentMatches = data.matches || [];
 			renderResults();
 		} catch ( err ) {
@@ -146,6 +187,7 @@
 
 				if ( data.done ) {
 					clearInterval( timer );
+					applyMatchMeta( data );
 					currentMatches = data.matches || [];
 					updateProgress( 100 );
 					renderResults();
@@ -294,15 +336,30 @@
 		const reasonHtml = m.ai_reasoning
 			? '<div class="sim-ai-reasoning">' + escapeHtml( m.ai_reasoning ) + '</div>'
 			: '';
+		const isGenerated = m.match_method === 'ai_generated' || m.ai_generated;
+		const aiBadge = isGenerated
+			? '<span class="sim-ai-badge">AI Generated</span>'
+			: '';
+		const generateBtn = ( canGenerateForMatches( matches ) && ! isGenerated )
+			? '<button type="button" class="button sim-generate-button"' +
+				' data-hash="' + escapeHtml( hash ) + '"' +
+				' data-heading="' + escapeHtml( heading.text ) + '">Generate</button>'
+			: '';
+		const regenerateBtn = isGenerated
+			? '<button type="button" class="button sim-regenerate-button"' +
+				' data-hash="' + escapeHtml( hash ) + '"' +
+				' data-heading="' + escapeHtml( heading.text ) + '">Regenerate</button>'
+			: '';
 
 		return (
-			'<div class="sim-match-item"' +
+			'<div class="sim-match-item' + ( isGenerated ? ' sim-match-generated' : '' ) + '"' +
 			' data-hash="' + escapeHtml( hash ) + '"' +
 			' data-image-id="' + m.image_id + '"' +
 			' data-all-matches=\'' + escapeAttrJson( matches ) + '\'>' +
 			'<div class="sim-match-heading">' +
 			'<span class="sim-heading-icon">' + checkIcon + '</span>' +
 			'<span>' + escapeHtml( heading.tag.toUpperCase() ) + ': ' + escapeHtml( heading.text ) + '</span>' +
+			aiBadge +
 			'</div>' +
 			carouselHtml +
 			'<div class="sim-image-preview-container">' +
@@ -319,6 +376,8 @@
 			'<button type="button" class="button sim-insert-single-button"' +
 			' data-hash="' + escapeHtml( hash ) + '">Insert Now</button>' +
 			'<a href="' + escapeHtml( m.image_url ) + '" target="_blank" rel="noopener" class="button">View &#8599;</a>' +
+			generateBtn +
+			regenerateBtn +
 			'</div>' +
 			'</div>' +
 			'</div>' +
@@ -329,13 +388,23 @@
 	function renderNoMatch( heading ) {
 		const crossIcon   = Icons.cross   ? Icons.cross()   : '';
 		const warnIcon    = Icons.warning ? Icons.warning() : '';
+		const hash        = heading.heading_hash || '';
+		const generateBtn = canGenerateForMatches( [] )
+			? '<div class="sim-generate-wrap">' +
+				'<button type="button" class="button button-primary sim-generate-button"' +
+				' data-hash="' + escapeHtml( hash ) + '"' +
+				' data-heading="' + escapeHtml( heading.text ) + '">Generate image</button>' +
+				'<p class="sim-generate-hint">Create an AI image for this heading via your configured connector.</p>' +
+				'</div>'
+			: '';
 		return (
-			'<div class="sim-match-item no-match">' +
+			'<div class="sim-match-item no-match" data-hash="' + escapeHtml( hash ) + '">' +
 			'<div class="sim-match-heading">' +
 			'<span class="sim-heading-icon">' + crossIcon + '</span>' +
 			'<span>' + escapeHtml( heading.tag.toUpperCase() ) + ': ' + escapeHtml( heading.text ) + '</span>' +
 			'</div>' +
 			'<div class="sim-no-match-warning">' + warnIcon + ' No matching image found</div>' +
+			generateBtn +
 			'</div>'
 		);
 	}
@@ -482,6 +551,152 @@
 	}
 
 	// -------------------------------------------------------------------------
+	// On-demand AI image generation
+	// -------------------------------------------------------------------------
+
+	function generatedMatchFromPayload( data ) {
+		return {
+			image_id: data.attachment_id,
+			image_url: data.attachment_url || '',
+			confidence_score: 75,
+			title: data.title || '',
+			filename: data.filename || '',
+			ai_reasoning: data.prompt_used || '',
+			match_method: 'ai_generated',
+			ai_generated: true,
+		};
+	}
+
+	function applyGeneratedMatch( hash, match ) {
+		const group = currentMatches.find( g => g.heading && g.heading.heading_hash === hash );
+		if ( ! group ) {
+			return;
+		}
+		group.matches = [ match ].concat( ( group.matches || [] ).filter( m => m.image_id !== match.image_id ) );
+		carouselIndices[ hash ] = 0;
+		renderResults();
+	}
+
+	function setGenerateBusy( hash, busy, label ) {
+		const el = getModal();
+		if ( ! el ) {
+			return;
+		}
+		el.querySelectorAll( '.sim-generate-button[data-hash="' + hash + '"], .sim-regenerate-button[data-hash="' + hash + '"]' )
+			.forEach( function( btn ) {
+				btn.disabled = busy;
+				if ( busy && label ) {
+					btn.dataset.prevLabel = btn.textContent;
+					btn.textContent = label;
+				} else if ( ! busy && btn.dataset.prevLabel ) {
+					btn.textContent = btn.dataset.prevLabel;
+					delete btn.dataset.prevLabel;
+				}
+			} );
+
+		const item = q( '.sim-match-item[data-hash="' + hash + '"]', el );
+		if ( ! item ) {
+			return;
+		}
+		let status = q( '.sim-generate-status', item );
+		if ( busy ) {
+			if ( ! status ) {
+				status = document.createElement( 'div' );
+				status.className = 'sim-generate-status';
+				item.appendChild( status );
+			}
+			status.textContent = label || 'Generating…';
+		} else if ( status ) {
+			status.remove();
+		}
+	}
+
+	async function pollGenerateStatus( pollUrl, hash ) {
+		let attempts = 0;
+		const maxAttempts = 20; // 20 × 3 s = 60 s
+
+		return new Promise( function( resolve, reject ) {
+			const timer = setInterval( async function() {
+				attempts++;
+				if ( attempts > maxAttempts ) {
+					clearInterval( timer );
+					reject( new Error( 'Image generation timed out. Try again.' ) );
+					return;
+				}
+
+				try {
+					const data = await requestGet( pollUrl );
+					if ( data.status === 'done' ) {
+						clearInterval( timer );
+						resolve( data );
+						return;
+					}
+					if ( data.status === 'failed' ) {
+						clearInterval( timer );
+						reject( new Error( data.error || 'Image generation failed.' ) );
+						return;
+					}
+					setGenerateBusy( hash, true, 'Generating image…' );
+				} catch ( err ) {
+					// Tolerate transient network errors during polling.
+				}
+			}, 3000 );
+		} );
+	}
+
+	async function handleGenerate( e ) {
+		const btn = e.currentTarget;
+		const hash = btn.dataset.hash;
+		const headingText = btn.dataset.heading || '';
+		const force = btn.classList.contains( 'sim-regenerate-button' );
+
+		if ( ! hash || ! postId ) {
+			return;
+		}
+
+		setGenerateBusy( hash, true, force ? 'Regenerating…' : 'Queuing…' );
+
+		try {
+			const data = await request( `${ REST_BASE }/posts/${ postId }/generate-image`, {
+				post_id: postId,
+				heading_hash: hash,
+				heading_text: headingText,
+				focus_keyword: focusKeyword || '',
+				style: 'photo',
+				force: !!force,
+			} );
+
+			if ( data.status === 'exists' || data.status === 'done' ) {
+				applyGeneratedMatch( hash, generatedMatchFromPayload( data ) );
+				return;
+			}
+
+			if ( data.status === 'queued' && data.poll_url ) {
+				setGenerateBusy( hash, true, 'Generating image…' );
+				const result = await pollGenerateStatus( data.poll_url, hash );
+				applyGeneratedMatch( hash, generatedMatchFromPayload( result ) );
+				return;
+			}
+
+			throw new Error( 'Unexpected generate response.' );
+		} catch ( err ) {
+			setGenerateBusy( hash, false );
+			const item = q( '.sim-match-item[data-hash="' + hash + '"]', getModal() );
+			if ( item ) {
+				let errEl = q( '.sim-generate-error', item );
+				if ( ! errEl ) {
+					errEl = document.createElement( 'div' );
+					errEl.className = 'sim-generate-error';
+					item.appendChild( errEl );
+				}
+				errEl.textContent = err.message || 'Generation failed.';
+			} else {
+				showError( err.message );
+			}
+		}
+	}
+
+	// -------------------------------------------------------------------------
 	// Event binding
 	// -------------------------------------------------------------------------
 
@@ -525,6 +740,16 @@
 		el.addEventListener( 'click', e => {
 			if ( e.target.classList.contains( 'sim-insert-single-button' ) ) {
 				handleInsertSingle( { currentTarget: e.target } );
+			}
+		} );
+
+		// Generate / regenerate.
+		el.addEventListener( 'click', e => {
+			if (
+				e.target.classList.contains( 'sim-generate-button' ) ||
+				e.target.classList.contains( 'sim-regenerate-button' )
+			) {
+				handleGenerate( { currentTarget: e.target } );
 			}
 		} );
 

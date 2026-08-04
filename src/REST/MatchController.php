@@ -109,7 +109,17 @@ class MatchController extends Controller {
 
 		if ( false !== $cached && is_array( $cached ) ) {
 			Logger::info( 'MatchController: cache hit', array( 'post_id' => $postId ) );
-			return rest_ensure_response( array( 'matches' => $cached, 'from_cache' => true ) );
+			return rest_ensure_response(
+				array(
+					'matches'       => $cached,
+					'from_cache'    => true,
+					'focus_keyword' => \SmartImageMatcher\AI\PromptBuilder::getFocusKeyword( $postId ),
+					'features'      => array(
+						'ai_image_generation' => (bool) Settings::get( 'ai_image_generation_enabled' )
+							&& \SmartImageMatcher\AI\ProviderBridge::isImageGenerationAvailable(),
+					),
+				)
+			);
 		}
 
 		// Extract headings.
@@ -159,9 +169,14 @@ class MatchController extends Controller {
 		set_transient( $cacheKey, $groups, $cacheTtl );
 
 		return rest_ensure_response( array(
-			'matches'       => $groups,
+			'matches'        => $groups,
 			'headings_found' => count( $headings ),
-			'from_cache'    => false,
+			'from_cache'     => false,
+			'focus_keyword'  => \SmartImageMatcher\AI\PromptBuilder::getFocusKeyword( $postId ),
+			'features'       => array(
+				'ai_image_generation' => (bool) Settings::get( 'ai_image_generation_enabled' )
+					&& \SmartImageMatcher\AI\ProviderBridge::isImageGenerationAvailable(),
+			),
 		) );
 	}
 
