@@ -66,6 +66,14 @@ class PromptBuilder {
 	private const PHOTO_SUFFIX = ' Photorealistic photograph, natural lighting, sharp focus on the subject, shallow depth of field when appropriate, no text, no watermark, no logo, no UI.';
 
 	/**
+	 * Extra cue for featured images (API aspect ratio is the hard lock).
+	 *
+	 * @since 3.2.15
+	 * @var string
+	 */
+	private const FEATURED_LANDSCAPE_SUFFIX = ' Horizontal landscape 16:9 composition, wide editorial frame, not portrait, not square.';
+
+	/**
 	 * Illustration quality suffix appended to the fal prompt.
 	 *
 	 * @since 3.2.12
@@ -140,17 +148,21 @@ class PromptBuilder {
 	 * Append style quality / negative cues for the image model.
 	 *
 	 * @since 3.2.12
-	 * @param string $brief Clean one-sentence visual brief.
-	 * @param string $style photo|illustration.
+	 * @param string $brief   Clean one-sentence visual brief.
+	 * @param string $style   photo|illustration.
+	 * @param string $purpose featured|heading.
 	 * @return string Prompt to send to the image provider.
 	 */
-	public function composeImageModelPrompt( string $brief, string $style = 'photo' ): string {
+	public function composeImageModelPrompt( string $brief, string $style = 'photo', string $purpose = 'heading' ): string {
 		$brief = trim( $brief );
 		if ( '' === $brief ) {
 			return '';
 		}
 
 		$suffix = ( 'illustration' === $style ) ? self::ILLUSTRATION_SUFFIX : self::PHOTO_SUFFIX;
+		if ( 'featured' === $purpose ) {
+			$suffix .= self::FEATURED_LANDSCAPE_SUFFIX;
+		}
 		return $brief . $suffix;
 	}
 

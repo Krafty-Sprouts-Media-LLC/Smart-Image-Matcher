@@ -176,12 +176,14 @@ class ProviderBridge {
 	 * Generate an image via the configured AI provider.
 	 *
 	 * Uses SIM's preferred image model, then the other curated fal model IDs.
+	 * Featured images force 16:9; under-heading images leave the model default.
 	 *
 	 * @since 3.0.0
-	 * @param string $prompt      Image description prompt.
-	 * @return mixed|\WP_Error    Generation result object or error.
+	 * @param string $prompt  Image description prompt.
+	 * @param string $purpose featured|heading.
+	 * @return mixed|\WP_Error Generation result object or error.
 	 */
-	public static function generateImage( string $prompt ) {
+	public static function generateImage( string $prompt, string $purpose = 'heading' ) {
 		if ( ! self::isImageGenerationAvailable() ) {
 			return new \WP_Error(
 				'smart_image_matcher_ai_image_unavailable',
@@ -201,11 +203,17 @@ class ProviderBridge {
 
 			// Pin fal provider so we never fall through to another connector's first model.
 			// Prefer generate_image_result so callers can read model metadata + File URL/base64.
-			$result = $builder
+			$builder = $builder
 				->using_provider( 'fal-ai' )
 				->with_text( $prompt )
-				->using_model_preference( ...$prefs )
-				->generate_image_result();
+				->using_model_preference( ...$prefs );
+
+			// Featured: lock landscape 16:9 (Seedream → image_size landscape_16_9; Nano Banana → aspect_ratio).
+			if ( 'featured' === $purpose && is_object( $builder ) && method_exists( $builder, 'as_output_media_aspect_ratio' ) ) {
+				$builder = $builder->as_output_media_aspect_ratio( '16:9' );
+			}
+
+			$result = $builder->generate_image_result();
 
 			if ( is_wp_error( $result ) ) {
 				Logger::warn( 'ProviderBridge::generateImage() error', array( 'error' => $result->get_error_message() ) );
@@ -221,6 +229,7 @@ class ProviderBridge {
 							? $model_meta->getId()
 							: '',
 						'preferred' => $prefs[0] ?? '',
+						'purpose'   => $purpose,
 					)
 				);
 			}

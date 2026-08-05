@@ -153,8 +153,8 @@ class AiImageGenerator {
 			return $brief;
 		}
 
-		$image_prompt = $this->prompt_builder->composeImageModelPrompt( $brief, $style );
-		$result       = ProviderBridge::generateImage( $image_prompt );
+		$image_prompt = $this->prompt_builder->composeImageModelPrompt( $brief, $style, $purpose );
+		$result       = ProviderBridge::generateImage( $image_prompt, $purpose );
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}

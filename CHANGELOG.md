@@ -7,6 +7,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.2.15] - 05/08/2026
+
+### Improved
+
+- Featured AI images force **16:9 landscape** via WP AI Client (`as_output_media_aspect_ratio`), mapped by the fal provider to Seedream `image_size` / Nano Banana `aspect_ratio`. Under-heading Generate keeps the model default. Soft landscape cue also appended to featured prompts.
+
 ## [3.2.14] - 05/08/2026
 
 ### Fixed
