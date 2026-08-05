@@ -7,6 +7,15 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.2.8] - 05/08/2026
+
+### Fixed
+
+- Posts-list featured AI modal showed the literal string `%d featured image job(s) queued…` because JS `sprintf` only handled `%1$d`-style placeholders; plain `%d` is now substituted.
+- Modal never treated successful jobs as finished (JobRunner status is `done`, poll only looked for `completed`), so progress stalled or falsely showed “Completed 2 of 2” while images were not applied in the UI.
+- Progress total no longer shrinks mid-run; per-post status updates to Queued / Generating / Featured image set / Failed; final notice tells you to refresh the list.
+- Duplicate “Photo (realistic)” label in the bulk modal toolbar (broken screen-reader-only label).
+
 ## [3.2.7] - 05/08/2026
 
 ### Fixed

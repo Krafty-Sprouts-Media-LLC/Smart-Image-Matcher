@@ -606,6 +606,10 @@ class Plugin {
 							'generateFailed'     => __( 'Could not queue jobs.', 'smart-image-matcher' ),
 							/* translators: %d: number of jobs queued */
 							'queuedNotice'       => __( '%d featured image job(s) queued. You can dismiss this dialog; generation continues in the background.', 'smart-image-matcher' ),
+							/* translators: 1: succeeded count, 2: failed count */
+							'allDone'            => __( 'Finished: %1$d succeeded, %2$d failed. Refresh the posts list to see new featured images.', 'smart-image-matcher' ),
+							/* translators: %d: succeeded count */
+							'allDoneOk'          => __( 'Finished: %d featured image(s) set. Refresh the posts list to see them.', 'smart-image-matcher' ),
 							'dismiss'            => __( 'Dismiss', 'smart-image-matcher' ),
 							'generate'           => __( 'Generate', 'smart-image-matcher' ),
 							'scan'               => __( 'Scan', 'smart-image-matcher' ),
@@ -618,6 +622,10 @@ class Plugin {
 							'notFound'           => __( 'Post not found', 'smart-image-matcher' ),
 							'noPermission'       => __( 'No permission', 'smart-image-matcher' ),
 							'skippedOther'       => __( 'Skipped', 'smart-image-matcher' ),
+							'queued'             => __( 'Queued…', 'smart-image-matcher' ),
+							'processing'         => __( 'Generating…', 'smart-image-matcher' ),
+							'generated'          => __( 'Featured image set', 'smart-image-matcher' ),
+							'failed'             => __( 'Failed', 'smart-image-matcher' ),
 							'edit'               => __( 'Edit', 'smart-image-matcher' ),
 							'minute'             => __( 'minute', 'smart-image-matcher' ),
 							'minutes'            => __( 'minutes', 'smart-image-matcher' ),
@@ -625,6 +633,7 @@ class Plugin {
 							'seconds'            => __( 'seconds', 'smart-image-matcher' ),
 							/* translators: 1: completed count, 2: total count */
 							'progress'           => __( 'Completed %1$d of %2$d', 'smart-image-matcher' ),
+							'styleLabel'         => __( 'Style', 'smart-image-matcher' ),
 							'stylePhoto'         => __( 'Photo (realistic)', 'smart-image-matcher' ),
 							'styleIllustration'  => __( 'Illustration', 'smart-image-matcher' ),
 							'noApi'              => __( 'Could not load controls (wp.apiFetch missing).', 'smart-image-matcher' ),

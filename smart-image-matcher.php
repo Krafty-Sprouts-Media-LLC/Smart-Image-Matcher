@@ -3,7 +3,7 @@
  * Plugin Name: Smart Image Matcher
  * Plugin URI:  https://kraftysprouts.com/portfolio/smart-image-matcher/
  * Description: Automatically scans the media library and intelligently attaches relevant images to headings within posts and pages. Offers keyword-based and AI-powered matching.
- * Version:     3.2.7
+ * Version:     3.2.8
  * Author:      Krafty Sprouts Media, LLC
  * Author URI:  https://kraftysprouts.com
  * License:     GPL-2.0-or-later
@@ -23,7 +23,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 // Plugin constants.
 // phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- smart_image_matcher_ is the established plugin prefix for this project.
-define( 'SMART_IMAGE_MATCHER_VERSION',       '3.2.7' );
+define( 'SMART_IMAGE_MATCHER_VERSION',       '3.2.8' );
 define( 'SMART_IMAGE_MATCHER_PLUGIN_FILE',   __FILE__ );
 define( 'SMART_IMAGE_MATCHER_PLUGIN_DIR',    plugin_dir_path( __FILE__ ) );
 define( 'SMART_IMAGE_MATCHER_PLUGIN_URL',    plugin_dir_url( __FILE__ ) );

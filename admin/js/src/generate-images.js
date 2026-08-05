@@ -55,6 +55,9 @@
 
 	let scanResult = null;
 	let activeJobs = [];
+	let pollTotal = 0;
+	let succeededCount = 0;
+	let failedCount = 0;
 	let pollTimer = null;
 	let isWorking = false;
 
@@ -73,10 +76,16 @@
 	}
 
 	function sprintf( template, ...args ) {
-		return String( template ).replace( /%(\d+)\$[ds]/g, ( match, index ) => {
-			const value = args[ parseInt( index, 10 ) - 1 ];
-			return null === value || undefined === value ? '' : String( value );
-		} );
+		let i = 0;
+		return String( template )
+			.replace( /%(\d+)\$[ds]/g, ( match, index ) => {
+				const value = args[ parseInt( index, 10 ) - 1 ];
+				return null === value || undefined === value ? '' : String( value );
+			} )
+			.replace( /%[ds]/g, () => {
+				const value = args[ i++ ];
+				return null === value || undefined === value ? '' : String( value );
+			} );
 	}
 
 	function formatDuration( seconds ) {
@@ -261,8 +270,6 @@
 			return;
 		}
 
-		let done = 0;
-		let failed = 0;
 		const stillActive = [];
 
 		for ( const job of activeJobs ) {
@@ -273,11 +280,10 @@
 				} );
 
 				const state = status.status || 'processing';
-				if ( 'completed' === state || 'exists' === state ) {
-					++done;
+				if ( 'done' === state || 'completed' === state || 'exists' === state ) {
+					++succeededCount;
 				} else if ( 'failed' === state || 'error' === state ) {
-					++done;
-					++failed;
+					++failedCount;
 				} else {
 					stillActive.push( job );
 				}
@@ -287,15 +293,15 @@
 		}
 
 		activeJobs = stillActive;
-		const total = done + activeJobs.length;
-		renderProgress( done, total, sprintf( i18n.progress, done, total ) );
+		const finished = succeededCount + failedCount;
+		renderProgress( finished, pollTotal, sprintf( i18n.progress, finished, pollTotal ) );
 
 		if ( ! activeJobs.length ) {
 			setWorking( false );
-			const msg = failed > 0
-				? `${ i18n.generateComplete } (${ failed } ${ i18n.failed.toLowerCase() })`
+			const msg = failedCount > 0
+				? `${ i18n.generateComplete } (${ failedCount } ${ i18n.failed.toLowerCase() })`
 				: i18n.generateComplete;
-			showNotice( failed > 0 ? 'warning' : 'success', msg );
+			showNotice( failedCount > 0 ? 'warning' : 'success', msg );
 			return;
 		}
 
@@ -382,6 +388,9 @@
 			activeJobs = Array.isArray( result.jobs ) ? result.jobs : [];
 			const queued = parseInt( result.queued || 0, 10 );
 			const skipped = parseInt( result.skipped || 0, 10 );
+			pollTotal = activeJobs.length;
+			succeededCount = 0;
+			failedCount = 0;
 
 			if ( queued <= 0 ) {
 				showNotice( 'warning', i18n.noResults );
@@ -389,7 +398,7 @@
 				return;
 			}
 
-			renderProgress( 0, queued, sprintf( i18n.progress, 0, queued ) );
+			renderProgress( 0, pollTotal, sprintf( i18n.progress, 0, pollTotal ) );
 			showNotice(
 				'info',
 				`${ i18n.queued }: ${ queued }${ skipped > 0 ? ` (${ skipped } skipped)` : '' }`

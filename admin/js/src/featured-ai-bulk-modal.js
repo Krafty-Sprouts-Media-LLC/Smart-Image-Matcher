@@ -27,6 +27,8 @@
 		generating: 'Queueing jobs…',
 		generateFailed: 'Could not queue jobs.',
 		queuedNotice: '%d featured image job(s) queued. You can dismiss this dialog; generation continues in the background.',
+		allDone: 'Finished: %1$d succeeded, %2$d failed. Refresh the posts list to see new featured images.',
+		allDoneOk: 'Finished: %d featured image(s) set. Refresh the posts list to see them.',
 		dismiss: 'Dismiss',
 		generate: 'Generate',
 		scan: 'Scan',
@@ -39,13 +41,18 @@
 		notFound: 'Not found',
 		noPermission: 'No permission',
 		skippedOther: 'Skipped',
+		queued: 'Queued…',
+		processing: 'Generating…',
+		generated: 'Featured image set',
+		failed: 'Failed',
 		edit: 'Edit',
 		minute: 'minute',
 		minutes: 'minutes',
 		second: 'second',
 		seconds: 'seconds',
 		progress: 'Completed %1$d of %2$d',
-		stylePhoto: 'Photo',
+		styleLabel: 'Style',
+		stylePhoto: 'Photo (realistic)',
 		styleIllustration: 'Illustration',
 		noApi: 'Could not load controls (wp.apiFetch missing).',
 		notReady: 'Enable on-demand image generation and connect an image provider first.',
@@ -58,6 +65,9 @@
 	let modal = null;
 	let scanResult = null;
 	let activeJobs = [];
+	let pollTotal = 0;
+	let succeededCount = 0;
+	let failedCount = 0;
 	let pollTimer = null;
 	let dismissed = false;
 
@@ -68,10 +78,16 @@
 	}
 
 	function sprintf( template, ...args ) {
-		return String( template ).replace( /%(\d+)\$[ds]/g, ( match, index ) => {
-			const value = args[ parseInt( index, 10 ) - 1 ];
-			return null === value || undefined === value ? '' : String( value );
-		} );
+		let i = 0;
+		return String( template )
+			.replace( /%(\d+)\$[ds]/g, ( match, index ) => {
+				const value = args[ parseInt( index, 10 ) - 1 ];
+				return null === value || undefined === value ? '' : String( value );
+			} )
+			.replace( /%[ds]/g, () => {
+				const value = args[ i++ ];
+				return null === value || undefined === value ? '' : String( value );
+			} );
 	}
 
 	function formatDuration( seconds ) {
@@ -95,6 +111,14 @@
 		return map[ reason ] || i18n.skippedOther;
 	}
 
+	function isTerminalSuccess( state ) {
+		return 'done' === state || 'completed' === state || 'exists' === state;
+	}
+
+	function isTerminalFailure( state ) {
+		return 'failed' === state || 'error' === state;
+	}
+
 	function cleanUrl() {
 		try {
 			const url = new URL( window.location.href );
@@ -103,6 +127,16 @@
 			window.history.replaceState( {}, document.title, url.toString() );
 		} catch ( e ) {
 			// Ignore.
+		}
+	}
+
+	function setRowStatus( postId, label ) {
+		if ( ! modal ) {
+			return;
+		}
+		const cell = modal.querySelector( `[data-sim-post-status="${ postId }"]` );
+		if ( cell ) {
+			cell.textContent = label;
 		}
 	}
 
@@ -125,10 +159,8 @@
 					<button type="button" class="sim-featured-ai-modal__close" data-sim-dismiss="1" aria-label="${ escHtml( i18n.close ) }">&times;</button>
 				</div>
 				<div class="sim-featured-ai-modal__body">
-					<p class="description">${ escHtml( i18n.notReady && ! generationReady ? i18n.notReady : '' ) }</p>
 					<div class="sim-featured-ai-modal__toolbar">
-						<label>
-							<span class="screen-reader-text">${ escHtml( i18n.stylePhoto ) }</span>
+						<label for="sim-featured-ai-style">${ escHtml( i18n.styleLabel ) }
 							<select id="sim-featured-ai-style">
 								<option value="photo">${ escHtml( i18n.stylePhoto ) }</option>
 								<option value="illustration">${ escHtml( i18n.styleIllustration ) }</option>
@@ -210,8 +242,6 @@
 			modal.style.display = 'none';
 		}
 		document.body.classList.remove( 'sim-featured-ai-modal-open' );
-		// Keep pollTimer running so background jobs still update until done (optional).
-		// Stop UI-only; jobs continue via Action Scheduler regardless.
 	}
 
 	function renderResults( result ) {
@@ -232,7 +262,7 @@
 		const rows = [];
 		posts.forEach( post => {
 			const editUrl = editPostUrl.replace( '%d', String( post.id ) );
-			rows.push( `<tr><td>${ escHtml( post.title || '#' + post.id ) }</td><td>${ escHtml( i18n.needsFeatured ) }</td><td><a href="${ escHtml( editUrl ) }">${ escHtml( i18n.edit ) }</a></td></tr>` );
+			rows.push( `<tr data-sim-post-id="${ escHtml( String( post.id ) ) }"><td>${ escHtml( post.title || '#' + post.id ) }</td><td data-sim-post-status="${ escHtml( String( post.id ) ) }">${ escHtml( i18n.needsFeatured ) }</td><td><a href="${ escHtml( editUrl ) }">${ escHtml( i18n.edit ) }</a></td></tr>` );
 		} );
 		skipped.forEach( item => {
 			const editUrl = editPostUrl.replace( '%d', String( item.id ) );
@@ -286,12 +316,20 @@
 		}
 	}
 
+	function updateProgress() {
+		const finished = succeededCount + failedCount;
+		const progress = modal && modal.querySelector( '#sim-featured-ai-progress' );
+		if ( progress && ! dismissed ) {
+			progress.style.display = 'block';
+			progress.textContent = sprintf( i18n.progress, finished, pollTotal );
+		}
+	}
+
 	async function pollJobs() {
 		if ( ! activeJobs.length ) {
 			return;
 		}
 
-		let done = 0;
 		const still = [];
 
 		for ( const job of activeJobs ) {
@@ -301,9 +339,18 @@
 					method: 'GET',
 				} );
 				const state = status.status || 'processing';
-				if ( 'completed' === state || 'exists' === state || 'failed' === state || 'error' === state ) {
-					++done;
+
+				if ( isTerminalSuccess( state ) ) {
+					++succeededCount;
+					setRowStatus( job.post_id, i18n.generated );
+				} else if ( isTerminalFailure( state ) ) {
+					++failedCount;
+					const err = status.error ? `${ i18n.failed }: ${ status.error }` : i18n.failed;
+					setRowStatus( job.post_id, err );
 				} else {
+					if ( 'processing' === state ) {
+						setRowStatus( job.post_id, i18n.processing );
+					}
 					still.push( job );
 				}
 			} catch ( e ) {
@@ -312,16 +359,21 @@
 		}
 
 		activeJobs = still;
-		const total = done + activeJobs.length;
-		const progress = modal && modal.querySelector( '#sim-featured-ai-progress' );
-		if ( progress && ! dismissed ) {
-			progress.style.display = 'block';
-			progress.textContent = sprintf( i18n.progress, done, total );
+		updateProgress();
+
+		if ( ! activeJobs.length ) {
+			if ( dismissed ) {
+				return;
+			}
+			if ( failedCount > 0 ) {
+				showNotice( 'warning', sprintf( i18n.allDone, succeededCount, failedCount ) );
+			} else {
+				showNotice( 'success', sprintf( i18n.allDoneOk, succeededCount ) );
+			}
+			return;
 		}
 
-		if ( activeJobs.length ) {
-			pollTimer = window.setTimeout( pollJobs, 3000 );
-		}
+		pollTimer = window.setTimeout( pollJobs, 3000 );
 	}
 
 	async function runGenerate() {
@@ -358,7 +410,15 @@
 
 			const queued = parseInt( result.queued || 0, 10 );
 			activeJobs = Array.isArray( result.jobs ) ? result.jobs : [];
+			pollTotal = activeJobs.length;
+			succeededCount = 0;
+			failedCount = 0;
+
+			activeJobs.forEach( job => setRowStatus( job.post_id, i18n.queued ) );
+
 			showNotice( 'success', sprintf( i18n.queuedNotice, queued ) );
+			updateProgress();
+
 			if ( activeJobs.length ) {
 				pollJobs();
 			}
