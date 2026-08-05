@@ -126,10 +126,10 @@ unset( $sim_ai_post_types['attachment'] );
 			</div>
 
 			<div class="sim-form-actions">
-				<button type="button" id="sim-generate-scan-button" class="button button-secondary">
+				<button type="button" id="sim-generate-scan-button" class="button button-primary">
 					<?php esc_html_e( 'Scan', 'smart-image-matcher' ); ?>
 				</button>
-				<button type="button" id="sim-generate-all-button" class="button button-primary" disabled>
+				<button type="button" id="sim-generate-all-button" class="button" disabled aria-disabled="true">
 					<?php esc_html_e( 'Generate Featured Images', 'smart-image-matcher' ); ?>
 				</button>
 			</div>

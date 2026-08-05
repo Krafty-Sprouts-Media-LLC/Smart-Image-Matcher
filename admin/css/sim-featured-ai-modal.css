@@ -70,6 +70,19 @@
 	font-weight: 400;
 }
 
+/* Disabled primary still looks “hot” in core admin — keep Generate muted until ready. */
+.sim-featured-ai-modal .button:disabled,
+.sim-featured-ai-modal .button[disabled] {
+	background: #f6f7f7 !important;
+	border-color: #dcdcde !important;
+	color: #a7aaad !important;
+	box-shadow: none !important;
+	text-shadow: none !important;
+	cursor: not-allowed;
+	transform: none;
+	opacity: 1;
+}
+
 .sim-featured-ai-modal__footer {
 	padding: 12px 20px 16px;
 	border-top: 1px solid #dcdcde;

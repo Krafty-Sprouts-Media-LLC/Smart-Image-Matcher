@@ -72,6 +72,20 @@
 	border-color: #2271b1;
 }
 
+.sim-admin-page .button:disabled,
+.sim-admin-page .button[disabled],
+.sim-admin-page .button-primary:disabled,
+.sim-admin-page .button-primary[disabled] {
+	background: #f6f7f7 !important;
+	border-color: #dcdcde !important;
+	color: #a7aaad !important;
+	box-shadow: none !important;
+	text-shadow: none !important;
+	cursor: not-allowed;
+	transform: none;
+	opacity: 1;
+}
+
 .sim-admin-page .button-primary:hover,
 .sim-admin-page .button-primary:focus {
 	background: #135e96;

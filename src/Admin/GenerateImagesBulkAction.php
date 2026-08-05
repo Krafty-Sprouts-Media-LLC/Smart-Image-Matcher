@@ -43,6 +43,22 @@ class GenerateImagesBulkAction {
 			add_filter( "bulk_actions-edit-{$post_type}", array( $this, 'addBulkAction' ) );
 			add_filter( "handle_bulk_actions-edit-{$post_type}", array( $this, 'handleBulkAction' ), 10, 3 );
 		}
+
+		// Keep pagination / filter links from re-carrying the one-shot modal args.
+		add_filter( 'removable_query_args', array( $this, 'removableQueryArgs' ) );
+	}
+
+	/**
+	 * Strip one-shot modal query args from admin-generated URLs (pagination, etc.).
+	 *
+	 * @since 3.2.14
+	 * @param string[] $args Removable query arg names.
+	 * @return string[]
+	 */
+	public function removableQueryArgs( array $args ): array {
+		$args[] = 'sim_featured_ai';
+		$args[] = 'sim_featured_ids';
+		return $args;
 	}
 
 	/**

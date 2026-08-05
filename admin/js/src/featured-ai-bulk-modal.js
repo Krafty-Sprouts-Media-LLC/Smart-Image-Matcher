@@ -73,6 +73,23 @@
 	let failedCount = 0;
 	let pollTimer = null;
 	let dismissed = false;
+	const handledStorageKey = 'sim_featured_ai_handled_' + postIds.slice().sort( ( a, b ) => a - b ).join( ',' );
+
+	function wasBatchHandled() {
+		try {
+			return '1' === window.sessionStorage.getItem( handledStorageKey );
+		} catch ( e ) {
+			return false;
+		}
+	}
+
+	function markBatchHandled() {
+		try {
+			window.sessionStorage.setItem( handledStorageKey, '1' );
+		} catch ( e ) {
+			// Ignore quota / private mode.
+		}
+	}
 
 	function escHtml( value ) {
 		const div = document.createElement( 'div' );
@@ -112,6 +129,25 @@
 			no_permission: i18n.noPermission,
 		};
 		return map[ reason ] || i18n.skippedOther;
+	}
+
+	/**
+	 * Primary only when Generate is actually clickable; Scan leads until then.
+	 *
+	 * @param {HTMLButtonElement|null} genBtn
+	 * @param {boolean} enabled
+	 */
+	function setGenerateReady( genBtn, enabled ) {
+		if ( ! genBtn ) {
+			return;
+		}
+		genBtn.disabled = ! enabled;
+		genBtn.setAttribute( 'aria-disabled', enabled ? 'false' : 'true' );
+		genBtn.classList.toggle( 'button-primary', enabled );
+		const scanBtn = modal && modal.querySelector( '#sim-featured-ai-scan' );
+		if ( scanBtn && ! scanBtn.disabled ) {
+			scanBtn.classList.toggle( 'button-primary', ! enabled );
+		}
 	}
 
 	function isTerminalSuccess( state ) {
@@ -169,8 +205,8 @@
 								<option value="illustration">${ escHtml( i18n.styleIllustration ) }</option>
 							</select>
 						</label>
-						<button type="button" class="button" id="sim-featured-ai-scan">${ escHtml( i18n.scan ) }</button>
-						<button type="button" class="button button-primary" id="sim-featured-ai-generate" disabled>${ escHtml( i18n.generate ) }</button>
+						<button type="button" class="button button-primary" id="sim-featured-ai-scan">${ escHtml( i18n.scan ) }</button>
+						<button type="button" class="button" id="sim-featured-ai-generate" disabled aria-disabled="true">${ escHtml( i18n.generate ) }</button>
 					</div>
 					<p id="sim-featured-ai-estimate" class="description sim-featured-ai-modal__estimate" style="display:none"></p>
 					<div id="sim-featured-ai-notice" aria-live="polite"></div>
@@ -241,6 +277,8 @@
 
 	function closeModal() {
 		dismissed = true;
+		markBatchHandled();
+		cleanUrl();
 		if ( modal ) {
 			modal.style.display = 'none';
 		}
@@ -287,7 +325,7 @@
 		}
 
 		if ( genBtn ) {
-			genBtn.disabled = ! generationReady || total <= 0;
+			setGenerateReady( genBtn, generationReady && total > 0 );
 		}
 	}
 
@@ -302,6 +340,7 @@
 
 		showNotice( 'info', i18n.scanning );
 		scanResult = null;
+		setGenerateReady( modal.querySelector( '#sim-featured-ai-generate' ), false );
 
 		try {
 			const result = await apiFetch( {
@@ -411,6 +450,7 @@
 		} ) );
 
 		showNotice( 'info', i18n.generating );
+		setGenerateReady( modal.querySelector( '#sim-featured-ai-generate' ), false );
 
 		try {
 			const result = await apiFetch( {
@@ -429,17 +469,28 @@
 
 			showNotice( 'success', sprintf( i18n.queuedNotice, queued ) );
 			updateProgress();
+			markBatchHandled();
+			cleanUrl();
 
 			if ( activeJobs.length ) {
 				pollJobs();
 			}
 		} catch ( err ) {
 			showNotice( 'error', err.message || i18n.generateFailed );
+			setGenerateReady(
+				modal.querySelector( '#sim-featured-ai-generate' ),
+				generationReady && parseInt( scanResult.total_images || 0, 10 ) > 0
+			);
 		}
 	}
 
 	function boot() {
 		if ( ! autoOpen || ! postIds.length ) {
+			return;
+		}
+		// Pagination links can still carry one-shot args after replaceState; skip if already handled.
+		if ( wasBatchHandled() ) {
+			cleanUrl();
 			return;
 		}
 		if ( ! apiFetch ) {

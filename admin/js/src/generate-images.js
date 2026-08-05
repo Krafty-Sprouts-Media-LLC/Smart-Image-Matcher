@@ -141,6 +141,19 @@
 		};
 	}
 
+	function setGenerateReady( genBtn, enabled ) {
+		if ( ! genBtn ) {
+			return;
+		}
+		genBtn.disabled = ! enabled;
+		genBtn.setAttribute( 'aria-disabled', enabled ? 'false' : 'true' );
+		genBtn.classList.toggle( 'button-primary', enabled );
+		const scanBtn = q( '#sim-generate-scan-button' );
+		if ( scanBtn && ! scanBtn.disabled ) {
+			scanBtn.classList.toggle( 'button-primary', ! enabled );
+		}
+	}
+
 	function setWorking( working ) {
 		isWorking = working;
 		const scanBtn = q( '#sim-generate-scan-button' );
@@ -153,7 +166,8 @@
 			scanBtn.disabled = working;
 		}
 		if ( genBtn ) {
-			genBtn.disabled = working || ! scanResult || parseInt( scanResult.total_images || 0, 10 ) <= 0 || ! generationReady;
+			const canGenerate = ! working && !! scanResult && parseInt( scanResult.total_images || 0, 10 ) > 0 && generationReady;
+			setGenerateReady( genBtn, canGenerate );
 		}
 		if ( postType && ! prefillPostIds.length ) {
 			postType.disabled = working;

@@ -7,6 +7,13 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.2.14] - 05/08/2026
+
+### Fixed
+
+- Featured AI Generate button no longer looks primary/clickable while disabled; Scan is the primary action until a scan finds work, then Generate becomes primary.
+- Posts-list featured AI modal no longer reopens the same batch when paging the list (strip one-shot query args from pagination; remember dismissed/queued batches in sessionStorage).
+
 ## [3.2.13] - 05/08/2026
 
 ### Fixed
