@@ -7,6 +7,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.2.9] - 05/08/2026
+
+### Fixed
+
+- Featured/heading AI generation failed with `Bad Request (400) - temperature is deprecated for this model` during the visual-brief text step. `ProviderBridge::generateText()` and vision scoring no longer send `temperature` by default (optional override still available).
+
 ## [3.2.8] - 05/08/2026
 
 ### Fixed

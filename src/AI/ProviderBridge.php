@@ -111,16 +111,20 @@ class ProviderBridge {
 	/**
 	 * Generate text via the configured AI provider.
 	 *
+	 * Temperature is omitted by default — many current models (e.g. GPT-5 family)
+	 * reject `temperature` with HTTP 400. Pass a float only when the connector
+	 * model is known to accept it.
+	 *
 	 * @since 3.0.0
-	 * @param string $systemPrompt Instructions for the model.
-	 * @param string $userPrompt   The actual user-turn prompt.
-	 * @param float  $temperature  0.0 = deterministic; 1.0 = creative.
+	 * @param string     $systemPrompt Instructions for the model.
+	 * @param string     $userPrompt   The actual user-turn prompt.
+	 * @param float|null $temperature  Optional; null = do not send temperature.
 	 * @return string|\WP_Error
 	 */
 	public static function generateText(
 		string $systemPrompt,
 		string $userPrompt,
-		float  $temperature = 0.2
+		?float $temperature = null
 	) {
 		if ( ! self::isAvailable() ) {
 			return new \WP_Error(
@@ -137,11 +141,15 @@ class ProviderBridge {
 				return $builder;
 			}
 
-			$result = $builder
+			$builder = $builder
 				->using_system_instruction( $systemPrompt )
-				->with_text( $userPrompt )
-				->using_temperature( $temperature )
-				->generate_text();
+				->with_text( $userPrompt );
+
+			if ( null !== $temperature ) {
+				$builder = $builder->using_temperature( $temperature );
+			}
+
+			$result = $builder->generate_text();
 
 			if ( is_wp_error( $result ) ) {
 				Logger::warn( 'ProviderBridge::generateText() error', array( 'error' => $result->get_error_message() ) );
@@ -262,7 +270,6 @@ class ProviderBridge {
 			$result = $builder
 				->with_file( $imageUrl )
 				->with_text( $prompt )
-				->using_temperature( 0 )
 				->generate_text();
 
 			if ( is_wp_error( $result ) ) {

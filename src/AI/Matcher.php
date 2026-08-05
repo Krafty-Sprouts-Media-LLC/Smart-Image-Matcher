@@ -77,8 +77,7 @@ class Matcher {
 
 		$responseText = ProviderBridge::generateText(
 			$prompt->systemMessage(),
-			$prompt->build( $heading, $candidates, $threshold ),
-			0.2
+			$prompt->build( $heading, $candidates, $threshold )
 		);
 
 		if ( is_wp_error( $responseText ) ) {

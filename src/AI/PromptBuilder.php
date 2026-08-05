@@ -76,7 +76,7 @@ class PromptBuilder {
 			$content_excerpt
 		);
 
-		$result = ProviderBridge::generateText( self::SYSTEM_BRIEF, $user, 0.4 );
+		$result = ProviderBridge::generateText( self::SYSTEM_BRIEF, $user );
 
 		if ( is_wp_error( $result ) ) {
 			return $result;
@@ -113,8 +113,7 @@ class PromptBuilder {
 
 		$result = ProviderBridge::generateText(
 			self::SYSTEM_SUBJECT_GATE,
-			'focus_keyword="' . $heading_or_keyword . '"',
-			0.0
+			'focus_keyword="' . $heading_or_keyword . '"'
 		);
 
 		if ( is_wp_error( $result ) ) {
@@ -142,7 +141,7 @@ class PromptBuilder {
 			( '' !== $focus_keyword ) ? $focus_keyword : '(none)'
 		);
 
-		$result = ProviderBridge::generateText( self::SYSTEM_ALT, $user, 0.2 );
+		$result = ProviderBridge::generateText( self::SYSTEM_ALT, $user );
 
 		if ( is_wp_error( $result ) ) {
 			return $result;
