@@ -23,12 +23,15 @@
 		scanning: 'Scanning selected posts…',
 		scanFailed: 'Could not scan posts.',
 		noResults: 'None of the selected posts need a featured image.',
-		confirmGenerate: 'Generate %1$d featured image(s)? Estimated time: about %2$s.',
+		confirmGenerate: 'Generate %d featured image(s)? Time varies by model — often a few minutes each.',
 		generating: 'Queueing jobs…',
 		generateFailed: 'Could not queue jobs.',
 		queuedNotice: '%d featured image job(s) queued. You can dismiss this dialog; generation continues in the background.',
 		allDone: 'Finished: %1$d succeeded, %2$d failed. Refresh the posts list to see new featured images.',
 		allDoneOk: 'Finished: %d featured image(s) set. Refresh the posts list to see them.',
+		estimateHint: 'Usually a few minutes per image (varies by model and queue).',
+		imagesCount: '%d to generate',
+		estimateWithCount: '%1$d to generate. %2$s',
 		dismiss: 'Dismiss',
 		generate: 'Generate',
 		scan: 'Scan',
@@ -169,8 +172,8 @@
 						<button type="button" class="button" id="sim-featured-ai-scan">${ escHtml( i18n.scan ) }</button>
 						<button type="button" class="button button-primary" id="sim-featured-ai-generate" disabled>${ escHtml( i18n.generate ) }</button>
 					</div>
+					<p id="sim-featured-ai-estimate" class="description sim-featured-ai-modal__estimate" style="display:none"></p>
 					<div id="sim-featured-ai-notice" aria-live="polite"></div>
-					<div id="sim-featured-ai-estimate" class="sim-featured-ai-modal__estimate" style="display:none"></div>
 					<table class="widefat striped" id="sim-featured-ai-table" style="display:none">
 						<thead>
 							<tr>
@@ -255,18 +258,27 @@
 		const total = parseInt( result.total_images || 0, 10 );
 
 		if ( estimate ) {
-			estimate.style.display = 'block';
-			estimate.textContent = `${ total } · ${ formatDuration( result.estimate_seconds || 0 ) }`;
+			if ( total > 0 ) {
+				estimate.style.display = 'block';
+				estimate.textContent = sprintf(
+					i18n.estimateWithCount,
+					total,
+					result.estimate_hint || i18n.estimateHint
+				);
+			} else {
+				estimate.style.display = 'none';
+				estimate.textContent = '';
+			}
 		}
 
 		const rows = [];
 		posts.forEach( post => {
 			const editUrl = editPostUrl.replace( '%d', String( post.id ) );
-			rows.push( `<tr data-sim-post-id="${ escHtml( String( post.id ) ) }"><td>${ escHtml( post.title || '#' + post.id ) }</td><td data-sim-post-status="${ escHtml( String( post.id ) ) }">${ escHtml( i18n.needsFeatured ) }</td><td><a href="${ escHtml( editUrl ) }">${ escHtml( i18n.edit ) }</a></td></tr>` );
+			rows.push( `<tr data-sim-post-id="${ escHtml( String( post.id ) ) }"><td>${ escHtml( post.title || '#' + post.id ) }</td><td data-sim-post-status="${ escHtml( String( post.id ) ) }">${ escHtml( i18n.needsFeatured ) }</td><td><a href="${ escHtml( editUrl ) }" target="_blank" rel="noopener noreferrer">${ escHtml( i18n.edit ) }</a></td></tr>` );
 		} );
 		skipped.forEach( item => {
 			const editUrl = editPostUrl.replace( '%d', String( item.id ) );
-			rows.push( `<tr><td>${ escHtml( item.title || '#' + item.id ) }</td><td>${ escHtml( reasonLabel( item.reason ) ) }</td><td><a href="${ escHtml( editUrl ) }">${ escHtml( i18n.edit ) }</a></td></tr>` );
+			rows.push( `<tr><td>${ escHtml( item.title || '#' + item.id ) }</td><td>${ escHtml( reasonLabel( item.reason ) ) }</td><td><a href="${ escHtml( editUrl ) }" target="_blank" rel="noopener noreferrer">${ escHtml( i18n.edit ) }</a></td></tr>` );
 		} );
 
 		if ( table && tbody ) {
@@ -386,8 +398,7 @@
 			return;
 		}
 
-		const estimate = formatDuration( scanResult.estimate_seconds || 0 );
-		if ( ! window.confirm( sprintf( i18n.confirmGenerate, total, estimate ) ) ) {
+		if ( ! window.confirm( sprintf( i18n.confirmGenerate, total ) ) ) {
 			return;
 		}
 

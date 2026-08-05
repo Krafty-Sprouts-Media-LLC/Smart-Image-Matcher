@@ -24,7 +24,7 @@
 		noStatuses: 'Select at least one post status before scanning.',
 		noResults: 'No posts need a featured image for the current filters.',
 		scanComplete: 'Scan complete.',
-		confirmGenerate: 'Generate %1$d featured image(s)? Estimated time: about %2$s.',
+		confirmGenerate: 'Generate %d featured image(s)? Time varies by model — often a few minutes each.',
 		generating: 'Queueing generation jobs…',
 		generateFailed: 'Could not queue generation jobs.',
 		generateComplete: 'All jobs finished.',
@@ -47,6 +47,8 @@
 		notFound: 'Post not found',
 		noPermission: 'No permission',
 		skippedOther: 'Skipped',
+		estimateHint: 'Usually a few minutes per image (varies by model and queue).',
+		imagesCount: '%d image(s)',
 	}, config.i18n || {} );
 
 	if ( apiFetch && apiFetch.createNonceMiddleware && nonce ) {
@@ -187,7 +189,7 @@
 			totalEl.textContent = String( total );
 		}
 		if ( timeEl ) {
-			timeEl.textContent = formatDuration( result.estimate_seconds || 0 );
+			timeEl.textContent = result.estimate_hint || i18n.estimateHint;
 		}
 
 		const rows = [];
@@ -198,7 +200,7 @@
 				<tr>
 					<td>${ escHtml( post.title || `#${ post.id }` ) }</td>
 					<td>${ escHtml( i18n.needsFeatured ) }</td>
-					<td><a href="${ escHtml( editUrl ) }">${ escHtml( i18n.edit ) }</a></td>
+					<td><a href="${ escHtml( editUrl ) }" target="_blank" rel="noopener noreferrer">${ escHtml( i18n.edit ) }</a></td>
 				</tr>` );
 		} );
 
@@ -208,7 +210,7 @@
 				<tr>
 					<td>${ escHtml( item.title || `#${ item.id }` ) }</td>
 					<td>${ escHtml( reasonLabel( item.reason ) ) }</td>
-					<td><a href="${ escHtml( editUrl ) }">${ escHtml( i18n.edit ) }</a></td>
+					<td><a href="${ escHtml( editUrl ) }" target="_blank" rel="noopener noreferrer">${ escHtml( i18n.edit ) }</a></td>
 				</tr>` );
 		} );
 
@@ -361,8 +363,7 @@
 			return;
 		}
 
-		const estimate = formatDuration( scanResult.estimate_seconds || 0 );
-		const confirmed = window.confirm( sprintf( i18n.confirmGenerate, total, estimate ) );
+		const confirmed = window.confirm( sprintf( i18n.confirmGenerate, total ) );
 		if ( ! confirmed ) {
 			return;
 		}

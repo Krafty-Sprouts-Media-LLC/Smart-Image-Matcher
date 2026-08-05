@@ -130,18 +130,31 @@ class AiImageGenerator {
 			}
 		}
 
+		$purpose       = ( 'featured' === $heading_hash ) ? 'featured' : 'heading';
+		$taxonomy_hint = PromptBuilder::buildTaxonomyHint( $post_id );
+
+		if ( 'featured' === $purpose ) {
+			$post = get_post( $post_id );
+			if ( $post instanceof \WP_Post ) {
+				$section_text = PromptBuilder::buildPostContext( $post );
+			}
+		}
+
 		$brief = $this->prompt_builder->buildImagePrompt(
 			$heading_text,
 			$focus_keyword,
 			$section_text,
-			$style
+			$style,
+			$purpose,
+			$taxonomy_hint
 		);
 
 		if ( is_wp_error( $brief ) ) {
 			return $brief;
 		}
 
-		$result = ProviderBridge::generateImage( $brief );
+		$image_prompt = $this->prompt_builder->composeImageModelPrompt( $brief, $style );
+		$result       = ProviderBridge::generateImage( $image_prompt );
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}
@@ -168,7 +181,7 @@ class AiImageGenerator {
 		$this->writeAttachmentMeta(
 			$attachment_id,
 			array(
-				'prompt'       => $brief,
+				'prompt'       => $image_prompt,
 				'keyword'      => $focus_keyword,
 				'heading_hash' => $heading_hash,
 				'post_id'      => $post_id,
@@ -177,10 +190,13 @@ class AiImageGenerator {
 				'alt'          => $alt,
 				'input'        => wp_json_encode(
 					array(
-						'title'   => $heading_text,
-						'keyword' => $focus_keyword,
-						'excerpt' => $section_text,
-						'heading' => $heading_text,
+						'title'    => $heading_text,
+						'keyword'  => $focus_keyword,
+						'excerpt'  => $section_text,
+						'heading'  => $heading_text,
+						'purpose'  => $purpose,
+						'topics'   => $taxonomy_hint,
+						'brief'    => $brief,
 					)
 				),
 			)
@@ -258,8 +274,8 @@ class AiImageGenerator {
 			);
 		}
 
-		$focus = PromptBuilder::getFocusKeyword( $post_id );
-		$excerpt = wp_trim_words( wp_strip_all_tags( $post->post_excerpt ?: $post->post_content ), 80 );
+		$focus   = PromptBuilder::getFocusKeyword( $post_id );
+		$excerpt = PromptBuilder::buildPostContext( $post );
 		$style = (string) Settings::get( 'ai_image_style' );
 		if ( 'illustration' !== $style ) {
 			$style = 'photo';
@@ -437,6 +453,7 @@ class AiImageGenerator {
 				'post_title' => $title,
 			)
 		);
+		$this->assignAttachmentAuthor( $attachment_id, $post_id );
 
 		return $attachment_id;
 	}
@@ -471,8 +488,43 @@ class AiImageGenerator {
 				'post_content' => '',
 			)
 		);
+		$this->assignAttachmentAuthor( $attachment_id, $post_id );
 
 		return $attachment_id;
+	}
+
+	/**
+	 * Assign attachment author (background jobs often have no current user).
+	 *
+	 * Prefers the parent post author, then the current user when available.
+	 *
+	 * @since 3.2.13
+	 * @param int $attachment_id Attachment ID.
+	 * @param int $post_id       Parent post ID.
+	 * @return void
+	 */
+	private function assignAttachmentAuthor( int $attachment_id, int $post_id ): void {
+		if ( $attachment_id <= 0 ) {
+			return;
+		}
+
+		$author_id = 0;
+		if ( $post_id > 0 ) {
+			$author_id = (int) get_post_field( 'post_author', $post_id );
+		}
+		if ( $author_id <= 0 ) {
+			$author_id = (int) get_current_user_id();
+		}
+		if ( $author_id <= 0 ) {
+			return;
+		}
+
+		wp_update_post(
+			array(
+				'ID'          => $attachment_id,
+				'post_author' => $author_id,
+			)
+		);
 	}
 
 	/**

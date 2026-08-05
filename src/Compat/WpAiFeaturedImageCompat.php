@@ -120,6 +120,14 @@ class WpAiFeaturedImageCompat {
 			'post_parent'  => $post_id,
 		);
 
+		$author_id = (int) get_post_field( 'post_author', $post_id );
+		if ( $author_id <= 0 ) {
+			$author_id = (int) get_current_user_id();
+		}
+		if ( $author_id > 0 ) {
+			$update['post_author'] = $author_id;
+		}
+
 		// phpcs:ignore WordPress.FAKESECRET_s1t2u3v4w5x6y7z8a9b0 -- intentional attachment metadata fix after WP AI import.
 		wp_update_post( $update );
 

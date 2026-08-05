@@ -600,8 +600,8 @@ class Plugin {
 							'scanning'           => __( 'Scanning selected posts…', 'smart-image-matcher' ),
 							'scanFailed'         => __( 'Could not scan posts.', 'smart-image-matcher' ),
 							'noResults'          => __( 'None of the selected posts need a featured image.', 'smart-image-matcher' ),
-							/* translators: 1: image count, 2: estimated duration */
-							'confirmGenerate'    => __( 'Generate %1$d featured image(s)? Estimated time: about %2$s.', 'smart-image-matcher' ),
+							/* translators: %d: image count */
+							'confirmGenerate'    => __( 'Generate %d featured image(s)? Time varies by model — often a few minutes each.', 'smart-image-matcher' ),
 							'generating'         => __( 'Queueing jobs…', 'smart-image-matcher' ),
 							'generateFailed'     => __( 'Could not queue jobs.', 'smart-image-matcher' ),
 							/* translators: %d: number of jobs queued */
@@ -610,6 +610,11 @@ class Plugin {
 							'allDone'            => __( 'Finished: %1$d succeeded, %2$d failed. Refresh the posts list to see new featured images.', 'smart-image-matcher' ),
 							/* translators: %d: succeeded count */
 							'allDoneOk'          => __( 'Finished: %d featured image(s) set. Refresh the posts list to see them.', 'smart-image-matcher' ),
+							'estimateHint'       => __( 'Usually a few minutes per image (varies by model and queue).', 'smart-image-matcher' ),
+							/* translators: %d: image count */
+							'imagesCount'        => __( '%d to generate', 'smart-image-matcher' ),
+							/* translators: 1: image count, 2: time hint */
+							'estimateWithCount'  => __( '%1$d to generate. %2$s', 'smart-image-matcher' ),
 							'dismiss'            => __( 'Dismiss', 'smart-image-matcher' ),
 							'generate'           => __( 'Generate', 'smart-image-matcher' ),
 							'scan'               => __( 'Scan', 'smart-image-matcher' ),
@@ -658,8 +663,8 @@ class Plugin {
 			'noStatuses'         => __( 'Select at least one post status before scanning.', 'smart-image-matcher' ),
 			'noResults'          => __( 'No posts need a featured image for the current filters.', 'smart-image-matcher' ),
 			'scanComplete'       => __( 'Scan complete.', 'smart-image-matcher' ),
-			/* translators: 1: image count, 2: estimated duration */
-			'confirmGenerate'    => __( 'Generate %1$d featured image(s)? Estimated time: about %2$s.', 'smart-image-matcher' ),
+			/* translators: %d: image count */
+			'confirmGenerate'    => __( 'Generate %d featured image(s)? Time varies by model — often a few minutes each.', 'smart-image-matcher' ),
 			'generating'         => __( 'Queueing generation jobs…', 'smart-image-matcher' ),
 			'generateFailed'     => __( 'Could not queue generation jobs.', 'smart-image-matcher' ),
 			'generateComplete'   => __( 'All jobs finished.', 'smart-image-matcher' ),
@@ -682,6 +687,9 @@ class Plugin {
 			'notFound'           => __( 'Post not found', 'smart-image-matcher' ),
 			'noPermission'       => __( 'No permission', 'smart-image-matcher' ),
 			'skippedOther'       => __( 'Skipped', 'smart-image-matcher' ),
+			'estimateHint'       => __( 'Usually a few minutes per image (varies by model and queue).', 'smart-image-matcher' ),
+			/* translators: %d: image count */
+			'imagesCount'        => __( '%d to generate', 'smart-image-matcher' ),
 			'edit'               => __( 'Edit', 'smart-image-matcher' ),
 		);
 	}

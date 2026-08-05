@@ -401,7 +401,8 @@ class ImageGenController extends Controller {
 				'posts'            => $posts,
 				'skipped'          => $skipped,
 				'total_images'     => $total_images,
-				'estimate_seconds' => $total_images * 60,
+				'estimate_seconds' => 0,
+				'estimate_hint'    => __( 'Usually a few minutes per image (varies by model and queue).', 'smart-image-matcher' ),
 				'mode'             => 'featured',
 			)
 		);
@@ -576,7 +577,7 @@ class ImageGenController extends Controller {
 			$heading_hash  = 'featured';
 			$heading_text  = (string) $post->post_title;
 			$item_keyword  = '' !== $focus_keyword ? $focus_keyword : PromptBuilder::getFocusKeyword( $post_id );
-			$section_text  = wp_trim_words( wp_strip_all_tags( $post->post_excerpt ? $post->post_excerpt : $post->post_content ), 80 );
+			$section_text  = PromptBuilder::buildPostContext( $post );
 
 			if ( $generator->findGenerated( $post_id, $heading_hash, $item_keyword, $style ) ) {
 				++$skipped;
@@ -683,7 +684,7 @@ class ImageGenController extends Controller {
 
 		// Re-extract section text server-side — do not trust client body text.
 		if ( 'featured' === $heading_hash ) {
-			$section_text = wp_trim_words( wp_strip_all_tags( $post->post_excerpt ? $post->post_excerpt : $post->post_content ), 80 );
+			$section_text = PromptBuilder::buildPostContext( $post );
 		} else {
 			$section_text = $this->extractSectionText( $post->post_content, $heading_hash );
 		}
@@ -853,7 +854,7 @@ class ImageGenController extends Controller {
 		}
 
 		$after = substr( $plain, $pos + strlen( $needle ) );
-		return wp_trim_words( $after, 80 );
+		return wp_trim_words( $after, PromptBuilder::CONTEXT_WORD_LIMIT );
 	}
 
 	/**
@@ -901,7 +902,7 @@ class ImageGenController extends Controller {
 				if ( '' !== $para ) {
 					$chunks[] = $para;
 				}
-				if ( count( $chunks ) >= 2 ) {
+				if ( count( $chunks ) >= 4 ) {
 					break;
 				}
 			}
@@ -909,7 +910,7 @@ class ImageGenController extends Controller {
 
 		unset( $all );
 
-		return wp_trim_words( implode( ' ', $chunks ), 80 );
+		return wp_trim_words( implode( ' ', $chunks ), PromptBuilder::CONTEXT_WORD_LIMIT );
 	}
 
 	/**

@@ -773,11 +773,9 @@
 			return;
 		}
 
-		const estimateMin = Math.max( 1, Math.ceil( ( eligible.length * 60 ) / 60 ) );
 		const msg = 'Generate AI images for ' + eligible.length + ' heading' +
 			( eligible.length === 1 ? '' : 's' ) +
-			'? About ' + estimateMin + ' minute' + ( estimateMin === 1 ? '' : 's' ) +
-			' at ~60s each. This uses fal credits.';
+			'? Time varies by model — often a few minutes each. This uses image-generation credits.';
 		if ( ! window.confirm( msg ) ) {
 			return;
 		}

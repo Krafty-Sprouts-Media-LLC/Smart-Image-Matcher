@@ -4,7 +4,7 @@ Tags: images, media library, alt text, featured image, automation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 3.2.9
+Stable tag: 3.2.13
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -95,6 +95,18 @@ No AI data is sent automatically — only when you explicitly trigger AI matchin
 The plugin stores match results and job metadata in your own database only. Update checks may contact GitHub (see External services). No post content leaves your server unless you explicitly use AI features with a configured provider.
 
 == Changelog ==
+
+= 3.2.13 =
+* AI-generated attachments inherit the parent post’s author (fixes empty author on background jobs).
+
+= 3.2.12 =
+* Improved AI image prompts: richer post context, topic hints, stronger visual briefs, and photo/illustration quality suffixes.
+
+= 3.2.11 =
+* Featured AI estimate sits under the toolbar as a normal description; Edit links open in a new tab.
+
+= 3.2.10 =
+* Replaced fake “N minutes” generation estimates with honest “varies by model” wording.
 
 = 3.2.9 =
 * Fixed AI text calls failing on models that reject `temperature` (visual brief / subject gate / alt / matching).

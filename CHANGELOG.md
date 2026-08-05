@@ -7,6 +7,32 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.2.13] - 05/08/2026
+
+### Fixed
+
+- AI-generated (and WP AI featured) attachments now get `post_author` set to the parent post’s author when background jobs run with no logged-in user.
+
+## [3.2.12] - 05/08/2026
+
+### Improved
+
+- AI image prompts: richer ~160-word post/section context, category/tag topic hints, stronger visual-brief instructions (subject/setting/lighting/composition), featured vs heading framing, and photo/illustration quality suffixes (no text/watermark/logo) before fal generation.
+
+## [3.2.11] - 05/08/2026
+
+### Changed
+
+- Bulk featured AI estimate sits under the toolbar as a normal description (`N to generate. …`), not a bold mid-panel timer line.
+- Featured Images scan card labels the wait as “Typical wait” instead of “Estimated duration”.
+- Edit links in featured AI scan tables open in a new tab (`target="_blank"` + `rel="noopener noreferrer"`).
+
+## [3.2.10] - 05/08/2026
+
+### Changed
+
+- Generation time estimates no longer multiply images × 60 seconds. UI now says time varies by model (often a few minutes each).
+
 ## [3.2.9] - 05/08/2026
 
 ### Fixed

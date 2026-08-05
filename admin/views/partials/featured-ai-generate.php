@@ -143,7 +143,7 @@ unset( $sim_ai_post_types['attachment'] );
 				<strong id="sim-generate-total-images">0</strong>
 			</div>
 			<div class="sim-info-row">
-				<span><?php esc_html_e( 'Estimated duration', 'smart-image-matcher' ); ?></span>
+				<span><?php esc_html_e( 'Typical wait', 'smart-image-matcher' ); ?></span>
 				<strong id="sim-generate-estimate-time"><?php esc_html_e( '—', 'smart-image-matcher' ); ?></strong>
 			</div>
 		</div>

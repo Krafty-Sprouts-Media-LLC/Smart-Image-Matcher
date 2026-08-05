@@ -95,7 +95,7 @@ class AutoMatchOnPublish {
 		}
 
 		$focus   = PromptBuilder::getFocusKeyword( $post->ID );
-		$excerpt = wp_trim_words( wp_strip_all_tags( $post->post_excerpt ?: $post->post_content ), 80 );
+		$excerpt = PromptBuilder::buildPostContext( $post );
 
 		$job_id = ( new Queue() )->enqueueAiImageGen(
 			array(
