@@ -26,8 +26,10 @@ class ComposerStaticInitd1eee0a5073e3dab1344a5e361ab6e16
 
     public static $classMap = array (
         'Composer\\InstalledVersions' => __DIR__ . '/..' . '/composer/InstalledVersions.php',
+        'SmartImageMatcher\\AI\\ImageModelCatalog' => __DIR__ . '/../..' . '/src/AI/ImageModelCatalog.php',
         'SmartImageMatcher\\AI\\MatchPrompt' => __DIR__ . '/../..' . '/src/AI/MatchPrompt.php',
         'SmartImageMatcher\\AI\\Matcher' => __DIR__ . '/../..' . '/src/AI/Matcher.php',
+        'SmartImageMatcher\\AI\\PromptBuilder' => __DIR__ . '/../..' . '/src/AI/PromptBuilder.php',
         'SmartImageMatcher\\AI\\ProviderBridge' => __DIR__ . '/../..' . '/src/AI/ProviderBridge.php',
         'SmartImageMatcher\\AI\\ResultParser' => __DIR__ . '/../..' . '/src/AI/ResultParser.php',
         'SmartImageMatcher\\Abilities\\AbilityAssignFeaturedImage' => __DIR__ . '/../..' . '/src/Abilities/AbilityAssignFeaturedImage.php',
@@ -58,6 +60,7 @@ class ComposerStaticInitd1eee0a5073e3dab1344a5e361ab6e16
         'SmartImageMatcher\\Premium' => __DIR__ . '/../..' . '/src/Premium.php',
         'SmartImageMatcher\\Premium\\AiAltText' => __DIR__ . '/../..' . '/src/Premium/AiAltText.php',
         'SmartImageMatcher\\Premium\\AiFeaturedImage' => __DIR__ . '/../..' . '/src/Premium/AiFeaturedImage.php',
+        'SmartImageMatcher\\Premium\\AiImageGenerator' => __DIR__ . '/../..' . '/src/Premium/AiImageGenerator.php',
         'SmartImageMatcher\\Premium\\AiMatcher' => __DIR__ . '/../..' . '/src/Premium/AiMatcher.php',
         'SmartImageMatcher\\Premium\\AiVisionMatch' => __DIR__ . '/../..' . '/src/Premium/AiVisionMatch.php',
         'SmartImageMatcher\\Premium\\Analytics' => __DIR__ . '/../..' . '/src/Premium/Analytics.php',
@@ -71,6 +74,7 @@ class ComposerStaticInitd1eee0a5073e3dab1344a5e361ab6e16
         'SmartImageMatcher\\REST\\BulkController' => __DIR__ . '/../..' . '/src/REST/BulkController.php',
         'SmartImageMatcher\\REST\\Controller' => __DIR__ . '/../..' . '/src/REST/Controller.php',
         'SmartImageMatcher\\REST\\FeaturedImageController' => __DIR__ . '/../..' . '/src/REST/FeaturedImageController.php',
+        'SmartImageMatcher\\REST\\ImageGenController' => __DIR__ . '/../..' . '/src/REST/ImageGenController.php',
         'SmartImageMatcher\\REST\\InsertController' => __DIR__ . '/../..' . '/src/REST/InsertController.php',
         'SmartImageMatcher\\REST\\MatchController' => __DIR__ . '/../..' . '/src/REST/MatchController.php',
         'SmartImageMatcher\\Settings\\Sanitizer' => __DIR__ . '/../..' . '/src/Settings/Sanitizer.php',

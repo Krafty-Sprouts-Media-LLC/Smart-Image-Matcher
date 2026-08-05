@@ -7,8 +7,10 @@ $baseDir = dirname($vendorDir);
 
 return array(
     'Composer\\InstalledVersions' => $vendorDir . '/composer/InstalledVersions.php',
+    'SmartImageMatcher\\AI\\ImageModelCatalog' => $baseDir . '/src/AI/ImageModelCatalog.php',
     'SmartImageMatcher\\AI\\MatchPrompt' => $baseDir . '/src/AI/MatchPrompt.php',
     'SmartImageMatcher\\AI\\Matcher' => $baseDir . '/src/AI/Matcher.php',
+    'SmartImageMatcher\\AI\\PromptBuilder' => $baseDir . '/src/AI/PromptBuilder.php',
     'SmartImageMatcher\\AI\\ProviderBridge' => $baseDir . '/src/AI/ProviderBridge.php',
     'SmartImageMatcher\\AI\\ResultParser' => $baseDir . '/src/AI/ResultParser.php',
     'SmartImageMatcher\\Abilities\\AbilityAssignFeaturedImage' => $baseDir . '/src/Abilities/AbilityAssignFeaturedImage.php',
@@ -39,6 +41,7 @@ return array(
     'SmartImageMatcher\\Premium' => $baseDir . '/src/Premium.php',
     'SmartImageMatcher\\Premium\\AiAltText' => $baseDir . '/src/Premium/AiAltText.php',
     'SmartImageMatcher\\Premium\\AiFeaturedImage' => $baseDir . '/src/Premium/AiFeaturedImage.php',
+    'SmartImageMatcher\\Premium\\AiImageGenerator' => $baseDir . '/src/Premium/AiImageGenerator.php',
     'SmartImageMatcher\\Premium\\AiMatcher' => $baseDir . '/src/Premium/AiMatcher.php',
     'SmartImageMatcher\\Premium\\AiVisionMatch' => $baseDir . '/src/Premium/AiVisionMatch.php',
     'SmartImageMatcher\\Premium\\Analytics' => $baseDir . '/src/Premium/Analytics.php',
@@ -52,6 +55,7 @@ return array(
     'SmartImageMatcher\\REST\\BulkController' => $baseDir . '/src/REST/BulkController.php',
     'SmartImageMatcher\\REST\\Controller' => $baseDir . '/src/REST/Controller.php',
     'SmartImageMatcher\\REST\\FeaturedImageController' => $baseDir . '/src/REST/FeaturedImageController.php',
+    'SmartImageMatcher\\REST\\ImageGenController' => $baseDir . '/src/REST/ImageGenController.php',
     'SmartImageMatcher\\REST\\InsertController' => $baseDir . '/src/REST/InsertController.php',
     'SmartImageMatcher\\REST\\MatchController' => $baseDir . '/src/REST/MatchController.php',
     'SmartImageMatcher\\Settings\\Sanitizer' => $baseDir . '/src/Settings/Sanitizer.php',

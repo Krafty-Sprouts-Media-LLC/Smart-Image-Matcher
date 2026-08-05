@@ -3,7 +3,7 @@
         'name' => 'kraftysprouts/smart-image-matcher',
         'pretty_version' => 'dev-main',
         'version' => 'dev-main',
-        'reference' => 'deaca83a9f28140efd6fb65bd3cf3deabbb32351',
+        'reference' => 'ddbc812425787fc24f0e2a7c0b68869b075f53bb',
         'type' => 'wordpress-plugin',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
@@ -13,7 +13,7 @@
         'kraftysprouts/smart-image-matcher' => array(
             'pretty_version' => 'dev-main',
             'version' => 'dev-main',
-            'reference' => 'deaca83a9f28140efd6fb65bd3cf3deabbb32351',
+            'reference' => 'ddbc812425787fc24f0e2a7c0b68869b075f53bb',
             'type' => 'wordpress-plugin',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),

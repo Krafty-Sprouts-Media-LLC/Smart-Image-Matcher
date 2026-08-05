@@ -19,7 +19,7 @@
 	'use strict';
 
 	// Data injected by wp_localize_script().
-	const { ajaxUrl, nonces, postId, debug, features } = window.smartImageMatcherData || {};
+	const { ajaxUrl, nonces, postId, debug, features, aiImageStyle: localizedStyle } = window.smartImageMatcherData || {};
 
 	// SVG icon helpers (loaded via svg-icons.js before this file).
 	const Icons = window.SimIcons || {};
@@ -62,6 +62,8 @@
 	let carouselIndices = {};  // headingHash → current carousel index
 	let focusKeyword = '';
 	let aiImageGeneration = !!( features && features.aiImageGeneration );
+	let aiImageStyle = ( localizedStyle === 'illustration' ) ? 'illustration' : 'photo';
+	let generateAllRunning = false;
 
 	// -------------------------------------------------------------------------
 	// Open / close
@@ -300,6 +302,39 @@
 
 		const insertAllBtn = q( '.sim-insert-all-button', el );
 		if ( insertAllBtn ) insertAllBtn.style.display = '';
+
+		const generateAllBtn = q( '.sim-generate-all-button', el );
+		if ( generateAllBtn ) {
+			const eligible = collectEligibleForGenerate();
+			generateAllBtn.style.display = ( aiImageGeneration && eligible.length > 0 ) ? '' : 'none';
+			generateAllBtn.disabled = generateAllRunning;
+		}
+	}
+
+	function collectEligibleForGenerate() {
+		const list = [];
+		( currentMatches || [] ).forEach( function( group ) {
+			const heading = group.heading || {};
+			const matches = group.matches || [];
+			const hash = heading.heading_hash;
+			if ( ! hash ) {
+				return;
+			}
+			const alreadyGenerated = matches.some( function( m ) {
+				return m.match_method === 'ai_generated' || m.ai_generated;
+			} );
+			if ( alreadyGenerated ) {
+				return;
+			}
+			if ( ! canGenerateForMatches( matches ) ) {
+				return;
+			}
+			list.push( {
+				heading_hash: hash,
+				heading_text: heading.text || '',
+			} );
+		} );
+		return list;
 	}
 
 	function renderMatchItem( heading, matches, index ) {
@@ -348,7 +383,9 @@
 		const regenerateBtn = isGenerated
 			? '<button type="button" class="button sim-regenerate-button"' +
 				' data-hash="' + escapeHtml( hash ) + '"' +
-				' data-heading="' + escapeHtml( heading.text ) + '">Regenerate</button>'
+				' data-heading="' + escapeHtml( heading.text ) + '">Regenerate</button>' +
+				'<button type="button" class="button sim-reject-generated-button"' +
+				' data-hash="' + escapeHtml( hash ) + '">Reject</button>'
 			: '';
 
 		return (
@@ -662,7 +699,7 @@
 				heading_hash: hash,
 				heading_text: headingText,
 				focus_keyword: focusKeyword || '',
-				style: 'photo',
+				style: aiImageStyle,
 				force: !!force,
 			} );
 
@@ -694,6 +731,114 @@
 				showError( err.message );
 			}
 		}
+	}
+
+	async function handleRejectGenerated( e ) {
+		const btn = e.currentTarget;
+		const hash = btn.dataset.hash;
+		if ( ! hash || ! postId ) {
+			return;
+		}
+		if ( ! window.confirm( 'Reject this AI image for this heading? Future Generate runs will skip it unless you Regenerate.' ) ) {
+			return;
+		}
+		btn.disabled = true;
+		try {
+			await request( `${ REST_BASE }/posts/${ postId }/generate-image/reject`, {
+				post_id: postId,
+				heading_hash: hash,
+				focus_keyword: focusKeyword || '',
+				style: aiImageStyle,
+			} );
+			const item = q( '.sim-match-item[data-hash="' + hash + '"]', getModal() );
+			if ( item ) {
+				item.classList.add( 'sim-match-rejected' );
+				const actions = q( '.sim-match-actions', item );
+				if ( actions ) {
+					const note = document.createElement( 'p' );
+					note.className = 'description sim-reject-note';
+					note.textContent = 'Rejected — skipped on future Generate runs.';
+					actions.appendChild( note );
+				}
+			}
+		} catch ( err ) {
+			showError( err.message || 'Could not save rejection.' );
+			btn.disabled = false;
+		}
+	}
+
+	async function handleGenerateAll() {
+		const eligible = collectEligibleForGenerate();
+		if ( ! eligible.length || generateAllRunning ) {
+			return;
+		}
+
+		const estimateMin = Math.max( 1, Math.ceil( ( eligible.length * 60 ) / 60 ) );
+		const msg = 'Generate AI images for ' + eligible.length + ' heading' +
+			( eligible.length === 1 ? '' : 's' ) +
+			'? About ' + estimateMin + ' minute' + ( estimateMin === 1 ? '' : 's' ) +
+			' at ~60s each. This uses fal credits.';
+		if ( ! window.confirm( msg ) ) {
+			return;
+		}
+
+		generateAllRunning = true;
+		const btn = q( '.sim-generate-all-button', getModal() );
+		if ( btn ) {
+			btn.disabled = true;
+			btn.textContent = 'Generating…';
+		}
+
+		let done = 0;
+		let failed = 0;
+
+		for ( let i = 0; i < eligible.length; i++ ) {
+			const item = eligible[ i ];
+			showProgress(
+				'Generating image ' + ( i + 1 ) + ' of ' + eligible.length +
+				'… (' + done + ' done, ' + failed + ' failed)'
+			);
+			try {
+				const data = await request( `${ REST_BASE }/posts/${ postId }/generate-image`, {
+					post_id: postId,
+					heading_hash: item.heading_hash,
+					heading_text: item.heading_text,
+					focus_keyword: focusKeyword || '',
+					style: aiImageStyle,
+					force: false,
+				} );
+
+				if ( data.status === 'exists' || data.status === 'done' ) {
+					applyGeneratedMatch( item.heading_hash, generatedMatchFromPayload( data ) );
+					done++;
+					continue;
+				}
+
+				if ( data.status === 'queued' && data.poll_url ) {
+					const result = await pollGenerateStatus( data.poll_url, item.heading_hash );
+					applyGeneratedMatch( item.heading_hash, generatedMatchFromPayload( result ) );
+					done++;
+					continue;
+				}
+
+				failed++;
+			} catch ( err ) {
+				failed++;
+			}
+		}
+
+		generateAllRunning = false;
+		if ( btn ) {
+			btn.disabled = false;
+			btn.textContent = 'Generate All';
+		}
+		renderResults();
+		showProgress(
+			'Generate All finished: ' + done + ' succeeded, ' + failed + ' failed of ' + eligible.length + '.'
+		);
+		window.setTimeout( function() {
+			showState( 'results' );
+		}, 1500 );
 	}
 
 	// -------------------------------------------------------------------------
@@ -743,7 +888,7 @@
 			}
 		} );
 
-		// Generate / regenerate.
+		// Generate / regenerate / reject.
 		el.addEventListener( 'click', e => {
 			if (
 				e.target.classList.contains( 'sim-generate-button' ) ||
@@ -751,11 +896,17 @@
 			) {
 				handleGenerate( { currentTarget: e.target } );
 			}
+			if ( e.target.classList.contains( 'sim-reject-generated-button' ) ) {
+				handleRejectGenerated( { currentTarget: e.target } );
+			}
 		} );
 
 		// Insert all.
 		const insertAllBtn = q( '.sim-insert-all-button', el );
 		if ( insertAllBtn ) insertAllBtn.addEventListener( 'click', handleInsertAll );
+
+		const generateAllBtn = q( '.sim-generate-all-button', el );
+		if ( generateAllBtn ) generateAllBtn.addEventListener( 'click', handleGenerateAll );
 	}
 
 	// -------------------------------------------------------------------------

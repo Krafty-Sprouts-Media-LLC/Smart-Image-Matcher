@@ -435,6 +435,116 @@ class FeaturedImageService {
 	}
 
 	// -------------------------------------------------------------------------
+	// Featured image presence (stored meta — not filter-injected fallbacks)
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Stored `_thumbnail_id` from post meta only (bypasses default_post_metadata filters).
+	 *
+	 * @since 3.2.7
+	 * @param int $post_id Post ID.
+	 * @return int Attachment ID, or 0 when none is stored.
+	 */
+	public static function getStoredThumbnailId( int $post_id ): int {
+		if ( $post_id <= 0 || ! metadata_exists( 'post', $post_id, '_thumbnail_id' ) ) {
+			return 0;
+		}
+
+		return max( 0, (int) get_metadata_raw( 'post', $post_id, '_thumbnail_id', true ) );
+	}
+
+	/**
+	 * Whether the post has a real featured image SIM should not replace with AI bulk generate.
+	 *
+	 * Ignores filter-injected fallbacks (e.g. KSM Extensions `default_post_metadata`) and
+	 * site-wide placeholder attachments assigned as the featured image.
+	 *
+	 * @since 3.2.7
+	 * @param int $post_id Post ID.
+	 * @return bool
+	 */
+	public static function hasActionableFeaturedImage( int $post_id ): bool {
+		$thumbnail_id = self::getStoredThumbnailId( $post_id );
+		if ( $thumbnail_id <= 0 ) {
+			return false;
+		}
+
+		if ( self::isKnownPlaceholderFeaturedAttachment( $thumbnail_id, $post_id ) ) {
+			return false;
+		}
+
+		$attachment = get_post( $thumbnail_id );
+		if ( ! $attachment instanceof \WP_Post || 'attachment' !== $attachment->post_type ) {
+			return false;
+		}
+
+		/**
+		 * Filter whether a stored featured image counts as "real" for SIM AI featured generation.
+		 *
+		 * @since 3.2.7
+		 * @param bool $counts   Default true when attachment exists and is not a known placeholder.
+		 * @param int  $post_id  Post ID.
+		 * @param int  $thumb_id Attachment ID.
+		 */
+		return (bool) apply_filters( 'sim_post_has_actionable_featured_image', true, $post_id, $thumbnail_id );
+	}
+
+	/**
+	 * Detect site-wide placeholder featured attachments (KSM Extensions fallback, etc.).
+	 *
+	 * @since 3.2.7
+	 * @param int $attachment_id Attachment ID.
+	 * @param int $post_id       Post ID.
+	 * @return bool
+	 */
+	public static function isKnownPlaceholderFeaturedAttachment( int $attachment_id, int $post_id ): bool {
+		$known = self::knownPlaceholderFeaturedAttachmentIds( $post_id );
+		if ( in_array( $attachment_id, $known, true ) ) {
+			return true;
+		}
+
+		/**
+		 * Filter placeholder featured attachment IDs for a post.
+		 *
+		 * @since 3.2.7
+		 * @param int[] $known_ids Known placeholder attachment IDs.
+		 * @param int   $post_id   Post ID.
+		 */
+		$filtered = apply_filters( 'sim_known_placeholder_featured_attachment_ids', $known, $post_id );
+
+		return is_array( $filtered ) && in_array( $attachment_id, array_map( 'intval', $filtered ), true );
+	}
+
+	/**
+	 * Collect known global placeholder featured-image attachment IDs.
+	 *
+	 * @since 3.2.7
+	 * @param int $post_id Post ID.
+	 * @return int[]
+	 */
+	private static function knownPlaceholderFeaturedAttachmentIds( int $post_id ): array {
+		$ids = array();
+
+		$ksm = get_option( 'ksm_extensions_featured_image_manager', array() );
+		if ( is_array( $ksm ) && ! empty( $ksm['fallback_image_id'] ) ) {
+			$ids[] = (int) $ksm['fallback_image_id'];
+		}
+
+		/**
+		 * KSM Extensions per-post fallback filter (when plugin is active).
+		 *
+		 * @param int $fallback_id Fallback attachment ID.
+		 * @param int $object_id   Post ID.
+		 */
+		$ksm_filtered = apply_filters( 'KSM_Extensions_featured_image_fallback_id', 0, $post_id );
+		if ( $ksm_filtered ) {
+			$ids[] = (int) $ksm_filtered;
+		}
+
+		return array_values( array_unique( array_filter( $ids ) ) );
+	}
+
+	// -------------------------------------------------------------------------
 	// Private helpers
 	// -------------------------------------------------------------------------
 
@@ -446,12 +556,7 @@ class FeaturedImageService {
 	 * @return bool
 	 */
 	private function hasRealFeaturedImage( int $postId ): bool {
-		if ( ! metadata_exists( 'post', $postId, '_thumbnail_id' ) ) {
-			return false;
-		}
-
-		$thumbnailId = (int) get_metadata_raw( 'post', $postId, '_thumbnail_id', true );
-		return $thumbnailId > 0;
+		return self::getStoredThumbnailId( $postId ) > 0;
 	}
 
 	/**

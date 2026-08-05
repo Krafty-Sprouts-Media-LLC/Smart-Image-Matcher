@@ -447,5 +447,7 @@ unset( $post_types['attachment'] );
 			</div>
 		</aside>
 	</div>
+
+	<?php require SMART_IMAGE_MATCHER_PLUGIN_DIR . 'admin/views/partials/featured-ai-generate.php'; ?>
 </div>
 <?php // phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound ?>

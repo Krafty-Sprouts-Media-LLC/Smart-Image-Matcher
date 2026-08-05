@@ -33,24 +33,40 @@
 	// Custom SVG icon (matches the menu icon in PHP)
 	// -------------------------------------------------------------------------
 
-	const SimIcon = () => createElement( 'svg', {
-		width: '20', height: '20', viewBox: '0 0 20 20',
-		fill: 'none', xmlns: 'http://www.w3.org/2000/svg',
-	}, [
-		createElement( 'path', {
-			key: 'frame',
-			d: 'M2 3C2 2.44772 2.44772 2 3 2H17C17.5523 2 18 2.44772 18 3V13C18 13.5523 17.5523 14 17 14H3C2.44772 14 2 13.5523 2 13V3Z',
-			stroke: 'currentColor', strokeWidth: '1.5',
-			strokeLinecap: 'round', strokeLinejoin: 'round',
-		} ),
-		createElement( 'circle', { key: 'dot', cx: '7', cy: '7', r: '1.5', fill: 'currentColor' } ),
-		createElement( 'path', {
-			key: 'wave',
-			d: 'M2 11L5.5 8L9 10.5L13.5 6L18 10',
-			stroke: 'currentColor', strokeWidth: '1.5',
-			strokeLinecap: 'round', strokeLinejoin: 'round',
-		} ),
-	] );
+	const SimIcon = ( props ) => {
+		const { className, ...rest } = props || {};
+		const iconClass = 'sim-gutenberg-plugin-icon' + ( className ? ' ' + className : '' );
+
+		return createElement( 'svg', {
+			...rest,
+			className: iconClass,
+			width: 24,
+			height: 24,
+			viewBox: '0 0 20 20',
+			fill: 'none',
+			xmlns: 'http://www.w3.org/2000/svg',
+			'aria-hidden': true,
+			focusable: 'false',
+		}, [
+			createElement( 'path', {
+				key: 'frame',
+				d: 'M2 3C2 2.44772 2.44772 2 3 2H17C17.5523 2 18 2.44772 18 3V13C18 13.5523 17.5523 14 17 14H3C2.44772 14 2 13.5523 2 13V3Z',
+				stroke: 'currentColor',
+				strokeWidth: 1.5,
+				strokeLinecap: 'round',
+				strokeLinejoin: 'round',
+			} ),
+			createElement( 'circle', { key: 'dot', cx: 7, cy: 7, r: 1.5, fill: 'currentColor' } ),
+			createElement( 'path', {
+				key: 'wave',
+				d: 'M2 11L5.5 8L9 10.5L13.5 6L18 10',
+				stroke: 'currentColor',
+				strokeWidth: 1.5,
+				strokeLinecap: 'round',
+				strokeLinejoin: 'round',
+			} ),
+		] );
+	};
 
 	// -------------------------------------------------------------------------
 	// Helper: open the modal
@@ -128,9 +144,9 @@
 
 	const SimPlugin = () =>
 		createElement( Fragment, null, [
-			createElement( SimDocumentPanel ),
-			createElement( SimSidebar ),
-			SimSidebarMenuItem ? createElement( SimSidebarMenuItem ) : null,
+			createElement( SimDocumentPanel, { key: 'sim-document-panel' } ),
+			createElement( SimSidebar, { key: 'sim-sidebar' } ),
+			SimSidebarMenuItem ? createElement( SimSidebarMenuItem, { key: 'sim-sidebar-menu' } ) : null,
 		] );
 
 	registerPlugin( 'smart-image-matcher', {

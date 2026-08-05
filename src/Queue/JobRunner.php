@@ -796,6 +796,10 @@ class JobRunner {
 		$attachment_url = (string) wp_get_attachment_url( $attachment_id );
 		$prompt         = (string) get_post_meta( $attachment_id, '_sim_generated_prompt', true );
 
+		if ( 'featured' === $heading_hash && ! get_post_meta( $attachment_id, '_sim_generated_vision_failed', true ) ) {
+			set_post_thumbnail( $post_id, $attachment_id );
+		}
+
 		\SmartImageMatcher\Premium\AiImageGenerator::setStatus(
 			$post_id,
 			$heading_hash,

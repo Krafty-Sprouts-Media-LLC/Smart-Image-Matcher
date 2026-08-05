@@ -1,0 +1,81 @@
+/**
+ * sim-featured-ai-modal.css — posts list featured AI bulk modal.
+ *
+ * @package SmartImageMatcher
+ * @since   3.2.3
+ */
+
+.sim-featured-ai-modal {
+	display: none;
+	position: fixed;
+	inset: 0;
+	z-index: 100100;
+	align-items: center;
+	justify-content: center;
+}
+
+.sim-featured-ai-modal__overlay {
+	position: absolute;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.55);
+}
+
+.sim-featured-ai-modal__panel {
+	position: relative;
+	z-index: 1;
+	width: min(720px, calc(100vw - 32px));
+	max-height: calc(100vh - 48px);
+	overflow: auto;
+	background: #fff;
+	border-radius: 4px;
+	box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.sim-featured-ai-modal__header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 16px 20px;
+	border-bottom: 1px solid #dcdcde;
+}
+
+.sim-featured-ai-modal__header h2 {
+	margin: 0;
+	font-size: 1.2rem;
+}
+
+.sim-featured-ai-modal__close {
+	border: 0;
+	background: transparent;
+	font-size: 24px;
+	line-height: 1;
+	cursor: pointer;
+	color: #50575e;
+}
+
+.sim-featured-ai-modal__body {
+	padding: 16px 20px;
+}
+
+.sim-featured-ai-modal__toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	align-items: center;
+	margin-bottom: 12px;
+}
+
+.sim-featured-ai-modal__estimate {
+	margin: 8px 0 12px;
+	font-weight: 600;
+}
+
+.sim-featured-ai-modal__footer {
+	padding: 12px 20px 16px;
+	border-top: 1px solid #dcdcde;
+	text-align: right;
+}
+
+body.sim-featured-ai-modal-open {
+	overflow: hidden;
+}

@@ -82,8 +82,11 @@ class Settings {
 		'ai_image_generation_enabled' => false,
 		'ai_image_model'             => \SmartImageMatcher\AI\ImageModelCatalog::DEFAULT_MODEL_ID,
 		'ai_image_subject_gate'      => true,
+		'ai_image_style'             => 'photo',
 		'ai_image_verify_vision'     => false,
+		'ai_image_auto_featured_on_publish' => false,
 		'ai_image_alt_mode'          => 'keyword',
+		'ai_image_save_prompt_as_description' => false,
 	);
 
 	// -------------------------------------------------------------------------
@@ -185,7 +188,7 @@ class Settings {
 			array( $this, 'renderDashboardPage' )
 		);
 
-		// Step 2: Featured Images.
+		// Step 2: Featured Images (Match Runner + AI Generate — single home).
 		add_submenu_page(
 			'smart-image-matcher',
 			__( 'Smart Image Matcher – Featured Images', 'smart-image-matcher' ),
@@ -193,6 +196,16 @@ class Settings {
 			'manage_options',
 			'smart-image-matcher-featured-images',
 			array( $this, 'renderFeaturedImagesPage' )
+		);
+
+		// Hidden legacy slug — redirects to Featured Images (bookmarks / old bulk links).
+		add_submenu_page(
+			null,
+			__( 'Generate Featured Images', 'smart-image-matcher' ),
+			'',
+			'manage_options',
+			'smart-image-matcher-generate-images',
+			array( $this, 'redirectLegacyGenerateImagesPage' )
 		);
 
 		add_submenu_page(
@@ -364,7 +377,11 @@ class Settings {
 		$this->addField( 'smart_image_matcher_ai', 'ai_image_generation_enabled', __( 'On-demand image generation', 'smart-image-matcher' ), 'renderAiImageGenToggle' );
 		$this->addField( 'smart_image_matcher_ai', 'ai_image_model', __( 'Preferred image model', 'smart-image-matcher' ), 'renderAiImageModelSelect' );
 		$this->addField( 'smart_image_matcher_ai', 'ai_image_subject_gate', __( 'Subject gate', 'smart-image-matcher' ), 'renderAiSubjectGateToggle' );
+		$this->addField( 'smart_image_matcher_ai', 'ai_image_style', __( 'Preferred image style', 'smart-image-matcher' ), 'renderAiImageStyleSelect' );
+		$this->addField( 'smart_image_matcher_ai', 'ai_image_verify_vision', __( 'Vision verification', 'smart-image-matcher' ), 'renderAiVerifyVisionToggle' );
+		$this->addField( 'smart_image_matcher_ai', 'ai_image_auto_featured_on_publish', __( 'Auto-generate featured image on publish', 'smart-image-matcher' ), 'renderAiAutoFeaturedOnPublishToggle' );
 		$this->addField( 'smart_image_matcher_ai', 'ai_image_alt_mode', __( 'Generated image alt text', 'smart-image-matcher' ), 'renderAiAltModeSelect' );
+		$this->addField( 'smart_image_matcher_ai', 'ai_image_save_prompt_as_description', __( 'Save prompt as media Description', 'smart-image-matcher' ), 'renderAiSavePromptDescriptionToggle' );
 	}
 
 	/**
@@ -409,7 +426,38 @@ class Settings {
 	}
 
 	/**
-	 * Render the Featured Images page.
+	 * Legacy Generate Featured Images slug → Featured Images (preserves post_ids).
+	 *
+	 * @since 3.2.3
+	 * @return void
+	 */
+	public function redirectLegacyGenerateImagesPage(): void {
+		if ( ! is_admin() || ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only redirect of legacy menu slug.
+		$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( (string) $_GET['page'] ) ) : '';
+		if ( 'smart-image-matcher-generate-images' !== $page ) {
+			return;
+		}
+
+		$args = array(
+			'page'   => 'smart-image-matcher-featured-images',
+			'sim_ai' => '1',
+		);
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( isset( $_GET['post_ids'] ) ) {
+			$args['post_ids'] = sanitize_text_field( wp_unslash( (string) $_GET['post_ids'] ) );
+		}
+
+		wp_safe_redirect( add_query_arg( $args, admin_url( 'admin.php' ) ) );
+		exit;
+	}
+
+	/**
+	 * Render the Featured Images page (Match Runner + AI Generate).
 	 *
 	 * @since 3.0.0
 	 * @return void
@@ -419,6 +467,15 @@ class Settings {
 			wp_die( esc_html__( 'You do not have permission to access this page.', 'smart-image-matcher' ) );
 		}
 		require SMART_IMAGE_MATCHER_PLUGIN_DIR . 'admin/views/featured-images.php';
+	}
+
+	/**
+	 * @deprecated 3.2.3 Redirects to Featured Images.
+	 * @since 3.2.0
+	 * @return void
+	 */
+	public function renderGenerateImagesPage(): void {
+		$this->redirectLegacyGenerateImagesPage();
 	}
 
 	// -------------------------------------------------------------------------
@@ -955,6 +1012,59 @@ class Settings {
 	}
 
 	/**
+	 * Render preferred image style select.
+	 *
+	 * @since 3.2.0
+	 * @param array<string,string> $args Field args.
+	 * @return void
+	 */
+	public function renderAiImageStyleSelect( array $args ): void {
+		$key     = $args['key'];
+		$current = (string) self::get( $key );
+		$name    = self::OPTION . '[' . esc_attr( $key ) . ']';
+		$options = array(
+			'photo'         => __( 'Photo (realistic)', 'smart-image-matcher' ),
+			'illustration'  => __( 'Illustration', 'smart-image-matcher' ),
+		);
+
+		echo '<select name="' . esc_attr( $name ) . '" id="smart_image_matcher_' . esc_attr( $key ) . '">';
+		foreach ( $options as $value => $label ) {
+			printf(
+				'<option value="%s"%s>%s</option>',
+				esc_attr( $value ),
+				selected( $current, $value, false ),
+				esc_html( $label )
+			);
+		}
+		echo '</select>';
+		echo '<p class="description">' . esc_html__( 'Default visual style for on-demand generation, bulk runs, and auto-publish featured images.', 'smart-image-matcher' ) . '</p>';
+	}
+
+	/**
+	 * Render vision verification toggle for generated images.
+	 *
+	 * @since 3.2.0
+	 * @param array<string,string> $args Field args.
+	 * @return void
+	 */
+	public function renderAiVerifyVisionToggle( array $args ): void {
+		$this->renderCheckbox( array( 'key' => 'ai_image_verify_vision' ) );
+		echo '<p class="description">' . esc_html__( 'After generation, score the image against the focus keyword or heading with vision AI. Failed checks stay in the modal for review instead of auto-approving. Uses additional AI credits per image.', 'smart-image-matcher' ) . '</p>';
+	}
+
+	/**
+	 * Render auto-generate featured image on publish toggle.
+	 *
+	 * @since 3.2.0
+	 * @param array<string,string> $args Field args.
+	 * @return void
+	 */
+	public function renderAiAutoFeaturedOnPublishToggle( array $args ): void {
+		$this->renderCheckbox( array( 'key' => 'ai_image_auto_featured_on_publish' ) );
+		echo '<p class="description">' . esc_html__( 'When a post is first published without a featured image, queue one AI featured image after slug matching fails. Does not generate in-content heading images.', 'smart-image-matcher' ) . '</p>';
+	}
+
+	/**
 	 * Render alt text mode select.
 	 *
 	 * @since 3.1.1
@@ -971,6 +1081,32 @@ class Settings {
 			<option value="descriptive" <?php selected( $value, 'descriptive' ); ?>><?php esc_html_e( 'Descriptive (accessibility)', 'smart-image-matcher' ); ?></option>
 		</select>
 		<p class="description"><?php esc_html_e( 'Keyword mode copies the focus keyword into alt text. Descriptive mode asks a text model for a short scene description.', 'smart-image-matcher' ); ?></p>
+		<?php
+	}
+
+	/**
+	 * Render toggle: save visual brief into attachment Description.
+	 *
+	 * @since 3.2.3
+	 * @param array<string,string> $args Field args.
+	 * @return void
+	 */
+	public function renderAiSavePromptDescriptionToggle( array $args ): void {
+		$key     = $args['key'];
+		$checked = (bool) self::get( $key );
+		$name    = self::OPTION . '[' . $key . ']';
+		?>
+		<label for="<?php echo esc_attr( 'smart_image_matcher_' . $key ); ?>">
+			<input
+				type="checkbox"
+				name="<?php echo esc_attr( $name ); ?>"
+				id="<?php echo esc_attr( 'smart_image_matcher_' . $key ); ?>"
+				value="1"
+				<?php checked( $checked ); ?>
+			/>
+			<?php esc_html_e( 'Write the AI visual brief into the media library Description field', 'smart-image-matcher' ); ?>
+		</label>
+		<p class="description"><?php esc_html_e( 'Off by default. The prompt is still stored in private attachment meta for debugging. Leave this off unless you want the long scene text visible on the media edit screen.', 'smart-image-matcher' ); ?></p>
 		<?php
 	}
 

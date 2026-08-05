@@ -10,7 +10,30 @@
 	justify-content: center;
 }
 
-/* Sidebar icon */
+/* Plugin icon — WP editor chrome uses a 24px slot */
+.sim-gutenberg-plugin-icon {
+	display: block;
+	flex-shrink: 0;
+	width: 24px;
+	height: 24px;
+	margin: 0;
+}
+
+.sim-document-panel .components-panel__icon {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	min-width: 24px;
+}
+
+.interface-complementary-area-header .sim-gutenberg-plugin-icon,
+.interface-pinned-items .sim-gutenberg-plugin-icon {
+	display: block;
+}
+
+/* Sidebar icon (legacy class from svg-icons strings) */
 .edit-post-sidebar .sim-icon {
 	color: #1e1e1e;
 }

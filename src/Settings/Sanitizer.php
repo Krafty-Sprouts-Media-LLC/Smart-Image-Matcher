@@ -99,10 +99,15 @@ class Sanitizer {
 					: \SmartImageMatcher\AI\ImageModelCatalog::DEFAULT_MODEL_ID;
 			} )(),
 			'ai_image_subject_gate'      => ! empty( $raw['ai_image_subject_gate'] ),
+			'ai_image_style'             => in_array( sanitize_key( (string) ( $raw['ai_image_style'] ?? 'photo' ) ), array( 'photo', 'illustration' ), true )
+				? sanitize_key( (string) $raw['ai_image_style'] )
+				: 'photo',
 			'ai_image_verify_vision'     => ! empty( $raw['ai_image_verify_vision'] ),
+			'ai_image_auto_featured_on_publish' => ! empty( $raw['ai_image_auto_featured_on_publish'] ),
 			'ai_image_alt_mode'          => in_array( sanitize_key( (string) ( $raw['ai_image_alt_mode'] ?? 'keyword' ) ), array( 'keyword', 'descriptive' ), true )
 				? sanitize_key( (string) $raw['ai_image_alt_mode'] )
 				: 'keyword',
+			'ai_image_save_prompt_as_description' => ! empty( $raw['ai_image_save_prompt_as_description'] ),
 		);
 	}
 

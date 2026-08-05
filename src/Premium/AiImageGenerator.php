@@ -17,6 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+use SmartImageMatcher\AI\GenerationRejectionStore;
 use SmartImageMatcher\AI\PromptBuilder;
 use SmartImageMatcher\AI\ProviderBridge;
 use SmartImageMatcher\Domain\MatchRepository;
@@ -99,6 +100,13 @@ class AiImageGenerator {
 			$focus_keyword = PromptBuilder::getFocusKeyword( $post_id );
 		}
 
+		if ( ! $force && GenerationRejectionStore::isBlocked( $post_id, $heading_hash, $focus_keyword, $style ) ) {
+			return new \WP_Error(
+				'smart_image_matcher_generation_blocked',
+				__( 'Generation was previously rejected for this heading. Use Regenerate to try again.', 'smart-image-matcher' )
+			);
+		}
+
 		if ( ! $force ) {
 			$existing = $this->findGenerated( $post_id, $heading_hash, $focus_keyword, $style );
 			if ( $existing ) {
@@ -138,16 +146,16 @@ class AiImageGenerator {
 			return $result;
 		}
 
-		$image_url = $this->extractImageUrl( $result );
-		if ( '' === $image_url ) {
+		$source = $this->extractImageSource( $result );
+		if ( empty( $source['url'] ) && empty( $source['binary'] ) ) {
 			return new \WP_Error(
 				'smart_image_matcher_no_image_url',
-				__( 'Image generation returned no usable URL.', 'smart-image-matcher' )
+				__( 'Image generation returned no usable image data (expected a remote URL or inline image bytes).', 'smart-image-matcher' )
 			);
 		}
 
 		$title = $this->resolveTitle( $focus_keyword, $heading_text );
-		$attachment_id = $this->sideloadImage( $image_url, $post_id, $title );
+		$attachment_id = $this->sideloadGeneratedImage( $source, $post_id, $title );
 
 		if ( ! $attachment_id ) {
 			return new \WP_Error(
@@ -178,7 +186,43 @@ class AiImageGenerator {
 			)
 		);
 
-		$this->recordMatch( $post_id, $heading_hash, $heading_text, $attachment_id, $brief, $focus_keyword, $style );
+		$vision_subject = $focus_keyword ? $focus_keyword : $heading_text;
+		$vision_failed  = false;
+		$vision_reason  = '';
+
+		if ( Settings::get( 'ai_image_verify_vision' ) ) {
+			$image_url = (string) wp_get_attachment_url( $attachment_id );
+			if ( '' !== $image_url ) {
+				$vision_raw = ProviderBridge::scoreImageWithVision( $image_url, $vision_subject );
+				$vision_score = $this->parseVisionScore( $vision_raw, $vision_reason );
+
+				if ( is_wp_error( $vision_score ) || $vision_score < 50 ) {
+					$vision_failed = true;
+					update_post_meta( $attachment_id, '_sim_generated_vision_failed', '1' );
+					if ( is_wp_error( $vision_score ) ) {
+						$vision_reason = $vision_score->get_error_message();
+					}
+				}
+			}
+		}
+
+		if ( $vision_failed ) {
+			$this->recordMatch(
+				$post_id,
+				$heading_hash,
+				$heading_text,
+				$attachment_id,
+				$brief,
+				$focus_keyword,
+				$style,
+				'pending',
+				50,
+				'ai_generated_vision_fail',
+				$vision_reason
+			);
+		} else {
+			$this->recordMatch( $post_id, $heading_hash, $heading_text, $attachment_id, $brief, $focus_keyword, $style );
+		}
 
 		set_transient(
 			$this->resultCacheKey( $heading_hash, $focus_keyword, $style ),
@@ -216,6 +260,10 @@ class AiImageGenerator {
 
 		$focus = PromptBuilder::getFocusKeyword( $post_id );
 		$excerpt = wp_trim_words( wp_strip_all_tags( $post->post_excerpt ?: $post->post_content ), 80 );
+		$style = (string) Settings::get( 'ai_image_style' );
+		if ( 'illustration' !== $style ) {
+			$style = 'photo';
+		}
 
 		$attachment_id = $this->generateForHeading(
 			'featured',
@@ -223,7 +271,7 @@ class AiImageGenerator {
 			$excerpt,
 			$post_id,
 			$focus,
-			'photo',
+			$style,
 			false
 		);
 
@@ -231,7 +279,9 @@ class AiImageGenerator {
 			return $attachment_id;
 		}
 
-		set_post_thumbnail( $post_id, $attachment_id );
+		if ( ! get_post_meta( $attachment_id, '_sim_generated_vision_failed', true ) ) {
+			set_post_thumbnail( $post_id, $attachment_id );
+		}
 
 		return $attachment_id;
 	}
@@ -332,6 +382,66 @@ class AiImageGenerator {
 	}
 
 	/**
+	 * Sideload from a remote URL or inline binary payload.
+	 *
+	 * @since 3.1.3
+	 * @param array{url?:string,binary?:string,mime?:string} $source Image source.
+	 * @param int                                            $post_id Parent post.
+	 * @param string                                         $title   Attachment title.
+	 * @return int|null
+	 */
+	private function sideloadGeneratedImage( array $source, int $post_id, string $title ): ?int {
+		if ( ! empty( $source['url'] ) && 0 === strpos( (string) $source['url'], 'http' ) ) {
+			return $this->sideloadImage( (string) $source['url'], $post_id, $title );
+		}
+
+		if ( empty( $source['binary'] ) ) {
+			return null;
+		}
+
+		require_once ABSPATH . 'wp-admin/includes/media.php';
+		require_once ABSPATH . 'wp-admin/includes/file.php';
+		require_once ABSPATH . 'wp-admin/includes/image.php';
+
+		$mime = ! empty( $source['mime'] ) ? (string) $source['mime'] : 'image/jpeg';
+		$ext  = ( false !== strpos( $mime, 'png' ) ) ? 'png' : ( ( false !== strpos( $mime, 'webp' ) ) ? 'webp' : 'jpg' );
+		$tmp  = wp_tempnam( 'sim-ai-' . $ext );
+		if ( ! $tmp ) {
+			return null;
+		}
+
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- temp upload for media_handle_sideload.
+		if ( false === file_put_contents( $tmp, $source['binary'] ) ) {
+			return null;
+		}
+
+		$file_array = array(
+			'name'     => sanitize_file_name( $title . '.' . $ext ),
+			'tmp_name' => $tmp,
+			'type'     => $mime,
+		);
+
+		$id = media_handle_sideload( $file_array, $post_id, $title );
+		if ( is_wp_error( $id ) ) {
+			Logger::error( 'AiImageGenerator: binary sideload failed', array( 'error' => $id->get_error_message() ) );
+			if ( file_exists( $tmp ) ) {
+				wp_delete_file( $tmp );
+			}
+			return null;
+		}
+
+		$attachment_id = (int) $id;
+		wp_update_post(
+			array(
+				'ID'         => $attachment_id,
+				'post_title' => $title,
+			)
+		);
+
+		return $attachment_id;
+	}
+
+	/**
 	 * Sideload a remote image URL into the media library.
 	 *
 	 * @since 3.1.1
@@ -382,10 +492,15 @@ class AiImageGenerator {
 		update_post_meta( $attachment_id, '_sim_generated_style', sanitize_key( (string) $meta['style'] ) );
 		update_post_meta( $attachment_id, '_sim_generated_input', (string) $meta['input'] );
 
+		$description = '';
+		if ( Settings::get( 'ai_image_save_prompt_as_description' ) ) {
+			$description = sanitize_textarea_field( (string) $meta['prompt'] );
+		}
+
 		wp_update_post(
 			array(
 				'ID'           => $attachment_id,
-				'post_content' => sanitize_textarea_field( (string) $meta['prompt'] ),
+				'post_content' => $description,
 			)
 		);
 
@@ -403,6 +518,10 @@ class AiImageGenerator {
 	 * @param string $prompt        Visual brief.
 	 * @param string $focus_keyword Focus keyword.
 	 * @param string $style         Style.
+	 * @param string $status        Match row status (approved|pending).
+	 * @param int    $confidence    Confidence score 0-100.
+	 * @param string $match_method  Match method slug.
+	 * @param string $vision_reason Optional vision-fail reasoning.
 	 * @return void
 	 */
 	private function recordMatch(
@@ -412,7 +531,11 @@ class AiImageGenerator {
 		int $attachment_id,
 		string $prompt,
 		string $focus_keyword,
-		string $style
+		string $style,
+		string $status = 'approved',
+		int $confidence = 75,
+		string $match_method = 'ai_generated',
+		string $vision_reason = ''
 	): void {
 		global $wpdb;
 
@@ -423,10 +546,14 @@ class AiImageGenerator {
 			array(
 				'post_id'      => $post_id,
 				'heading_hash' => $heading_hash,
-				'match_method' => 'ai_generated',
 			),
-			array( '%d', '%s', '%s' )
+			array( '%d', '%s' )
 		);
+
+		$reasoning = $prompt;
+		if ( '' !== $vision_reason ) {
+			$reasoning = $prompt . ' [vision_failed: ' . $vision_reason . ']';
+		}
 
 		$wpdb->insert( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$table,
@@ -436,16 +563,49 @@ class AiImageGenerator {
 				'heading_text'     => $heading_text,
 				'heading_tag'      => ( 'featured' === $heading_hash ) ? 'h1' : 'h2',
 				'image_id'         => $attachment_id,
-				'confidence_score' => 75,
-				'match_method'     => 'ai_generated',
-				'ai_reasoning'     => $prompt,
-				'status'           => 'approved',
+				'confidence_score' => max( 0, min( 100, $confidence ) ),
+				'match_method'     => sanitize_key( $match_method ),
+				'ai_reasoning'     => $reasoning,
+				'status'           => sanitize_key( $status ),
 				'created_at'       => current_time( 'mysql' ),
 			),
 			array( '%d', '%s', '%s', '%s', '%d', '%d', '%s', '%s', '%s', '%s' )
 		);
 
 		unset( $focus_keyword, $style );
+	}
+
+	/**
+	 * Parse a vision score from ProviderBridge::scoreImageWithVision() output.
+	 *
+	 * @since 3.2.0
+	 * @param mixed  $raw     Raw provider response.
+	 * @param string $reason  Populated with reasoning text when available.
+	 * @return int|\WP_Error Score 0-100 or error.
+	 */
+	private function parseVisionScore( $raw, string &$reason = '' ) {
+		if ( is_wp_error( $raw ) ) {
+			return $raw;
+		}
+
+		if ( ! is_string( $raw ) || '' === $raw ) {
+			return new \WP_Error(
+				'smart_image_matcher_vision_empty',
+				__( 'Vision verification returned no score.', 'smart-image-matcher' )
+			);
+		}
+
+		$data = json_decode( $raw, true );
+		if ( JSON_ERROR_NONE !== json_last_error() || ! isset( $data['score'] ) ) {
+			return new \WP_Error(
+				'smart_image_matcher_vision_parse',
+				__( 'Vision verification returned an unreadable score.', 'smart-image-matcher' )
+			);
+		}
+
+		$reason = sanitize_text_field( (string) ( $data['reasoning'] ?? '' ) );
+
+		return (int) $data['score'];
 	}
 
 	/**
@@ -488,25 +648,56 @@ class AiImageGenerator {
 	}
 
 	/**
-	 * Extract a remote image URL from a ProviderBridge generateImage result.
+	 * Extract a remote URL and/or binary payload from a generate_image_result File/result.
 	 *
-	 * @since 3.1.1
-	 * @param mixed $result Provider result.
-	 * @return string
+	 * @since 3.1.3
+	 * @param mixed $result Provider result (GenerativeAiResult or File).
+	 * @return array{url?:string,binary?:string,mime?:string}
 	 */
-	private function extractImageUrl( $result ): string {
-		if ( is_string( $result ) && 0 === strpos( $result, 'http' ) ) {
-			return $result;
+	private function extractImageSource( $result ): array {
+		$file = null;
+
+		if ( is_object( $result ) && method_exists( $result, 'toFile' ) ) {
+			try {
+				$file = $result->toFile();
+			} catch ( \Throwable $e ) {
+				Logger::warn( 'AiImageGenerator: toFile() failed', array( 'error' => $e->getMessage() ) );
+			}
+		} elseif ( is_object( $result ) && method_exists( $result, 'getUrl' ) ) {
+			$file = $result;
 		}
 
-		if ( is_object( $result ) && method_exists( $result, 'getUrl' ) ) {
-			$url = $result->getUrl();
-			if ( is_string( $url ) && '' !== $url ) {
-				return $url;
+		$out = array();
+
+		if ( is_object( $file ) ) {
+			if ( method_exists( $file, 'getMimeType' ) ) {
+				$mime = $file->getMimeType();
+				if ( is_string( $mime ) && '' !== $mime ) {
+					$out['mime'] = $mime;
+				}
+			}
+			if ( method_exists( $file, 'getUrl' ) ) {
+				$url = $file->getUrl();
+				if ( is_string( $url ) && '' !== $url ) {
+					$out['url'] = $url;
+				}
+			}
+			if ( method_exists( $file, 'getBase64Data' ) ) {
+				$b64 = $file->getBase64Data();
+				if ( is_string( $b64 ) && '' !== $b64 ) {
+					$decoded = base64_decode( $b64, true );
+					if ( false !== $decoded && '' !== $decoded ) {
+						$out['binary'] = $decoded;
+					}
+				}
 			}
 		}
 
-		if ( is_object( $result ) && method_exists( $result, 'getCandidates' ) ) {
+		if ( empty( $out['url'] ) && is_string( $result ) && 0 === strpos( $result, 'http' ) ) {
+			$out['url'] = $result;
+		}
+
+		if ( empty( $out['url'] ) && is_object( $result ) && method_exists( $result, 'getCandidates' ) ) {
 			foreach ( $result->getCandidates() as $candidate ) {
 				if ( ! is_object( $candidate ) || ! method_exists( $candidate, 'getMessage' ) ) {
 					continue;
@@ -516,24 +707,25 @@ class AiImageGenerator {
 					continue;
 				}
 				foreach ( $message->getParts() as $part ) {
-					if ( ! is_object( $part ) ) {
+					if ( ! is_object( $part ) || ! method_exists( $part, 'getFile' ) ) {
 						continue;
 					}
-					$file = null;
-					if ( method_exists( $part, 'getFile' ) ) {
-						$file = $part->getFile();
+					$part_file = $part->getFile();
+					if ( ! is_object( $part_file ) ) {
+						continue;
 					}
-					if ( is_object( $file ) && method_exists( $file, 'getUrl' ) ) {
-						$url = $file->getUrl();
+					if ( method_exists( $part_file, 'getUrl' ) ) {
+						$url = $part_file->getUrl();
 						if ( is_string( $url ) && '' !== $url ) {
-							return $url;
+							$out['url'] = $url;
+							return $out;
 						}
 					}
 				}
 			}
 		}
 
-		return '';
+		return $out;
 	}
 
 	/**

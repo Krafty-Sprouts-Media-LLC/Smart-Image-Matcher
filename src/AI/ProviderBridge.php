@@ -88,7 +88,10 @@ class ProviderBridge {
 
 		try {
 			$prefs   = ImageModelCatalog::preferenceList( (string) Settings::get( 'ai_image_model' ) );
-			$builder = $probe->with_text( 'x' )->using_model_preference( ...$prefs );
+			$builder = $probe
+				->using_provider( 'fal-ai' )
+				->with_text( 'x' )
+				->using_model_preference( ...$prefs );
 
 			if ( is_callable( array( $builder, 'is_supported_for_image_generation' ) ) ) {
 				return (bool) $builder->is_supported_for_image_generation();
@@ -188,14 +191,30 @@ class ProviderBridge {
 
 			$prefs = ImageModelCatalog::preferenceList( (string) Settings::get( 'ai_image_model' ) );
 
+			// Pin fal provider so we never fall through to another connector's first model.
+			// Prefer generate_image_result so callers can read model metadata + File URL/base64.
 			$result = $builder
+				->using_provider( 'fal-ai' )
 				->with_text( $prompt )
 				->using_model_preference( ...$prefs )
-				->generate_image();
+				->generate_image_result();
 
 			if ( is_wp_error( $result ) ) {
 				Logger::warn( 'ProviderBridge::generateImage() error', array( 'error' => $result->get_error_message() ) );
 				return $result;
+			}
+
+			if ( is_object( $result ) && method_exists( $result, 'getModelMetadata' ) ) {
+				$model_meta = $result->getModelMetadata();
+				Logger::info(
+					'ProviderBridge::generateImage() model',
+					array(
+						'model_id' => is_object( $model_meta ) && method_exists( $model_meta, 'getId' )
+							? $model_meta->getId()
+							: '',
+						'preferred' => $prefs[0] ?? '',
+					)
+				);
 			}
 
 			return $result;
