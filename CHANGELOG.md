@@ -7,6 +7,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.2.16] - 07/08/2026
+
+### Improved
+
+- Featured Seedream 16:9 generations target **2048×1152** via the fal provider (cheap pixel-area tier). SIM stores output width/height and a Seedream cost-tier *hint* on the attachment (real $ still comes from the fal dashboard — API responses do not include price).
+
 ## [3.2.15] - 05/08/2026
 
 ### Improved

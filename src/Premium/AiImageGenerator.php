@@ -177,6 +177,8 @@ class AiImageGenerator {
 			);
 		}
 
+		$dimensions = $this->recordGeneratedDimensions( $attachment_id, $purpose );
+
 		$alt = $this->resolveAlt( $title, $brief, $focus_keyword );
 		$this->writeAttachmentMeta(
 			$attachment_id,
@@ -190,13 +192,16 @@ class AiImageGenerator {
 				'alt'          => $alt,
 				'input'        => wp_json_encode(
 					array(
-						'title'    => $heading_text,
-						'keyword'  => $focus_keyword,
-						'excerpt'  => $section_text,
-						'heading'  => $heading_text,
-						'purpose'  => $purpose,
-						'topics'   => $taxonomy_hint,
-						'brief'    => $brief,
+						'title'      => $heading_text,
+						'keyword'    => $focus_keyword,
+						'excerpt'    => $section_text,
+						'heading'    => $heading_text,
+						'purpose'    => $purpose,
+						'topics'     => $taxonomy_hint,
+						'brief'      => $brief,
+						'width'      => $dimensions['width'],
+						'height'     => $dimensions['height'],
+						'cost_hint'  => $dimensions['cost_hint'],
 					)
 				),
 			)
@@ -524,6 +529,74 @@ class AiImageGenerator {
 				'ID'          => $attachment_id,
 				'post_author' => $author_id,
 			)
+		);
+	}
+
+	/**
+	 * Record output dimensions and a Seedream-oriented cost-tier hint (not a fal invoice).
+	 *
+	 * Real $ amounts come from the fal dashboard / usage API — responses do not include price.
+	 *
+	 * @since 3.2.16
+	 * @param int    $attachment_id Attachment ID.
+	 * @param string $purpose       featured|heading.
+	 * @return array{width:int,height:int,area:int,cost_hint:string}
+	 */
+	private function recordGeneratedDimensions( int $attachment_id, string $purpose ): array {
+		$width  = 0;
+		$height = 0;
+		$meta   = wp_get_attachment_metadata( $attachment_id );
+		if ( is_array( $meta ) ) {
+			$width  = isset( $meta['width'] ) ? (int) $meta['width'] : 0;
+			$height = isset( $meta['height'] ) ? (int) $meta['height'] : 0;
+		}
+
+		if ( ( $width <= 0 || $height <= 0 ) ) {
+			$file = get_attached_file( $attachment_id );
+			if ( is_string( $file ) && '' !== $file && file_exists( $file ) ) {
+				$size = function_exists( 'wp_getimagesize' ) ? wp_getimagesize( $file ) : getimagesize( $file );
+				if ( is_array( $size ) ) {
+					$width  = (int) $size[0];
+					$height = (int) $size[1];
+				}
+			}
+		}
+
+		$area = max( 0, $width * $height );
+		// Seedream documented area tiers (other models bill differently).
+		$cheap_cap = 1536 * 1536;
+		$high_cap  = 2048 * 2048;
+		if ( $area <= 0 ) {
+			$cost_hint = 'unknown';
+		} elseif ( $area <= $cheap_cap ) {
+			$cost_hint = 'seedream_tier_low_approx_0.0675';
+		} elseif ( $area <= $high_cap ) {
+			$cost_hint = 'seedream_tier_high_approx_0.135';
+		} else {
+			$cost_hint = 'above_seedream_documented_caps';
+		}
+
+		update_post_meta( $attachment_id, '_sim_generated_width', $width );
+		update_post_meta( $attachment_id, '_sim_generated_height', $height );
+		update_post_meta( $attachment_id, '_sim_generated_cost_hint', sanitize_key( $cost_hint ) );
+
+		Logger::info(
+			'AiImageGenerator: output dimensions',
+			array(
+				'attachment_id' => $attachment_id,
+				'purpose'       => $purpose,
+				'width'         => $width,
+				'height'        => $height,
+				'area'          => $area,
+				'cost_hint'     => $cost_hint,
+			)
+		);
+
+		return array(
+			'width'     => $width,
+			'height'    => $height,
+			'area'      => $area,
+			'cost_hint' => $cost_hint,
 		);
 	}
 

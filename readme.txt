@@ -4,7 +4,7 @@ Tags: images, media library, alt text, featured image, automation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 3.2.15
+Stable tag: 3.2.16
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -95,6 +95,9 @@ No AI data is sent automatically — only when you explicitly trigger AI matchin
 The plugin stores match results and job metadata in your own database only. Update checks may contact GitHub (see External services). No post content leaves your server unless you explicitly use AI features with a configured provider.
 
 == Changelog ==
+
+= 3.2.16 =
+* Featured Seedream images target 2048×1152 (cheap fal area tier); stores size + cost-tier hint (fal dashboard has real $).
 
 = 3.2.15 =
 * Featured AI images force 16:9 landscape; under-heading Generate keeps the model default.
