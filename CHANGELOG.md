@@ -7,6 +7,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.2.17] - 07/08/2026
+
+### Fixed
+
+- AI image URL sideload no longer keeps fal’s CDN filename (which included size suffixes like `-2048x1152`). Files are named from the keyword/title, same as the binary sideload path.
+
 ## [3.2.16] - 07/08/2026
 
 ### Improved

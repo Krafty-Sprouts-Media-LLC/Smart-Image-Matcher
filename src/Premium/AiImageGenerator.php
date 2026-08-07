@@ -466,6 +466,9 @@ class AiImageGenerator {
 	/**
 	 * Sideload a remote image URL into the media library.
 	 *
+	 * Always names the file from $title — never keep fal’s CDN basename
+	 * (which can include size suffixes like -2048x1152).
+	 *
 	 * @since 3.1.1
 	 * @param string $url     Remote URL.
 	 * @param int    $post_id Parent post.
@@ -477,10 +480,28 @@ class AiImageGenerator {
 		require_once ABSPATH . 'wp-admin/includes/file.php';
 		require_once ABSPATH . 'wp-admin/includes/image.php';
 
-		$id = media_sideload_image( $url, $post_id, $title, 'id' );
+		$tmp = download_url( $url );
+		if ( is_wp_error( $tmp ) ) {
+			Logger::error( 'AiImageGenerator: download failed', array( 'error' => $tmp->get_error_message() ) );
+			return null;
+		}
 
+		$path_ext = strtolower( pathinfo( wp_parse_url( $url, PHP_URL_PATH ) ?: '', PATHINFO_EXTENSION ) );
+		$ext      = in_array( $path_ext, array( 'jpg', 'jpeg', 'png', 'webp', 'gif' ), true )
+			? ( 'jpeg' === $path_ext ? 'jpg' : $path_ext )
+			: 'jpg';
+
+		$file_array = array(
+			'name'     => sanitize_file_name( $title . '.' . $ext ),
+			'tmp_name' => $tmp,
+		);
+
+		$id = media_handle_sideload( $file_array, $post_id, $title );
 		if ( is_wp_error( $id ) ) {
 			Logger::error( 'AiImageGenerator: sideload failed', array( 'error' => $id->get_error_message() ) );
+			if ( file_exists( $tmp ) ) {
+				wp_delete_file( $tmp );
+			}
 			return null;
 		}
 
