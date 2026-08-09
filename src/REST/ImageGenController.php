@@ -203,6 +203,18 @@ class ImageGenController extends Controller {
 
 		register_rest_route(
 			self::NAMESPACE,
+			'/generate-images/active',
+			array(
+				array(
+					'methods'             => \WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'listActive' ),
+					'permission_callback' => array( $this, 'checkActiveListPermission' ),
+				),
+			)
+		);
+
+		register_rest_route(
+			self::NAMESPACE,
 			'/posts/(?P<post_id>[\d]+)/generate-image/reject',
 			array(
 				array(
@@ -267,6 +279,23 @@ class ImageGenController extends Controller {
 	 */
 	public function checkStatusPermission( \WP_REST_Request $request ) {
 		return $this->checkPermission( $request );
+	}
+
+	/**
+	 * Permission for listing in-flight generation jobs (posts list dock).
+	 *
+	 * @since 3.2.20
+	 * @return bool|\WP_Error
+	 */
+	public function checkActiveListPermission() {
+		if ( ! current_user_can( 'edit_posts' ) ) {
+			return new \WP_Error(
+				'rest_forbidden',
+				__( 'You do not have permission to view generation jobs.', 'smart-image-matcher' ),
+				array( 'status' => 403 )
+			);
+		}
+		return true;
 	}
 
 	/**
@@ -832,6 +861,65 @@ class ImageGenController extends Controller {
 		}
 
 		return rest_ensure_response( $status );
+	}
+
+	/**
+	 * List in-flight AI image jobs (for sticky dock when sessionStorage is empty).
+	 *
+	 * @since 3.2.20
+	 * @param \WP_REST_Request $request Request.
+	 * @return \WP_REST_Response
+	 */
+	public function listActive( \WP_REST_Request $request ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found
+		$pairs = Queue::listInFlightAiImageGens( 100 );
+		$jobs  = array();
+
+		foreach ( $pairs as $pair ) {
+			$post_id      = (int) $pair['post_id'];
+			$heading_hash = (string) $pair['heading_hash'];
+
+			if ( $post_id <= 0 || ! current_user_can( 'edit_post', $post_id ) ) {
+				continue;
+			}
+
+			// Posts-list dock tracks featured generations; skip heading jobs.
+			if ( 'featured' !== $heading_hash ) {
+				continue;
+			}
+
+			$status_payload = AiImageGenerator::getStatus( $post_id, $heading_hash );
+			$state          = is_array( $status_payload ) && isset( $status_payload['status'] )
+				? (string) $status_payload['status']
+				: 'processing';
+
+			if ( in_array( $state, array( 'done', 'completed', 'failed', 'error', 'exists' ), true ) ) {
+				continue;
+			}
+
+			$post  = get_post( $post_id );
+			$title = ( $post instanceof \WP_Post ) ? $post->post_title : '';
+
+			$jobs[] = array(
+				'post_id'      => $post_id,
+				'heading_hash' => $heading_hash,
+				'title'        => $title,
+				'status'       => $state,
+				'poll_url'     => add_query_arg(
+					array(
+						'post_id'      => $post_id,
+						'heading_hash' => $heading_hash,
+					),
+					rest_url( self::NAMESPACE . '/generate-image/status' )
+				),
+			);
+		}
+
+		return rest_ensure_response(
+			array(
+				'jobs'  => $jobs,
+				'total' => count( $jobs ),
+			)
+		);
 	}
 
 	/**

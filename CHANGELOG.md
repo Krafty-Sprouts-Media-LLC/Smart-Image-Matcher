@@ -7,6 +7,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.2.20] - 10/08/2026
+
+### Fixed
+
+- Sticky progress dock can resume from the server (Action Scheduler) when the modal was closed before 3.2.19 / with no sessionStorage — hard-refresh the posts list and the dock appears for still-running featured jobs.
+
 ## [3.2.19] - 09/08/2026
 
 ### Improved

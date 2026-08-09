@@ -803,7 +803,74 @@
 		return true;
 	}
 
-	function boot() {
+	function labelForServerStatus( state ) {
+		if ( 'queued' === state ) {
+			return i18n.queued;
+		}
+		if ( 'failed' === state || 'error' === state ) {
+			return i18n.failed;
+		}
+		if ( isTerminalSuccess( state ) ) {
+			return i18n.generated;
+		}
+		return i18n.processing;
+	}
+
+	/**
+	 * Resume dock from Action Scheduler when sessionStorage is empty
+	 * (e.g. modal was closed before the dock feature shipped).
+	 *
+	 * @return {Promise<boolean>}
+	 */
+	async function resumeServerBatch() {
+		if ( ! apiFetch ) {
+			return false;
+		}
+
+		try {
+			const result = await apiFetch( {
+				path: '/smart-image-matcher/v1/generate-images/active',
+				method: 'GET',
+			} );
+			const jobs = Array.isArray( result.jobs ) ? result.jobs : [];
+			if ( ! jobs.length ) {
+				return false;
+			}
+
+			jobMeta = {};
+			activeJobs = [];
+			succeededCount = 0;
+			failedCount = 0;
+			pollTotal = jobs.length;
+			dockExpanded = true;
+
+			jobs.forEach( ( job ) => {
+				const id = String( job.post_id );
+				jobMeta[ id ] = {
+					title: job.title || ( '#' + job.post_id ),
+					status: labelForServerStatus( job.status || 'processing' ),
+				};
+				activeJobs.push( {
+					post_id: job.post_id,
+					heading_hash: job.heading_hash || 'featured',
+				} );
+			} );
+
+			dismissed = true;
+			showDock();
+			persistBatch();
+
+			if ( pollTimer ) {
+				window.clearTimeout( pollTimer );
+			}
+			pollJobs();
+			return true;
+		} catch ( e ) {
+			return false;
+		}
+	}
+
+	async function boot() {
 		if ( ! apiFetch ) {
 			if ( autoOpen && postIds.length ) {
 				window.alert( i18n.noApi );
@@ -812,7 +879,10 @@
 		}
 
 		// Resume in-flight batch on any posts-list load (pagination / refresh).
-		const resumed = resumeStoredBatch();
+		const resumedLocal = resumeStoredBatch();
+		if ( ! resumedLocal ) {
+			await resumeServerBatch();
+		}
 
 		if ( ! autoOpen || ! postIds.length ) {
 			return;
@@ -824,7 +894,7 @@
 		}
 
 		// Prefer not stacking a new modal on top of an already-running batch.
-		if ( resumed && activeJobs.length ) {
+		if ( activeJobs.length ) {
 			cleanUrl();
 			return;
 		}

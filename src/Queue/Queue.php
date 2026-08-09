@@ -488,6 +488,87 @@ class Queue {
 		return false;
 	}
 
+	/**
+	 * List in-flight AI image gen jobs from Action Scheduler (for progress dock resume).
+	 *
+	 * @since 3.2.20
+	 * @param int $limit Max actions to scan per hook.
+	 * @return list<array{post_id:int,heading_hash:string}>
+	 */
+	public static function listInFlightAiImageGens( int $limit = 100 ): array {
+		if ( ! function_exists( 'as_get_scheduled_actions' ) || ! class_exists( 'ActionScheduler_Store' ) ) {
+			return array();
+		}
+
+		$limit = max( 1, min( 200, $limit ) );
+		$found = array();
+
+		foreach ( array( self::HOOK_AI_IMAGE_GEN, self::HOOK_AI_IMAGE_GEN_POLL ) as $hook ) {
+			$actions = as_get_scheduled_actions(
+				array(
+					'hook'     => $hook,
+					'group'    => self::GROUP,
+					'status'   => array(
+						\ActionScheduler_Store::STATUS_PENDING,
+						\ActionScheduler_Store::STATUS_RUNNING,
+					),
+					'per_page' => $limit,
+					'orderby'  => 'date',
+					'order'    => 'DESC',
+				),
+				OBJECT
+			);
+
+			if ( ! is_array( $actions ) ) {
+				continue;
+			}
+
+			foreach ( $actions as $action ) {
+				if ( ! is_object( $action ) || ! method_exists( $action, 'get_args' ) ) {
+					continue;
+				}
+				$parsed = self::parseAiImageGenArgs( $action->get_args() );
+				if ( null === $parsed ) {
+					continue;
+				}
+				$key = $parsed['post_id'] . ':' . $parsed['heading_hash'];
+				$found[ $key ] = $parsed;
+			}
+		}
+
+		return array_values( $found );
+	}
+
+	/**
+	 * Extract post_id + heading_hash from AS action args (new or legacy shapes).
+	 *
+	 * @since 3.2.20
+	 * @param mixed $args Action args.
+	 * @return array{post_id:int,heading_hash:string}|null
+	 */
+	private static function parseAiImageGenArgs( $args ): ?array {
+		if ( ! is_array( $args ) ) {
+			return null;
+		}
+
+		$payload = $args;
+		if ( isset( $args['payload'] ) && is_array( $args['payload'] ) ) {
+			$payload = $args['payload'];
+		}
+
+		$post_id      = isset( $payload['post_id'] ) ? absint( $payload['post_id'] ) : 0;
+		$heading_hash = isset( $payload['heading_hash'] ) ? sanitize_text_field( (string) $payload['heading_hash'] ) : '';
+
+		if ( $post_id <= 0 || '' === $heading_hash ) {
+			return null;
+		}
+
+		return array(
+			'post_id'      => $post_id,
+			'heading_hash' => $heading_hash,
+		);
+	}
+
 	// -------------------------------------------------------------------------
 	// Utilities
 	// -------------------------------------------------------------------------
