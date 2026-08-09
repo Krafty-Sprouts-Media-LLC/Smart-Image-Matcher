@@ -68,6 +68,27 @@ class Queue {
 	 */
 	const HOOK_AI_IMAGE_GEN = 'smart_image_matcher_queue_ai_image_gen';
 
+	/**
+	 * Action hook: poll fal for a submitted AI image job.
+	 *
+	 * @since 3.2.18
+	 */
+	const HOOK_AI_IMAGE_GEN_POLL = 'smart_image_matcher_queue_ai_image_gen_poll';
+
+	/**
+	 * Seconds between fal poll AS jobs.
+	 *
+	 * @since 3.2.18
+	 */
+	const AI_IMAGE_POLL_DELAY = 5;
+
+	/**
+	 * Max seconds to keep polling fal for one image.
+	 *
+	 * @since 3.2.18
+	 */
+	const AI_IMAGE_POLL_DEADLINE = 300;
+
 	// -------------------------------------------------------------------------
 	// Registration
 	// -------------------------------------------------------------------------
@@ -87,7 +108,8 @@ class Queue {
 		add_action( self::HOOK_BULK_INSERT,    array( JobRunner::class, 'runBulkInsertJob' ), 10, 2 );
 		add_action( self::HOOK_FIAA_RUN,       array( JobRunner::class, 'runFiaaRunJob' ), 10, 1 );
 		add_action( self::HOOK_FIAA_AUDIT_CLEAR, array( JobRunner::class, 'runFiaaAuditClearJob' ), 10, 1 );
-		add_action( self::HOOK_AI_IMAGE_GEN, array( JobRunner::class, 'runAiImageGenJob' ), 10, 1 );
+		add_action( self::HOOK_AI_IMAGE_GEN, array( JobRunner::class, 'runAiImageGenJob' ), 10, 2 );
+		add_action( self::HOOK_AI_IMAGE_GEN_POLL, array( JobRunner::class, 'runAiImageGenPollJob' ), 10, 2 );
 	}
 
 	// -------------------------------------------------------------------------
@@ -318,6 +340,9 @@ class Queue {
 	/**
 	 * Enqueue an on-demand AI image generation job.
 	 *
+	 * Uses unique AS args (post_id + heading_hash) so a second Generate while
+	 * pending cannot double-spend. Full payload lives in a transient.
+	 *
 	 * @since 3.1.1
 	 * @param array<string, mixed> $args {
 	 *     @type string $heading_hash  Heading hash.
@@ -328,7 +353,7 @@ class Queue {
 	 *     @type string $style         photo|illustration.
 	 *     @type bool   $force         Bypass cache/dedup.
 	 * }
-	 * @return string|null AS action ID or null.
+	 * @return string|null AS action ID, or null if unavailable / already queued.
 	 */
 	public function enqueueAiImageGen( array $args ): ?string {
 		if ( ! self::isAvailable() ) {
@@ -346,13 +371,121 @@ class Queue {
 			'force'         => ! empty( $args['force'] ),
 		);
 
+		$post_id      = (int) $payload['post_id'];
+		$heading_hash = (string) $payload['heading_hash'];
+
+		if ( $post_id <= 0 || '' === $heading_hash ) {
+			return null;
+		}
+
+		$stable_args = array(
+			'post_id'      => $post_id,
+			'heading_hash' => $heading_hash,
+		);
+
+		if ( ! empty( $payload['force'] ) && function_exists( 'as_unschedule_all_actions' ) ) {
+			as_unschedule_all_actions( self::HOOK_AI_IMAGE_GEN, $stable_args, self::GROUP );
+			as_unschedule_all_actions( self::HOOK_AI_IMAGE_GEN_POLL, $stable_args, self::GROUP );
+		} elseif ( empty( $payload['force'] ) && self::hasPendingAiImageGen( $post_id, $heading_hash ) ) {
+			Logger::info(
+				'Queue::enqueueAiImageGen: already queued/processing',
+				array(
+					'post_id'      => $post_id,
+					'heading_hash' => $heading_hash,
+				)
+			);
+			return null;
+		}
+
+		\SmartImageMatcher\Premium\AiImageGenerator::storeJobPayload( $post_id, $heading_hash, $payload );
+
+		// unique=true: AS refuses a second pending/running action with same hook+args+group.
 		$action_id = as_enqueue_async_action(
 			self::HOOK_AI_IMAGE_GEN,
-			array( 'payload' => $payload ),
-			self::GROUP
+			$stable_args,
+			self::GROUP,
+			true
 		);
 
 		return $action_id ? (string) $action_id : null;
+	}
+
+	/**
+	 * Schedule a fal poll job for a submitted image generation.
+	 *
+	 * @since 3.2.18
+	 * @param int    $post_id      Post ID.
+	 * @param string $heading_hash Heading hash.
+	 * @param int    $delay        Seconds from now.
+	 * @return string|null
+	 */
+	public function enqueueAiImageGenPoll( int $post_id, string $heading_hash, int $delay = self::AI_IMAGE_POLL_DELAY ): ?string {
+		if ( ! self::isAvailable() ) {
+			return null;
+		}
+
+		$post_id      = absint( $post_id );
+		$heading_hash = sanitize_text_field( $heading_hash );
+		if ( $post_id <= 0 || '' === $heading_hash ) {
+			return null;
+		}
+
+		$args = array(
+			'post_id'      => $post_id,
+			'heading_hash' => $heading_hash,
+		);
+
+		$delay = max( 1, $delay );
+
+		// Not unique: the current poll job is still RUNNING when we schedule the next.
+		if ( function_exists( 'as_schedule_single_action' ) ) {
+			$action_id = as_schedule_single_action(
+				time() + $delay,
+				self::HOOK_AI_IMAGE_GEN_POLL,
+				$args,
+				self::GROUP,
+				false
+			);
+			return $action_id ? (string) $action_id : null;
+		}
+
+		$action_id = as_enqueue_async_action(
+			self::HOOK_AI_IMAGE_GEN_POLL,
+			$args,
+			self::GROUP,
+			false
+		);
+
+		return $action_id ? (string) $action_id : null;
+	}
+
+	/**
+	 * Whether a start or poll AS action is pending/running for this pair.
+	 *
+	 * @since 3.2.18
+	 * @param int    $post_id      Post ID.
+	 * @param string $heading_hash Heading hash.
+	 * @return bool
+	 */
+	public static function hasPendingAiImageGen( int $post_id, string $heading_hash ): bool {
+		if ( ! function_exists( 'as_has_scheduled_action' ) ) {
+			return false;
+		}
+
+		$args = array(
+			'post_id'      => absint( $post_id ),
+			'heading_hash' => sanitize_text_field( $heading_hash ),
+		);
+
+		if ( as_has_scheduled_action( self::HOOK_AI_IMAGE_GEN, $args, self::GROUP ) ) {
+			return true;
+		}
+
+		if ( as_has_scheduled_action( self::HOOK_AI_IMAGE_GEN_POLL, $args, self::GROUP ) ) {
+			return true;
+		}
+
+		return false;
 	}
 
 	// -------------------------------------------------------------------------

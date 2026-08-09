@@ -242,6 +242,96 @@ class ProviderBridge {
 		}
 	}
 
+	/**
+	 * Whether the fal provider exposes non-blocking queue submit/poll.
+	 *
+	 * @since 3.2.18
+	 * @return bool
+	 */
+	public static function supportsAsyncImageQueue(): bool {
+		return class_exists( '\KraftySprouts\AiProviderForFalAi\Queue\FalQueueClient' )
+			&& \KraftySprouts\AiProviderForFalAi\Queue\FalQueueClient::isAvailable();
+	}
+
+	/**
+	 * Submit an image job to fal without waiting for completion.
+	 *
+	 * @since 3.2.18
+	 * @param string $prompt  Image prompt.
+	 * @param string $purpose featured|heading.
+	 * @return array{request_id:string,status_url:string,response_url:string,model_id:string}|\WP_Error
+	 */
+	public static function submitImage( string $prompt, string $purpose = 'heading' ) {
+		if ( ! self::supportsAsyncImageQueue() ) {
+			return new \WP_Error(
+				'smart_image_matcher_async_unavailable',
+				__( 'Async fal queue is not available. Update AI Provider for fal.ai.', 'smart-image-matcher' )
+			);
+		}
+
+		$prefs  = ImageModelCatalog::preferenceList( (string) Settings::get( 'ai_image_model' ) );
+		$aspect = ( 'featured' === $purpose ) ? '16:9' : null;
+		$errors = array();
+
+		foreach ( $prefs as $model_id ) {
+			$result = \KraftySprouts\AiProviderForFalAi\Queue\FalQueueClient::submit( $model_id, $prompt, $aspect );
+			if ( ! is_wp_error( $result ) ) {
+				Logger::info(
+					'ProviderBridge::submitImage() ok',
+					array(
+						'model_id'   => $model_id,
+						'request_id' => $result['request_id'] ?? '',
+						'purpose'    => $purpose,
+					)
+				);
+				return $result;
+			}
+			$errors[] = $model_id . ': ' . $result->get_error_message();
+		}
+
+		return new \WP_Error(
+			'smart_image_matcher_submit_failed',
+			implode( ' | ', $errors )
+		);
+	}
+
+	/**
+	 * Poll fal queue status once.
+	 *
+	 * @since 3.2.18
+	 * @param string $status_url Queue status URL.
+	 * @param string $request_id Request id.
+	 * @return string|\WP_Error Uppercase status or error.
+	 */
+	public static function pollImageStatus( string $status_url, string $request_id = '' ) {
+		if ( ! self::supportsAsyncImageQueue() ) {
+			return new \WP_Error(
+				'smart_image_matcher_async_unavailable',
+				__( 'Async fal queue is not available.', 'smart-image-matcher' )
+			);
+		}
+
+		return \KraftySprouts\AiProviderForFalAi\Queue\FalQueueClient::status( $status_url, $request_id );
+	}
+
+	/**
+	 * Fetch a completed fal image as a source array for sideload.
+	 *
+	 * @since 3.2.18
+	 * @param string $response_url Queue response URL.
+	 * @return array{url:string,mime?:string}|\WP_Error
+	 */
+	public static function fetchImageSource( string $response_url ) {
+		if ( ! self::supportsAsyncImageQueue() ) {
+			return new \WP_Error(
+				'smart_image_matcher_async_unavailable',
+				__( 'Async fal queue is not available.', 'smart-image-matcher' )
+			);
+		}
+
+		return \KraftySprouts\AiProviderForFalAi\Queue\FalQueueClient::fetchImage( $response_url );
+	}
+
 	// -------------------------------------------------------------------------
 	// Vision
 	// -------------------------------------------------------------------------

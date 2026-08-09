@@ -40,6 +40,22 @@ class AiImageGenerator {
 	public const STATUS_TRANSIENT_PREFIX = 'smart_image_matcher_img_gen_';
 
 	/**
+	 * Transient prefix for AS job payloads (stable post+hash key).
+	 *
+	 * @since 3.2.18
+	 * @var string
+	 */
+	public const JOB_PAYLOAD_TRANSIENT_PREFIX = 'smart_image_matcher_img_gen_job_';
+
+	/**
+	 * In-flight statuses that should block a second enqueue.
+	 *
+	 * @since 3.2.18
+	 * @var list<string>
+	 */
+	private const IN_FLIGHT_STATUSES = array( 'queued', 'processing', 'submitted' );
+
+	/**
 	 * Cache group key for generated results (30 days).
 	 *
 	 * @since 3.1.1
@@ -87,6 +103,138 @@ class AiImageGenerator {
 		string $style = 'photo',
 		bool $force = false
 	) {
+		$prepared = $this->prepareGenerationInputs(
+			$heading_hash,
+			$heading_text,
+			$section_text,
+			$post_id,
+			$focus_keyword,
+			$style,
+			$force
+		);
+		if ( is_wp_error( $prepared ) ) {
+			return $prepared;
+		}
+		if ( isset( $prepared['attachment_id'] ) ) {
+			return (int) $prepared['attachment_id'];
+		}
+
+		$result = ProviderBridge::generateImage( $prepared['image_prompt'], $prepared['purpose'] );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		$source = $this->extractImageSource( $result );
+		return $this->finalizeGeneratedImage(
+			$source,
+			(string) $prepared['heading_hash'],
+			(string) $prepared['heading_text'],
+			(string) $prepared['section_text'],
+			(int) $prepared['post_id'],
+			(string) $prepared['focus_keyword'],
+			(string) $prepared['style'],
+			(string) $prepared['purpose'],
+			(string) $prepared['brief'],
+			(string) $prepared['image_prompt'],
+			(string) $prepared['taxonomy_hint']
+		);
+	}
+
+	/**
+	 * Build brief + submit to fal asynchronously (no long poll in this request).
+	 *
+	 * @since 3.2.18
+	 * @param string $heading_hash  Heading hash.
+	 * @param string $heading_text  Heading text.
+	 * @param string $section_text  Section excerpt.
+	 * @param int    $post_id       Post ID.
+	 * @param string $focus_keyword Focus keyword.
+	 * @param string $style         photo|illustration.
+	 * @param bool   $force         Bypass cache/dedup.
+	 * @return array{fal:array<string,string>,context:array<string,mixed>}|int|\WP_Error Attachment if cache hit, submit bundle, or error.
+	 */
+	public function submitForHeading(
+		string $heading_hash,
+		string $heading_text,
+		string $section_text,
+		int $post_id,
+		string $focus_keyword = '',
+		string $style = 'photo',
+		bool $force = false
+	) {
+		$prepared = $this->prepareGenerationInputs(
+			$heading_hash,
+			$heading_text,
+			$section_text,
+			$post_id,
+			$focus_keyword,
+			$style,
+			$force
+		);
+		if ( is_wp_error( $prepared ) ) {
+			return $prepared;
+		}
+		if ( isset( $prepared['attachment_id'] ) ) {
+			return (int) $prepared['attachment_id'];
+		}
+
+		$fal = ProviderBridge::submitImage( $prepared['image_prompt'], $prepared['purpose'] );
+		if ( is_wp_error( $fal ) ) {
+			return $fal;
+		}
+
+		return array(
+			'fal'     => $fal,
+			'context' => $prepared,
+		);
+	}
+
+	/**
+	 * Sideload + meta after an async fal result.
+	 *
+	 * @since 3.2.18
+	 * @param array{url?:string,binary?:string,mime?:string} $source  Image source.
+	 * @param array<string, mixed>                           $context From submitForHeading.
+	 * @return int|\WP_Error
+	 */
+	public function finalizeFromSource( array $source, array $context ) {
+		return $this->finalizeGeneratedImage(
+			$source,
+			(string) ( $context['heading_hash'] ?? '' ),
+			(string) ( $context['heading_text'] ?? '' ),
+			(string) ( $context['section_text'] ?? '' ),
+			(int) ( $context['post_id'] ?? 0 ),
+			(string) ( $context['focus_keyword'] ?? '' ),
+			(string) ( $context['style'] ?? 'photo' ),
+			(string) ( $context['purpose'] ?? 'heading' ),
+			(string) ( $context['brief'] ?? '' ),
+			(string) ( $context['image_prompt'] ?? '' ),
+			(string) ( $context['taxonomy_hint'] ?? '' )
+		);
+	}
+
+	/**
+	 * Shared preflight + brief for sync and async paths.
+	 *
+	 * @since 3.2.18
+	 * @param string $heading_hash  Heading hash.
+	 * @param string $heading_text  Heading text.
+	 * @param string $section_text  Section excerpt.
+	 * @param int    $post_id       Post ID.
+	 * @param string $focus_keyword Focus keyword.
+	 * @param string $style         Style.
+	 * @param bool   $force         Force.
+	 * @return array<string, mixed>|\WP_Error
+	 */
+	private function prepareGenerationInputs(
+		string $heading_hash,
+		string $heading_text,
+		string $section_text,
+		int $post_id,
+		string $focus_keyword,
+		string $style,
+		bool $force
+	) {
 		if ( ! ProviderBridge::isImageGenerationAvailable() ) {
 			return new \WP_Error(
 				'smart_image_matcher_ai_image_unavailable',
@@ -110,7 +258,7 @@ class AiImageGenerator {
 		if ( ! $force ) {
 			$existing = $this->findGenerated( $post_id, $heading_hash, $focus_keyword, $style );
 			if ( $existing ) {
-				return $existing;
+				return array( 'attachment_id' => $existing );
 			}
 		} else {
 			delete_transient( $this->resultCacheKey( $heading_hash, $focus_keyword, $style ) );
@@ -154,12 +302,51 @@ class AiImageGenerator {
 		}
 
 		$image_prompt = $this->prompt_builder->composeImageModelPrompt( $brief, $style, $purpose );
-		$result       = ProviderBridge::generateImage( $image_prompt, $purpose );
-		if ( is_wp_error( $result ) ) {
-			return $result;
-		}
 
-		$source = $this->extractImageSource( $result );
+		return array(
+			'heading_hash'  => $heading_hash,
+			'heading_text'  => $heading_text,
+			'section_text'  => $section_text,
+			'post_id'       => $post_id,
+			'focus_keyword' => $focus_keyword,
+			'style'         => $style,
+			'purpose'       => $purpose,
+			'taxonomy_hint' => $taxonomy_hint,
+			'brief'         => $brief,
+			'image_prompt'  => $image_prompt,
+		);
+	}
+
+	/**
+	 * Sideload, meta, vision, match row — shared by sync and async.
+	 *
+	 * @since 3.2.18
+	 * @param array{url?:string,binary?:string,mime?:string} $source        Image source.
+	 * @param string                                         $heading_hash  Hash.
+	 * @param string                                         $heading_text  Text.
+	 * @param string                                         $section_text  Section.
+	 * @param int                                            $post_id       Post ID.
+	 * @param string                                         $focus_keyword Keyword.
+	 * @param string                                         $style         Style.
+	 * @param string                                         $purpose       Purpose.
+	 * @param string                                         $brief         Brief.
+	 * @param string                                         $image_prompt  Prompt.
+	 * @param string                                         $taxonomy_hint Topics.
+	 * @return int|\WP_Error
+	 */
+	private function finalizeGeneratedImage(
+		array $source,
+		string $heading_hash,
+		string $heading_text,
+		string $section_text,
+		int $post_id,
+		string $focus_keyword,
+		string $style,
+		string $purpose,
+		string $brief,
+		string $image_prompt,
+		string $taxonomy_hint
+	) {
 		if ( empty( $source['url'] ) && empty( $source['binary'] ) ) {
 			return new \WP_Error(
 				'smart_image_matcher_no_image_url',
@@ -192,16 +379,16 @@ class AiImageGenerator {
 				'alt'          => $alt,
 				'input'        => wp_json_encode(
 					array(
-						'title'      => $heading_text,
-						'keyword'    => $focus_keyword,
-						'excerpt'    => $section_text,
-						'heading'    => $heading_text,
-						'purpose'    => $purpose,
-						'topics'     => $taxonomy_hint,
-						'brief'      => $brief,
-						'width'      => $dimensions['width'],
-						'height'     => $dimensions['height'],
-						'cost_hint'  => $dimensions['cost_hint'],
+						'title'     => $heading_text,
+						'keyword'   => $focus_keyword,
+						'excerpt'   => $section_text,
+						'heading'   => $heading_text,
+						'purpose'   => $purpose,
+						'topics'    => $taxonomy_hint,
+						'brief'     => $brief,
+						'width'     => $dimensions['width'],
+						'height'    => $dimensions['height'],
+						'cost_hint' => $dimensions['cost_hint'],
 					)
 				),
 			)
@@ -400,6 +587,76 @@ class AiImageGenerator {
 	public static function getStatus( int $post_id, string $heading_hash ): ?array {
 		$data = get_transient( self::statusTransientKey( $post_id, $heading_hash ) );
 		return is_array( $data ) ? $data : null;
+	}
+
+	/**
+	 * Whether a generation for this post+heading is already queued or running.
+	 *
+	 * @since 3.2.18
+	 * @param int    $post_id      Post ID.
+	 * @param string $heading_hash Heading hash.
+	 * @return bool
+	 */
+	public static function isInFlight( int $post_id, string $heading_hash ): bool {
+		$status = self::getStatus( $post_id, $heading_hash );
+		if ( is_array( $status ) ) {
+			$state = isset( $status['status'] ) ? (string) $status['status'] : '';
+			if ( in_array( $state, self::IN_FLIGHT_STATUSES, true ) ) {
+				return true;
+			}
+		}
+
+		return \SmartImageMatcher\Queue\Queue::hasPendingAiImageGen( $post_id, $heading_hash );
+	}
+
+	/**
+	 * Transient key for the full AS job payload.
+	 *
+	 * @since 3.2.18
+	 * @param int    $post_id      Post ID.
+	 * @param string $heading_hash Heading hash.
+	 * @return string
+	 */
+	public static function jobPayloadTransientKey( int $post_id, string $heading_hash ): string {
+		return self::JOB_PAYLOAD_TRANSIENT_PREFIX . $post_id . '_' . md5( $heading_hash );
+	}
+
+	/**
+	 * Persist job args for the worker (stable AS args are only post_id + hash).
+	 *
+	 * @since 3.2.18
+	 * @param int                  $post_id      Post ID.
+	 * @param string               $heading_hash Heading hash.
+	 * @param array<string, mixed> $payload      Job payload.
+	 * @return void
+	 */
+	public static function storeJobPayload( int $post_id, string $heading_hash, array $payload ): void {
+		set_transient( self::jobPayloadTransientKey( $post_id, $heading_hash ), $payload, HOUR_IN_SECONDS );
+	}
+
+	/**
+	 * Load job args for the worker.
+	 *
+	 * @since 3.2.18
+	 * @param int    $post_id      Post ID.
+	 * @param string $heading_hash Heading hash.
+	 * @return array<string, mixed>|null
+	 */
+	public static function getJobPayload( int $post_id, string $heading_hash ): ?array {
+		$data = get_transient( self::jobPayloadTransientKey( $post_id, $heading_hash ) );
+		return is_array( $data ) ? $data : null;
+	}
+
+	/**
+	 * Clear stored job payload after completion/failure.
+	 *
+	 * @since 3.2.18
+	 * @param int    $post_id      Post ID.
+	 * @param string $heading_hash Heading hash.
+	 * @return void
+	 */
+	public static function clearJobPayload( int $post_id, string $heading_hash ): void {
+		delete_transient( self::jobPayloadTransientKey( $post_id, $heading_hash ) );
 	}
 
 	/**

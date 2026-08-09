@@ -177,6 +177,7 @@ class Plugin {
 				Queue::HOOK_FIAA_RUN,
 				Queue::HOOK_FIAA_AUDIT_CLEAR,
 				Queue::HOOK_AI_IMAGE_GEN,
+				Queue::HOOK_AI_IMAGE_GEN_POLL,
 				Premium\FiaaCron::HOOK,
 			);
 
@@ -551,7 +552,7 @@ class Plugin {
 			);
 		}
 
-		// Posts list — dismissable featured-AI bulk modal.
+		// Posts list — featured-AI bulk modal + sticky progress dock (resume after dismiss/pagination).
 		if ( 'edit.php' === $hook ) {
 			$auto_open = isset( $_GET['sim_featured_ai'] ) && '1' === sanitize_text_field( wp_unslash( (string) $_GET['sim_featured_ai'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			$bulk_ids  = array();
@@ -559,94 +560,100 @@ class Plugin {
 				$bulk_ids = array_filter( array_map( 'absint', explode( ',', sanitize_text_field( wp_unslash( (string) $_GET['sim_featured_ids'] ) ) ) ) );
 			}
 
-			if ( $auto_open && ! empty( $bulk_ids ) ) {
-				$list_post_type = 'post';
-				if ( isset( $_GET['post_type'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-					$list_post_type = sanitize_key( wp_unslash( (string) $_GET['post_type'] ) );
-				}
-				if ( ! post_type_exists( $list_post_type ) ) {
-					$list_post_type = 'post';
-				}
-
-				wp_enqueue_style(
-					'smart-image-matcher-featured-ai-modal',
-					SMART_IMAGE_MATCHER_PLUGIN_URL . 'admin/css/sim-featured-ai-modal.css',
-					array(),
-					SMART_IMAGE_MATCHER_VERSION
-				);
-
-				wp_enqueue_script(
-					'smart-image-matcher-featured-ai-bulk-modal',
-					SMART_IMAGE_MATCHER_PLUGIN_URL . 'admin/js/src/featured-ai-bulk-modal.js',
-					array( 'wp-api-fetch' ),
-					SMART_IMAGE_MATCHER_VERSION,
-					true
-				);
-
-				wp_localize_script(
-					'smart-image-matcher-featured-ai-bulk-modal',
-					'smartImageMatcherFeaturedAiBulk',
-					array(
-						'nonce'           => wp_create_nonce( 'wp_rest' ),
-						'postIds'         => $bulk_ids,
-						'postType'        => $list_post_type,
-						'autoOpen'        => true,
-						'defaultStyle'    => (string) Settings::get( 'ai_image_style' ),
-						'generationReady' => (bool) Settings::get( 'ai_image_generation_enabled' )
-							&& \SmartImageMatcher\AI\ProviderBridge::isImageGenerationAvailable(),
-						'editPostUrl'     => admin_url( 'post.php?post=%d&action=edit' ),
-						'i18n'            => array(
-							'title'              => __( 'Generate featured images', 'smart-image-matcher' ),
-							'scanning'           => __( 'Scanning selected posts…', 'smart-image-matcher' ),
-							'scanFailed'         => __( 'Could not scan posts.', 'smart-image-matcher' ),
-							'noResults'          => __( 'None of the selected posts need a featured image.', 'smart-image-matcher' ),
-							/* translators: %d: image count */
-							'confirmGenerate'    => __( 'Generate %d featured image(s)? Time varies by model — often a few minutes each.', 'smart-image-matcher' ),
-							'generating'         => __( 'Queueing jobs…', 'smart-image-matcher' ),
-							'generateFailed'     => __( 'Could not queue jobs.', 'smart-image-matcher' ),
-							/* translators: %d: number of jobs queued */
-							'queuedNotice'       => __( '%d featured image job(s) queued. You can dismiss this dialog; generation continues in the background.', 'smart-image-matcher' ),
-							/* translators: 1: succeeded count, 2: failed count */
-							'allDone'            => __( 'Finished: %1$d succeeded, %2$d failed. Refresh the posts list to see new featured images.', 'smart-image-matcher' ),
-							/* translators: %d: succeeded count */
-							'allDoneOk'          => __( 'Finished: %d featured image(s) set. Refresh the posts list to see them.', 'smart-image-matcher' ),
-							'estimateHint'       => __( 'Usually a few minutes per image (varies by model and queue).', 'smart-image-matcher' ),
-							/* translators: %d: image count */
-							'imagesCount'        => __( '%d to generate', 'smart-image-matcher' ),
-							/* translators: 1: image count, 2: time hint */
-							'estimateWithCount'  => __( '%1$d to generate. %2$s', 'smart-image-matcher' ),
-							'dismiss'            => __( 'Dismiss', 'smart-image-matcher' ),
-							'generate'           => __( 'Generate', 'smart-image-matcher' ),
-							'scan'               => __( 'Scan', 'smart-image-matcher' ),
-							'close'              => __( 'Close', 'smart-image-matcher' ),
-							'needsFeatured'      => __( 'Missing featured image', 'smart-image-matcher' ),
-							'alreadyHasFeatured' => __( 'Already has featured image', 'smart-image-matcher' ),
-							'noThumbnailSupport' => __( 'Post type does not support featured images', 'smart-image-matcher' ),
-							'alreadyGenerated'   => __( 'Already generated for this style', 'smart-image-matcher' ),
-							'rejected'           => __( 'Previously rejected', 'smart-image-matcher' ),
-							'notFound'           => __( 'Post not found', 'smart-image-matcher' ),
-							'noPermission'       => __( 'No permission', 'smart-image-matcher' ),
-							'skippedOther'       => __( 'Skipped', 'smart-image-matcher' ),
-							'queued'             => __( 'Queued…', 'smart-image-matcher' ),
-							'processing'         => __( 'Generating…', 'smart-image-matcher' ),
-							'generated'          => __( 'Featured image set', 'smart-image-matcher' ),
-							'failed'             => __( 'Failed', 'smart-image-matcher' ),
-							'edit'               => __( 'Edit', 'smart-image-matcher' ),
-							'minute'             => __( 'minute', 'smart-image-matcher' ),
-							'minutes'            => __( 'minutes', 'smart-image-matcher' ),
-							'second'             => __( 'second', 'smart-image-matcher' ),
-							'seconds'            => __( 'seconds', 'smart-image-matcher' ),
-							/* translators: 1: completed count, 2: total count */
-							'progress'           => __( 'Completed %1$d of %2$d', 'smart-image-matcher' ),
-							'styleLabel'         => __( 'Style', 'smart-image-matcher' ),
-							'stylePhoto'         => __( 'Photo (realistic)', 'smart-image-matcher' ),
-							'styleIllustration'  => __( 'Illustration', 'smart-image-matcher' ),
-							'noApi'              => __( 'Could not load controls (wp.apiFetch missing).', 'smart-image-matcher' ),
-							'notReady'           => __( 'Enable on-demand image generation and connect an image provider under Settings → Connectors first.', 'smart-image-matcher' ),
-						),
-					)
-				);
+			$list_post_type = 'post';
+			if ( isset( $_GET['post_type'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				$list_post_type = sanitize_key( wp_unslash( (string) $_GET['post_type'] ) );
 			}
+			if ( ! post_type_exists( $list_post_type ) ) {
+				$list_post_type = 'post';
+			}
+
+			wp_enqueue_style(
+				'smart-image-matcher-featured-ai-modal',
+				SMART_IMAGE_MATCHER_PLUGIN_URL . 'admin/css/sim-featured-ai-modal.css',
+				array(),
+				SMART_IMAGE_MATCHER_VERSION
+			);
+
+			wp_enqueue_script(
+				'smart-image-matcher-featured-ai-bulk-modal',
+				SMART_IMAGE_MATCHER_PLUGIN_URL . 'admin/js/src/featured-ai-bulk-modal.js',
+				array( 'wp-api-fetch' ),
+				SMART_IMAGE_MATCHER_VERSION,
+				true
+			);
+
+			wp_localize_script(
+				'smart-image-matcher-featured-ai-bulk-modal',
+				'smartImageMatcherFeaturedAiBulk',
+				array(
+					'nonce'           => wp_create_nonce( 'wp_rest' ),
+					'postIds'         => array_values( $bulk_ids ),
+					'postType'        => $list_post_type,
+					'autoOpen'        => $auto_open && ! empty( $bulk_ids ),
+					'defaultStyle'    => (string) Settings::get( 'ai_image_style' ),
+					'generationReady' => (bool) Settings::get( 'ai_image_generation_enabled' )
+						&& \SmartImageMatcher\AI\ProviderBridge::isImageGenerationAvailable(),
+					'editPostUrl'     => admin_url( 'post.php?post=%d&action=edit' ),
+					'i18n'            => array(
+						'title'              => __( 'Generate featured images', 'smart-image-matcher' ),
+						'scanning'           => __( 'Scanning selected posts…', 'smart-image-matcher' ),
+						'scanFailed'         => __( 'Could not scan posts.', 'smart-image-matcher' ),
+						'noResults'          => __( 'None of the selected posts need a featured image.', 'smart-image-matcher' ),
+						/* translators: %d: image count */
+						'confirmGenerate'    => __( 'Generate %d featured image(s)? Time varies by model — often a few minutes each.', 'smart-image-matcher' ),
+						'generating'         => __( 'Queueing jobs…', 'smart-image-matcher' ),
+						'generateFailed'     => __( 'Could not queue jobs.', 'smart-image-matcher' ),
+						/* translators: %d: number of jobs queued */
+						'queuedNotice'       => __( '%d featured image job(s) queued. You can dismiss this dialog; progress stays visible below.', 'smart-image-matcher' ),
+						/* translators: 1: succeeded count, 2: failed count */
+						'allDone'            => __( 'Finished: %1$d succeeded, %2$d failed. Refresh the posts list to see new featured images.', 'smart-image-matcher' ),
+						/* translators: %d: succeeded count */
+						'allDoneOk'          => __( 'Finished: %d featured image(s) set. Refresh the posts list to see them.', 'smart-image-matcher' ),
+						'estimateHint'       => __( 'Usually a few minutes per image (varies by model and queue).', 'smart-image-matcher' ),
+						/* translators: %d: image count */
+						'imagesCount'        => __( '%d to generate', 'smart-image-matcher' ),
+						/* translators: 1: image count, 2: time hint */
+						'estimateWithCount'  => __( '%1$d to generate. %2$s', 'smart-image-matcher' ),
+						'dismiss'            => __( 'Dismiss', 'smart-image-matcher' ),
+						'generate'           => __( 'Generate', 'smart-image-matcher' ),
+						'scan'               => __( 'Scan', 'smart-image-matcher' ),
+						'close'              => __( 'Close', 'smart-image-matcher' ),
+						'needsFeatured'      => __( 'Missing featured image', 'smart-image-matcher' ),
+						'alreadyHasFeatured' => __( 'Already has featured image', 'smart-image-matcher' ),
+						'noThumbnailSupport' => __( 'Post type does not support featured images', 'smart-image-matcher' ),
+						'alreadyGenerated'   => __( 'Already generated for this style', 'smart-image-matcher' ),
+						'rejected'           => __( 'Previously rejected', 'smart-image-matcher' ),
+						'notFound'           => __( 'Post not found', 'smart-image-matcher' ),
+						'noPermission'       => __( 'No permission', 'smart-image-matcher' ),
+						'skippedOther'       => __( 'Skipped', 'smart-image-matcher' ),
+						'queued'             => __( 'Queued…', 'smart-image-matcher' ),
+						'processing'         => __( 'Generating…', 'smart-image-matcher' ),
+						'generated'          => __( 'Featured image set', 'smart-image-matcher' ),
+						'failed'             => __( 'Failed', 'smart-image-matcher' ),
+						'edit'               => __( 'Edit', 'smart-image-matcher' ),
+						'minute'             => __( 'minute', 'smart-image-matcher' ),
+						'minutes'            => __( 'minutes', 'smart-image-matcher' ),
+						'second'             => __( 'second', 'smart-image-matcher' ),
+						'seconds'            => __( 'seconds', 'smart-image-matcher' ),
+						/* translators: 1: completed count, 2: total count */
+						'progress'           => __( 'Completed %1$d of %2$d', 'smart-image-matcher' ),
+						'styleLabel'         => __( 'Style', 'smart-image-matcher' ),
+						'stylePhoto'         => __( 'Photo (realistic)', 'smart-image-matcher' ),
+						'styleIllustration'  => __( 'Illustration', 'smart-image-matcher' ),
+						'noApi'              => __( 'Could not load controls (wp.apiFetch missing).', 'smart-image-matcher' ),
+						'notReady'           => __( 'Enable on-demand image generation and connect an image provider under Settings → Connectors first.', 'smart-image-matcher' ),
+						'dockTitle'          => __( 'Featured image generation', 'smart-image-matcher' ),
+						/* translators: %d: remaining job count */
+						'dockRemaining'      => __( '%d remaining', 'smart-image-matcher' ),
+						'dockExpand'         => __( 'Show details', 'smart-image-matcher' ),
+						'dockCollapse'       => __( 'Hide details', 'smart-image-matcher' ),
+						'dockReopen'         => __( 'Open dialog', 'smart-image-matcher' ),
+						'dockHide'           => __( 'Hide', 'smart-image-matcher' ),
+						'untitled'           => __( 'Untitled', 'smart-image-matcher' ),
+					),
+				)
+			);
 		}
 	}
 

@@ -721,14 +721,20 @@ class JobRunner {
 	}
 
 	/**
-	 * Run an on-demand AI image generation job.
+	 * Run an on-demand AI image generation job (brief + fal submit, or sync fallback).
+	 *
+	 * Accepts either:
+	 * - New: (int $post_id, string $heading_hash) with payload in a transient
+	 * - Legacy: (array $payload) from pre-3.2.18 AS actions still in the queue
 	 *
 	 * @since 3.1.1
-	 * @param array<string, mixed> $payload Job payload from Queue::enqueueAiImageGen().
+	 * @param mixed $arg1 Payload array or post ID.
+	 * @param mixed $arg2 Heading hash when using stable args.
 	 * @return void
 	 */
-	public static function runAiImageGenJob( $payload ): void {
-		if ( ! is_array( $payload ) ) {
+	public static function runAiImageGenJob( $arg1, $arg2 = null ): void {
+		$payload = self::resolveAiImageGenPayload( $arg1, $arg2 );
+		if ( null === $payload ) {
 			Logger::error( 'JobRunner: AI image gen payload invalid' );
 			return;
 		}
@@ -763,7 +769,63 @@ class JobRunner {
 		);
 
 		$generator = new \SmartImageMatcher\Premium\AiImageGenerator();
-		$result    = $generator->generateForHeading(
+
+		if ( \SmartImageMatcher\AI\ProviderBridge::supportsAsyncImageQueue() ) {
+			$result = $generator->submitForHeading(
+				$heading_hash,
+				$heading_text,
+				$section_text,
+				$post_id,
+				$focus_keyword,
+				$style,
+				$force
+			);
+
+			if ( is_wp_error( $result ) ) {
+				self::markAiImageGenFailed( $post_id, $heading_hash, $result->get_error_message() );
+				return;
+			}
+
+			if ( is_int( $result ) ) {
+				self::markAiImageGenDone( $post_id, $heading_hash, $result );
+				return;
+			}
+
+			$fal     = isset( $result['fal'] ) && is_array( $result['fal'] ) ? $result['fal'] : array();
+			$context = isset( $result['context'] ) && is_array( $result['context'] ) ? $result['context'] : array();
+
+			\SmartImageMatcher\Premium\AiImageGenerator::setStatus(
+				$post_id,
+				$heading_hash,
+				array(
+					'status'       => 'submitted',
+					'request_id'   => (string) ( $fal['request_id'] ?? '' ),
+					'fal'          => $fal,
+					'context'      => $context,
+					'submitted_at' => time(),
+				)
+			);
+
+			$poll_id = ( new Queue() )->enqueueAiImageGenPoll( $post_id, $heading_hash );
+			if ( ! $poll_id ) {
+				self::markAiImageGenFailed(
+					$post_id,
+					$heading_hash,
+					__( 'Could not schedule fal poll job.', 'smart-image-matcher' )
+				);
+			}
+
+			Logger::info(
+				'JobRunner: AI image gen submitted to fal',
+				array(
+					'post_id'    => $post_id,
+					'request_id' => $fal['request_id'] ?? '',
+				)
+			);
+			return;
+		}
+
+		$result = $generator->generateForHeading(
 			$heading_hash,
 			$heading_text,
 			$section_text,
@@ -774,25 +836,164 @@ class JobRunner {
 		);
 
 		if ( is_wp_error( $result ) ) {
-			\SmartImageMatcher\Premium\AiImageGenerator::setStatus(
+			self::markAiImageGenFailed( $post_id, $heading_hash, $result->get_error_message() );
+			return;
+		}
+
+		self::markAiImageGenDone( $post_id, $heading_hash, (int) $result );
+	}
+
+	/**
+	 * Poll fal for a submitted image; re-queue until complete or deadline.
+	 *
+	 * @since 3.2.18
+	 * @param mixed $arg1 Post ID.
+	 * @param mixed $arg2 Heading hash.
+	 * @return void
+	 */
+	public static function runAiImageGenPollJob( $arg1, $arg2 = null ): void {
+		$post_id      = absint( $arg1 );
+		$heading_hash = sanitize_text_field( (string) $arg2 );
+
+		if ( $post_id <= 0 || '' === $heading_hash ) {
+			Logger::error( 'JobRunner: AI image gen poll missing ids' );
+			return;
+		}
+
+		$status = \SmartImageMatcher\Premium\AiImageGenerator::getStatus( $post_id, $heading_hash );
+		if ( ! is_array( $status ) || empty( $status['fal'] ) || ! is_array( $status['fal'] ) ) {
+			self::markAiImageGenFailed(
 				$post_id,
 				$heading_hash,
-				array(
-					'status' => 'failed',
-					'error'  => $result->get_error_message(),
-				)
-			);
-			Logger::warn(
-				'JobRunner: AI image gen failed',
-				array(
-					'post_id' => $post_id,
-					'error'   => $result->get_error_message(),
-				)
+				__( 'Missing fal tracking data for poll.', 'smart-image-matcher' )
 			);
 			return;
 		}
 
-		$attachment_id  = (int) $result;
+		$fal          = $status['fal'];
+		$request_id   = (string) ( $fal['request_id'] ?? '' );
+		$status_url   = (string) ( $fal['status_url'] ?? '' );
+		$response_url = (string) ( $fal['response_url'] ?? '' );
+		$submitted_at = isset( $status['submitted_at'] ) ? (int) $status['submitted_at'] : time();
+
+		if ( '' === $status_url || '' === $response_url ) {
+			self::markAiImageGenFailed(
+				$post_id,
+				$heading_hash,
+				__( 'Invalid fal tracking URLs.', 'smart-image-matcher' )
+			);
+			return;
+		}
+
+		if ( ( time() - $submitted_at ) > Queue::AI_IMAGE_POLL_DEADLINE ) {
+			self::markAiImageGenFailed(
+				$post_id,
+				$heading_hash,
+				__( 'Timed out waiting for fal.ai to finish the image.', 'smart-image-matcher' )
+			);
+			return;
+		}
+
+		$queue_status = \SmartImageMatcher\AI\ProviderBridge::pollImageStatus( $status_url, $request_id );
+		if ( is_wp_error( $queue_status ) ) {
+			self::markAiImageGenFailed( $post_id, $heading_hash, $queue_status->get_error_message() );
+			return;
+		}
+
+		if ( 'COMPLETED' !== $queue_status ) {
+			( new Queue() )->enqueueAiImageGenPoll( $post_id, $heading_hash );
+			return;
+		}
+
+		$source = \SmartImageMatcher\AI\ProviderBridge::fetchImageSource( $response_url );
+		if ( is_wp_error( $source ) ) {
+			self::markAiImageGenFailed( $post_id, $heading_hash, $source->get_error_message() );
+			return;
+		}
+
+		$context   = isset( $status['context'] ) && is_array( $status['context'] ) ? $status['context'] : array();
+		$generator = new \SmartImageMatcher\Premium\AiImageGenerator();
+		$result    = $generator->finalizeFromSource( $source, $context );
+
+		if ( is_wp_error( $result ) ) {
+			self::markAiImageGenFailed( $post_id, $heading_hash, $result->get_error_message() );
+			return;
+		}
+
+		self::markAiImageGenDone( $post_id, $heading_hash, (int) $result );
+	}
+
+	/**
+	 * Normalize AI image gen job args (legacy full payload vs stable ids).
+	 *
+	 * @since 3.2.18
+	 * @param mixed $arg1 First AS arg.
+	 * @param mixed $arg2 Second AS arg.
+	 * @return array<string, mixed>|null
+	 */
+	private static function resolveAiImageGenPayload( $arg1, $arg2 ): ?array {
+		if ( is_array( $arg1 ) ) {
+			if ( isset( $arg1['payload'] ) && is_array( $arg1['payload'] ) ) {
+				return $arg1['payload'];
+			}
+			if ( isset( $arg1['post_id'], $arg1['heading_hash'] ) ) {
+				if ( isset( $arg1['heading_text'] ) || isset( $arg1['section_text'] ) ) {
+					return $arg1;
+				}
+				$post_id      = absint( $arg1['post_id'] );
+				$heading_hash = sanitize_text_field( (string) $arg1['heading_hash'] );
+				return \SmartImageMatcher\Premium\AiImageGenerator::getJobPayload( $post_id, $heading_hash );
+			}
+			return null;
+		}
+
+		$post_id      = absint( $arg1 );
+		$heading_hash = sanitize_text_field( (string) $arg2 );
+		if ( $post_id <= 0 || '' === $heading_hash ) {
+			return null;
+		}
+
+		return \SmartImageMatcher\Premium\AiImageGenerator::getJobPayload( $post_id, $heading_hash );
+	}
+
+	/**
+	 * Persist failed status and clear job payload.
+	 *
+	 * @since 3.2.18
+	 * @param int    $post_id      Post ID.
+	 * @param string $heading_hash Heading hash.
+	 * @param string $message      Error message.
+	 * @return void
+	 */
+	private static function markAiImageGenFailed( int $post_id, string $heading_hash, string $message ): void {
+		\SmartImageMatcher\Premium\AiImageGenerator::setStatus(
+			$post_id,
+			$heading_hash,
+			array(
+				'status' => 'failed',
+				'error'  => $message,
+			)
+		);
+		\SmartImageMatcher\Premium\AiImageGenerator::clearJobPayload( $post_id, $heading_hash );
+		Logger::warn(
+			'JobRunner: AI image gen failed',
+			array(
+				'post_id' => $post_id,
+				'error'   => $message,
+			)
+		);
+	}
+
+	/**
+	 * Persist done status, set featured thumbnail when appropriate, clear payload.
+	 *
+	 * @since 3.2.18
+	 * @param int    $post_id       Post ID.
+	 * @param string $heading_hash  Heading hash.
+	 * @param int    $attachment_id Attachment ID.
+	 * @return void
+	 */
+	private static function markAiImageGenDone( int $post_id, string $heading_hash, int $attachment_id ): void {
 		$attachment_url = (string) wp_get_attachment_url( $attachment_id );
 		$prompt         = (string) get_post_meta( $attachment_id, '_sim_generated_prompt', true );
 
@@ -815,6 +1016,8 @@ class JobRunner {
 				'filename'       => basename( (string) get_attached_file( $attachment_id ) ),
 			)
 		);
+
+		\SmartImageMatcher\Premium\AiImageGenerator::clearJobPayload( $post_id, $heading_hash );
 
 		Logger::info(
 			'JobRunner: AI image gen done',

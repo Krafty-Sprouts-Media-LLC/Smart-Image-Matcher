@@ -97,6 +97,22 @@ class AutoMatchOnPublish {
 		$focus   = PromptBuilder::getFocusKeyword( $post->ID );
 		$excerpt = PromptBuilder::buildPostContext( $post );
 
+		if ( AiImageGenerator::isInFlight( $post->ID, 'featured' ) ) {
+			Logger::info(
+				'AutoMatchOnPublish: featured AI gen already in flight',
+				array( 'post_id' => $post->ID )
+			);
+			return;
+		}
+
+		AiImageGenerator::setStatus(
+			$post->ID,
+			'featured',
+			array(
+				'status' => 'queued',
+			)
+		);
+
 		$job_id = ( new Queue() )->enqueueAiImageGen(
 			array(
 				'heading_hash'  => 'featured',
@@ -110,6 +126,14 @@ class AutoMatchOnPublish {
 		);
 
 		if ( null === $job_id ) {
+			AiImageGenerator::setStatus(
+				$post->ID,
+				'featured',
+				array(
+					'status' => 'failed',
+					'error'  => __( 'Could not enqueue image generation.', 'smart-image-matcher' ),
+				)
+			);
 			Logger::warn(
 				'AutoMatchOnPublish: failed to enqueue featured image generation',
 				array( 'post_id' => $post->ID )

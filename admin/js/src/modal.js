@@ -650,7 +650,7 @@
 
 	async function pollGenerateStatus( pollUrl, hash ) {
 		let attempts = 0;
-		const maxAttempts = 20; // 20 × 3 s = 60 s
+		const maxAttempts = 100; // 100 × 3 s ≈ 5 min (fal queue can be slow)
 
 		return new Promise( function( resolve, reject ) {
 			const timer = setInterval( async function() {

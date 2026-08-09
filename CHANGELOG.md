@@ -7,6 +7,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.2.19] - 09/08/2026
+
+### Improved
+
+- After dismissing the posts-list featured AI modal, a sticky progress dock stays on screen with per-post status (queued / generating / done / failed), remaining count, Edit links, and “Open dialog”. Progress also resumes after list pagination via sessionStorage.
+
+## [3.2.18] - 09/08/2026
+
+### Added
+
+- Server-side “already queued” guard for AI image generation (status + pending Action Scheduler start/poll actions) so a second Generate cannot double-charge fal.
+- Submit/poll pipeline: start jobs build the brief and submit to fal, then short poll jobs finish sideload — large batches can run many fal jobs in parallel. Requires **AI Provider for fal.ai 1.1.8+** (`FalQueueClient`); older fal falls back to the previous blocking generate path.
+- Upgrade-safe job runner: pending pre-3.2.18 AS actions (full payload in args) still complete; in-flight PHP workers finish with the code loaded for that request.
+
+### Improved
+
+- Modal generate status polling waits up to ~5 minutes (was ~60s) to match fal queue times.
+
 ## [3.2.17] - 07/08/2026
 
 ### Fixed

@@ -1,6 +1,9 @@
 /**
  * featured-ai-bulk-modal.js — Posts list dismissable modal for featured AI generate.
  *
+ * After dismiss, a sticky dock keeps per-post progress visible and resumes after
+ * pagination via sessionStorage.
+ *
  * @package SmartImageMatcher
  * @since   3.2.3
  */
@@ -17,6 +20,7 @@
 	const generationReady = !! config.generationReady;
 	const defaultStyle = config.defaultStyle === 'illustration' ? 'illustration' : 'photo';
 	const editPostUrl = config.editPostUrl || 'post.php?post=%d&action=edit';
+	const BATCH_STORAGE_KEY = 'sim_featured_ai_batch';
 
 	const i18n = Object.assign( {
 		title: 'Generate featured images',
@@ -26,7 +30,7 @@
 		confirmGenerate: 'Generate %d featured image(s)? Time varies by model — often a few minutes each.',
 		generating: 'Queueing jobs…',
 		generateFailed: 'Could not queue jobs.',
-		queuedNotice: '%d featured image job(s) queued. You can dismiss this dialog; generation continues in the background.',
+		queuedNotice: '%d featured image job(s) queued. You can dismiss this dialog; progress stays visible below.',
 		allDone: 'Finished: %1$d succeeded, %2$d failed. Refresh the posts list to see new featured images.',
 		allDoneOk: 'Finished: %d featured image(s) set. Refresh the posts list to see them.',
 		estimateHint: 'Usually a few minutes per image (varies by model and queue).',
@@ -59,6 +63,13 @@
 		styleIllustration: 'Illustration',
 		noApi: 'Could not load controls (wp.apiFetch missing).',
 		notReady: 'Enable on-demand image generation and connect an image provider first.',
+		dockTitle: 'Featured image generation',
+		dockRemaining: '%d remaining',
+		dockExpand: 'Show details',
+		dockCollapse: 'Hide details',
+		dockReopen: 'Open dialog',
+		dockHide: 'Hide',
+		untitled: 'Untitled',
 	}, config.i18n || {} );
 
 	if ( apiFetch && apiFetch.createNonceMiddleware && nonce ) {
@@ -66,13 +77,16 @@
 	}
 
 	let modal = null;
+	let dock = null;
 	let scanResult = null;
 	let activeJobs = [];
+	let jobMeta = {};
 	let pollTotal = 0;
 	let succeededCount = 0;
 	let failedCount = 0;
 	let pollTimer = null;
 	let dismissed = false;
+	let dockExpanded = true;
 	const handledStorageKey = 'sim_featured_ai_handled_' + postIds.slice().sort( ( a, b ) => a - b ).join( ',' );
 
 	function wasBatchHandled() {
@@ -108,15 +122,6 @@
 				const value = args[ i++ ];
 				return null === value || undefined === value ? '' : String( value );
 			} );
-	}
-
-	function formatDuration( seconds ) {
-		const total = Math.max( 0, parseInt( seconds || 0, 10 ) );
-		if ( total < 60 ) {
-			return `${ total } ${ total === 1 ? i18n.second : i18n.seconds }`;
-		}
-		const mins = Math.round( total / 60 );
-		return `${ mins } ${ mins === 1 ? i18n.minute : i18n.minutes }`;
 	}
 
 	function reasonLabel( reason ) {
@@ -169,6 +174,26 @@
 		}
 	}
 
+	function postTitle( postId ) {
+		const meta = jobMeta[ String( postId ) ];
+		if ( meta && meta.title ) {
+			return meta.title;
+		}
+		return i18n.untitled + ' #' + postId;
+	}
+
+	function setJobStatus( postId, label ) {
+		const key = String( postId );
+		if ( ! jobMeta[ key ] ) {
+			jobMeta[ key ] = { title: postTitle( postId ), status: label };
+		} else {
+			jobMeta[ key ].status = label;
+		}
+		setRowStatus( postId, label );
+		renderDock();
+		persistBatch();
+	}
+
 	function setRowStatus( postId, label ) {
 		if ( ! modal ) {
 			return;
@@ -176,6 +201,188 @@
 		const cell = modal.querySelector( `[data-sim-post-status="${ postId }"]` );
 		if ( cell ) {
 			cell.textContent = label;
+		}
+	}
+
+	function persistBatch() {
+		try {
+			const jobs = [];
+			Object.keys( jobMeta ).forEach( ( id ) => {
+				const meta = jobMeta[ id ];
+				const stillActive = activeJobs.some( ( j ) => String( j.post_id ) === id );
+				jobs.push( {
+					post_id: parseInt( id, 10 ),
+					heading_hash: 'featured',
+					title: meta.title || '',
+					status: meta.status || i18n.queued,
+					active: stillActive,
+				} );
+			} );
+
+			if ( ! jobs.length ) {
+				window.sessionStorage.removeItem( BATCH_STORAGE_KEY );
+				return;
+			}
+
+			window.sessionStorage.setItem(
+				BATCH_STORAGE_KEY,
+				JSON.stringify( {
+					jobs,
+					pollTotal,
+					succeededCount,
+					failedCount,
+					dockExpanded,
+					updatedAt: Date.now(),
+				} )
+			);
+		} catch ( e ) {
+			// Ignore.
+		}
+	}
+
+	function clearBatchStorage() {
+		try {
+			window.sessionStorage.removeItem( BATCH_STORAGE_KEY );
+		} catch ( e ) {
+			// Ignore.
+		}
+	}
+
+	function loadStoredBatch() {
+		try {
+			const raw = window.sessionStorage.getItem( BATCH_STORAGE_KEY );
+			if ( ! raw ) {
+				return null;
+			}
+			const data = JSON.parse( raw );
+			if ( ! data || ! Array.isArray( data.jobs ) || ! data.jobs.length ) {
+				return null;
+			}
+			// Stale after 2 hours.
+			if ( data.updatedAt && ( Date.now() - data.updatedAt ) > 2 * 60 * 60 * 1000 ) {
+				clearBatchStorage();
+				return null;
+			}
+			return data;
+		} catch ( e ) {
+			return null;
+		}
+	}
+
+	function ensureDock() {
+		if ( dock ) {
+			return dock;
+		}
+
+		dock = document.createElement( 'div' );
+		dock.id = 'sim-featured-ai-dock';
+		dock.className = 'sim-featured-ai-dock';
+		dock.setAttribute( 'role', 'status' );
+		dock.setAttribute( 'aria-live', 'polite' );
+		dock.innerHTML = `
+			<div class="sim-featured-ai-dock__header">
+				<strong class="sim-featured-ai-dock__title">${ escHtml( i18n.dockTitle ) }</strong>
+				<div class="sim-featured-ai-dock__actions">
+					<button type="button" class="button-link" id="sim-featured-ai-dock-toggle">${ escHtml( i18n.dockCollapse ) }</button>
+					<button type="button" class="button-link" id="sim-featured-ai-dock-reopen">${ escHtml( i18n.dockReopen ) }</button>
+					<button type="button" class="button-link" id="sim-featured-ai-dock-hide">${ escHtml( i18n.dockHide ) }</button>
+				</div>
+			</div>
+			<p class="sim-featured-ai-dock__summary" id="sim-featured-ai-dock-summary"></p>
+			<ul class="sim-featured-ai-dock__list" id="sim-featured-ai-dock-list"></ul>
+		`;
+		document.body.appendChild( dock );
+
+		const toggle = dock.querySelector( '#sim-featured-ai-dock-toggle' );
+		const reopen = dock.querySelector( '#sim-featured-ai-dock-reopen' );
+		const hide = dock.querySelector( '#sim-featured-ai-dock-hide' );
+
+		if ( toggle ) {
+			toggle.addEventListener( 'click', () => {
+				dockExpanded = ! dockExpanded;
+				renderDock();
+				persistBatch();
+			} );
+		}
+		if ( reopen ) {
+			reopen.addEventListener( 'click', () => {
+				openModal( false );
+			} );
+		}
+		if ( hide ) {
+			hide.addEventListener( 'click', () => {
+				if ( activeJobs.length ) {
+					dock.style.display = 'none';
+					return;
+				}
+				hideDock( true );
+			} );
+		}
+
+		return dock;
+	}
+
+	function hideDock( clearStorage ) {
+		if ( dock ) {
+			dock.style.display = 'none';
+		}
+		if ( clearStorage ) {
+			clearBatchStorage();
+		}
+	}
+
+	function showDock() {
+		ensureDock();
+		dock.style.display = 'block';
+		renderDock();
+	}
+
+	function renderDock() {
+		if ( ! dock || dock.style.display === 'none' ) {
+			return;
+		}
+
+		const finished = succeededCount + failedCount;
+		const remaining = activeJobs.length;
+		const summary = dock.querySelector( '#sim-featured-ai-dock-summary' );
+		const list = dock.querySelector( '#sim-featured-ai-dock-list' );
+		const toggle = dock.querySelector( '#sim-featured-ai-dock-toggle' );
+		const reopen = dock.querySelector( '#sim-featured-ai-dock-reopen' );
+
+		if ( summary ) {
+			let text = sprintf( i18n.progress, finished, pollTotal || finished );
+			if ( remaining > 0 ) {
+				text += ' — ' + sprintf( i18n.dockRemaining, remaining );
+			} else if ( failedCount > 0 ) {
+				text = sprintf( i18n.allDone, succeededCount, failedCount );
+			} else if ( finished > 0 ) {
+				text = sprintf( i18n.allDoneOk, succeededCount );
+			}
+			summary.textContent = text;
+		}
+
+		if ( toggle ) {
+			toggle.textContent = dockExpanded ? i18n.dockCollapse : i18n.dockExpand;
+		}
+		if ( reopen ) {
+			reopen.style.display = dismissed ? '' : 'none';
+		}
+
+		if ( list ) {
+			list.style.display = dockExpanded ? '' : 'none';
+			const ids = Object.keys( jobMeta ).sort( ( a, b ) => parseInt( a, 10 ) - parseInt( b, 10 ) );
+			list.innerHTML = ids.map( ( id ) => {
+				const meta = jobMeta[ id ];
+				const editUrl = editPostUrl.replace( '%d', id );
+				const status = meta.status || i18n.queued;
+				let statusClass = 'is-pending';
+				if ( status === i18n.generated ) {
+					statusClass = 'is-done';
+				} else if ( 0 === status.indexOf( i18n.failed ) ) {
+					statusClass = 'is-failed';
+				}
+				return `<li class="sim-featured-ai-dock__item ${ statusClass }"><span class="sim-featured-ai-dock__item-title">${ escHtml( meta.title || ( '#' + id ) ) }</span><span class="sim-featured-ai-dock__item-status">${ escHtml( status ) }</span><a class="sim-featured-ai-dock__item-edit" href="${ escHtml( editUrl ) }" target="_blank" rel="noopener noreferrer">${ escHtml( i18n.edit ) }</a></li>`;
+			} ).join( '' );
 		}
 	}
 
@@ -213,9 +420,9 @@
 					<table class="widefat striped" id="sim-featured-ai-table" style="display:none">
 						<thead>
 							<tr>
-								<th>${ escHtml( 'Post' ) }</th>
-								<th>${ escHtml( 'Status' ) }</th>
-								<th>${ escHtml( i18n.edit ) }</th>
+								<th>${ escHtml( i18n.title ) }</th>
+								<th>${ escHtml( i18n.processing ) }</th>
+								<th></th>
 							</tr>
 						</thead>
 						<tbody id="sim-featured-ai-tbody"></tbody>
@@ -225,8 +432,8 @@
 				<div class="sim-featured-ai-modal__footer">
 					<button type="button" class="button" data-sim-dismiss="1">${ escHtml( i18n.dismiss ) }</button>
 				</div>
-			</div>`;
-
+			</div>
+		`;
 		document.body.appendChild( modal );
 
 		const styleSelect = modal.querySelector( '#sim-featured-ai-style' );
@@ -262,17 +469,50 @@
 			: '';
 	}
 
-	function openModal() {
+	/**
+	 * @param {boolean} runInitialScan Whether to scan selected posts (URL auto-open).
+	 */
+	function openModal( runInitialScan ) {
 		dismissed = false;
 		ensureModal();
+		syncModalTableFromMeta();
 		modal.style.display = 'flex';
 		document.body.classList.add( 'sim-featured-ai-modal-open' );
+		updateProgress();
+
+		if ( false === runInitialScan ) {
+			return;
+		}
+
 		cleanUrl();
 		if ( generationReady && postIds.length ) {
 			runScan();
 		} else if ( ! generationReady ) {
 			showNotice( 'warning', i18n.notReady );
 		}
+	}
+
+	function syncModalTableFromMeta() {
+		if ( ! modal || ! Object.keys( jobMeta ).length ) {
+			return;
+		}
+
+		const table = modal.querySelector( '#sim-featured-ai-table' );
+		const tbody = modal.querySelector( '#sim-featured-ai-tbody' );
+		if ( ! table || ! tbody ) {
+			return;
+		}
+
+		const rows = Object.keys( jobMeta )
+			.sort( ( a, b ) => parseInt( a, 10 ) - parseInt( b, 10 ) )
+			.map( ( id ) => {
+				const meta = jobMeta[ id ];
+				const editUrl = editPostUrl.replace( '%d', id );
+				return `<tr data-sim-post-id="${ escHtml( id ) }"><td>${ escHtml( meta.title || ( '#' + id ) ) }</td><td data-sim-post-status="${ escHtml( id ) }">${ escHtml( meta.status || i18n.queued ) }</td><td><a href="${ escHtml( editUrl ) }" target="_blank" rel="noopener noreferrer">${ escHtml( i18n.edit ) }</a></td></tr>`;
+			} );
+
+		tbody.innerHTML = rows.join( '' );
+		table.style.display = rows.length ? '' : 'none';
 	}
 
 	function closeModal() {
@@ -283,6 +523,11 @@
 			modal.style.display = 'none';
 		}
 		document.body.classList.remove( 'sim-featured-ai-modal-open' );
+
+		if ( Object.keys( jobMeta ).length ) {
+			showDock();
+			persistBatch();
+		}
 	}
 
 	function renderResults( result ) {
@@ -374,6 +619,7 @@
 			progress.style.display = 'block';
 			progress.textContent = sprintf( i18n.progress, finished, pollTotal );
 		}
+		renderDock();
 	}
 
 	async function pollJobs() {
@@ -393,14 +639,14 @@
 
 				if ( isTerminalSuccess( state ) ) {
 					++succeededCount;
-					setRowStatus( job.post_id, i18n.generated );
+					setJobStatus( job.post_id, i18n.generated );
 				} else if ( isTerminalFailure( state ) ) {
 					++failedCount;
 					const err = status.error ? `${ i18n.failed }: ${ status.error }` : i18n.failed;
-					setRowStatus( job.post_id, err );
+					setJobStatus( job.post_id, err );
 				} else {
-					if ( 'processing' === state ) {
-						setRowStatus( job.post_id, i18n.processing );
+					if ( 'processing' === state || 'submitted' === state || 'queued' === state ) {
+						setJobStatus( job.post_id, i18n.processing );
 					}
 					still.push( job );
 				}
@@ -411,15 +657,18 @@
 
 		activeJobs = still;
 		updateProgress();
+		persistBatch();
 
 		if ( ! activeJobs.length ) {
-			if ( dismissed ) {
-				return;
-			}
-			if ( failedCount > 0 ) {
-				showNotice( 'warning', sprintf( i18n.allDone, succeededCount, failedCount ) );
+			persistBatch();
+			if ( ! dismissed ) {
+				if ( failedCount > 0 ) {
+					showNotice( 'warning', sprintf( i18n.allDone, succeededCount, failedCount ) );
+				} else {
+					showNotice( 'success', sprintf( i18n.allDoneOk, succeededCount ) );
+				}
 			} else {
-				showNotice( 'success', sprintf( i18n.allDoneOk, succeededCount ) );
+				showDock();
 			}
 			return;
 		}
@@ -464,15 +713,27 @@
 			pollTotal = activeJobs.length;
 			succeededCount = 0;
 			failedCount = 0;
+			jobMeta = {};
 
-			activeJobs.forEach( job => setRowStatus( job.post_id, i18n.queued ) );
+			( scanResult.posts || [] ).forEach( ( post ) => {
+				jobMeta[ String( post.id ) ] = {
+					title: post.title || ( '#' + post.id ),
+					status: i18n.queued,
+				};
+			} );
+
+			activeJobs.forEach( job => setJobStatus( job.post_id, i18n.queued ) );
 
 			showNotice( 'success', sprintf( i18n.queuedNotice, queued ) );
 			updateProgress();
 			markBatchHandled();
 			cleanUrl();
+			persistBatch();
 
 			if ( activeJobs.length ) {
+				if ( pollTimer ) {
+					window.clearTimeout( pollTimer );
+				}
 				pollJobs();
 			}
 		} catch ( err ) {
@@ -484,20 +745,91 @@
 		}
 	}
 
+	function resumeStoredBatch() {
+		const data = loadStoredBatch();
+		if ( ! data || ! apiFetch ) {
+			return false;
+		}
+
+		jobMeta = {};
+		activeJobs = [];
+		pollTotal = parseInt( data.pollTotal || data.jobs.length, 10 ) || data.jobs.length;
+		succeededCount = parseInt( data.succeededCount || 0, 10 );
+		failedCount = parseInt( data.failedCount || 0, 10 );
+		dockExpanded = false !== data.dockExpanded;
+
+		data.jobs.forEach( ( job ) => {
+			const id = String( job.post_id );
+			jobMeta[ id ] = {
+				title: job.title || ( '#' + job.post_id ),
+				status: job.status || i18n.queued,
+			};
+			const st = jobMeta[ id ].status;
+			const terminal = st === i18n.generated || 0 === st.indexOf( i18n.failed );
+			if ( ! terminal ) {
+				activeJobs.push( {
+					post_id: job.post_id,
+					heading_hash: job.heading_hash || 'featured',
+				} );
+			}
+		} );
+
+		// Re-count terminals from stored statuses if counters look stale.
+		let ok = 0;
+		let bad = 0;
+		Object.keys( jobMeta ).forEach( ( id ) => {
+			const st = jobMeta[ id ].status || '';
+			if ( st === i18n.generated ) {
+				++ok;
+			} else if ( st.indexOf( i18n.failed ) === 0 ) {
+				++bad;
+			}
+		} );
+		if ( ok + bad > succeededCount + failedCount ) {
+			succeededCount = ok;
+			failedCount = bad;
+		}
+
+		dismissed = true;
+		showDock();
+
+		if ( activeJobs.length ) {
+			if ( pollTimer ) {
+				window.clearTimeout( pollTimer );
+			}
+			pollJobs();
+		}
+
+		return true;
+	}
+
 	function boot() {
+		if ( ! apiFetch ) {
+			if ( autoOpen && postIds.length ) {
+				window.alert( i18n.noApi );
+			}
+			return;
+		}
+
+		// Resume in-flight batch on any posts-list load (pagination / refresh).
+		const resumed = resumeStoredBatch();
+
 		if ( ! autoOpen || ! postIds.length ) {
 			return;
 		}
-		// Pagination links can still carry one-shot args after replaceState; skip if already handled.
+
 		if ( wasBatchHandled() ) {
 			cleanUrl();
 			return;
 		}
-		if ( ! apiFetch ) {
-			window.alert( i18n.noApi );
+
+		// Prefer not stacking a new modal on top of an already-running batch.
+		if ( resumed && activeJobs.length ) {
+			cleanUrl();
 			return;
 		}
-		openModal();
+
+		openModal( true );
 	}
 
 	if ( 'loading' === document.readyState ) {

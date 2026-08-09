@@ -589,6 +589,11 @@ class ImageGenController extends Controller {
 				continue;
 			}
 
+			if ( AiImageGenerator::isInFlight( $post_id, $heading_hash ) ) {
+				++$skipped;
+				continue;
+			}
+
 			AiImageGenerator::setStatus(
 				$post_id,
 				$heading_hash,
@@ -610,6 +615,14 @@ class ImageGenController extends Controller {
 			);
 
 			if ( ! $job_id ) {
+				AiImageGenerator::setStatus(
+					$post_id,
+					$heading_hash,
+					array(
+						'status' => 'failed',
+						'error'  => __( 'Could not enqueue image generation.', 'smart-image-matcher' ),
+					)
+				);
 				++$skipped;
 				continue;
 			}
@@ -707,6 +720,24 @@ class ImageGenController extends Controller {
 					)
 				);
 			}
+
+			if ( AiImageGenerator::isInFlight( $post_id, $heading_hash ) ) {
+				return rest_ensure_response(
+					array(
+						'status'       => 'queued',
+						'heading_hash' => $heading_hash,
+						'already'      => true,
+						'message'      => __( 'A generation job is already queued or running for this heading.', 'smart-image-matcher' ),
+						'poll_url'     => add_query_arg(
+							array(
+								'post_id'      => $post_id,
+								'heading_hash' => $heading_hash,
+							),
+							rest_url( self::NAMESPACE . '/generate-image/status' )
+						),
+					)
+				);
+			}
 		}
 
 		if ( ! Queue::isAvailable() ) {
@@ -738,6 +769,25 @@ class ImageGenController extends Controller {
 		);
 
 		if ( ! $job_id ) {
+			// Race: another request claimed the unique AS slot after our check.
+			if ( AiImageGenerator::isInFlight( $post_id, $heading_hash ) ) {
+				return rest_ensure_response(
+					array(
+						'status'       => 'queued',
+						'heading_hash' => $heading_hash,
+						'already'      => true,
+						'message'      => __( 'A generation job is already queued or running for this heading.', 'smart-image-matcher' ),
+						'poll_url'     => add_query_arg(
+							array(
+								'post_id'      => $post_id,
+								'heading_hash' => $heading_hash,
+							),
+							rest_url( self::NAMESPACE . '/generate-image/status' )
+						),
+					)
+				);
+			}
+
 			return new \WP_Error(
 				'smart_image_matcher_enqueue_failed',
 				__( 'Could not enqueue image generation.', 'smart-image-matcher' ),

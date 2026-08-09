@@ -4,7 +4,7 @@ Tags: images, media library, alt text, featured image, automation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 3.2.17
+Stable tag: 3.2.19
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -95,6 +95,14 @@ No AI data is sent automatically — only when you explicitly trigger AI matchin
 The plugin stores match results and job metadata in your own database only. Update checks may contact GitHub (see External services). No post content leaves your server unless you explicitly use AI features with a configured provider.
 
 == Changelog ==
+
+= 3.2.19 =
+* Sticky progress dock after dismissing the posts-list featured AI modal (per-post status; resumes on pagination).
+
+= 3.2.18 =
+* Blocks duplicate AI Generate while a job is already queued/processing.
+* Submit/poll fal pipeline for parallel batch throughput (needs fal provider 1.1.8+).
+* Safe for mid-batch plugin updates; modal poll window extended to ~5 minutes.
 
 = 3.2.17 =
 * AI sideload filenames use the post keyword/title — no more fal CDN names with -2048x1152 suffixes.
