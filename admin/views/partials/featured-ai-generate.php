@@ -179,7 +179,7 @@ unset( $sim_ai_post_types['attachment'] );
 				<div>
 					<h3 id="sim-fal-recovery-title"><?php esc_html_e( 'Recover completed fal.ai images', 'smart-image-matcher' ); ?></h3>
 					<p class="description">
-						<?php esc_html_e( 'Find images that completed on fal.ai but never reached WordPress. Preview matches first, then recover all confirmed matches in the background.', 'smart-image-matcher' ); ?>
+						<?php esc_html_e( 'Find images that completed on fal.ai but never reached WordPress. Matches use the post title and SEO focus/target keyword (Rank Math, Yoast, SEOPress, or The SEO Framework) against the fal prompt — only posts still missing a featured image. Preview first, then recover confirmed matches in the background.', 'smart-image-matcher' ); ?>
 					</p>
 				</div>
 			</div>

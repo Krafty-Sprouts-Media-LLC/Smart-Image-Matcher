@@ -119,6 +119,40 @@ final class FalRecoverBatchTest extends TestCase {
 	}
 
 	/**
+	 * SEO title fluff ("Causes, Fixes, Prevention") must not dilute the score.
+	 *
+	 * @return void
+	 */
+	public function test_seo_title_boilerplate_does_not_block_match(): void {
+		$title  = 'Why Are My Tomato Leaves Curling? Causes, Fixes, and Prevention';
+		$prompt = 'A close-up realistic photograph of a sunlit tomato plant in a backyard garden bed, its upper leaves curled inward into tight tubes, morning light.';
+
+		self::assertGreaterThanOrEqual(
+			60,
+			FalRecoverBatch::scoreTitleInPrompt( $title, $prompt )
+		);
+	}
+
+	/**
+	 * Rank Math / Yoast focus keywords are scored and can beat a weak title.
+	 *
+	 * @return void
+	 */
+	public function test_focus_keyword_is_factored_into_match_score(): void {
+		$prompt = 'A close-up realistic photograph of a blueberry bush branch with green leaves showing distinct yellow chlorosis between the veins.';
+
+		self::assertGreaterThanOrEqual(
+			60,
+			FalRecoverBatch::scorePostAgainstPrompt(
+				'Plant Care Tips for Beginners: Causes and Fixes',
+				'',
+				$prompt,
+				'blueberry leaves yellow'
+			)
+		);
+	}
+
+	/**
 	 * Generic composition language must not match an unrelated article title.
 	 *
 	 * @return void

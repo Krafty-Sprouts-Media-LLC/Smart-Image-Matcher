@@ -7,6 +7,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.2.25] - 10/08/2026
+
+### Fixed
+
+- Recovery matching was under-matching (~12/100) because long SEO titles (`Causes`, `Fixes`, `Prevention`, …) diluted token overlap below 60%. Those boilerplate tokens are stripped before scoring. Focus/target keywords (Rank Math / Yoast / SEOPress / TSF) were already included via `max(title, focus)` and remain so; unmatched preview rows now include `score` + nearest title for debugging.
+
 ## [3.2.24] - 10/08/2026
 
 ### Fixed

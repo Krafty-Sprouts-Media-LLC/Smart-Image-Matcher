@@ -60,6 +60,41 @@ class FalRecoverBatch {
 	);
 
 	/**
+	 * SEO title fluff that almost never appears in fal image prompts.
+	 * Leaving these in title tokens tanks the overlap % (e.g. 2/6 = 33%).
+	 *
+	 * @since 3.2.25
+	 * @var list<string>
+	 */
+	private const MATCH_TITLE_BOILERPLATE_TOKENS = array(
+		'cause',
+		'causes',
+		'complete',
+		'diagnose',
+		'diagnosis',
+		'fix',
+		'fixes',
+		'guide',
+		'guides',
+		'prevention',
+		'reason',
+		'reasons',
+		'solution',
+		'solutions',
+		'step',
+		'steps',
+		'symptom',
+		'symptoms',
+		'tip',
+		'tips',
+		'treat',
+		'treatment',
+		'ultimate',
+		'way',
+		'ways',
+	);
+
+	/**
 	 * Parse a CSV file into recovery rows.
 	 *
 	 * Accepted headers (case-insensitive): post_id, request_id, model_id
@@ -276,7 +311,7 @@ class FalRecoverBatch {
 	}
 
 	/**
-	 * Tokenize text for recovery matching (noise terms removed).
+	 * Tokenize text for recovery matching (noise + SEO boilerplate removed).
 	 *
 	 * @since 3.2.24
 	 * @param string $text Raw text.
@@ -286,7 +321,8 @@ class FalRecoverBatch {
 		return array_values(
 			array_diff(
 				array_unique( Normalizer::normalize( wp_strip_all_tags( $text ) ) ),
-				self::MATCH_NOISE_TOKENS
+				self::MATCH_NOISE_TOKENS,
+				self::MATCH_TITLE_BOILERPLATE_TOKENS
 			)
 		);
 	}
@@ -311,9 +347,11 @@ class FalRecoverBatch {
 	/**
 	 * Score a post title/focus keyword against an image prompt.
 	 *
-	 * Body text is deliberately not used as a fallback: broad article content
-	 * produced false-positive recovery matches. A missed match is safer than
-	 * assigning a paid image to the wrong article.
+	 * Focus/target keywords (Rank Math, Yoast, SEOPress, The SEO Framework)
+	 * are scored separately and the higher of title vs focus wins. Body text
+	 * is deliberately not used: broad article content produced false-positive
+	 * recovery matches. A missed match is safer than assigning a paid image
+	 * to the wrong article.
 	 *
 	 * @since 3.2.22
 	 * @param string $title   Post title.
@@ -398,6 +436,7 @@ class FalRecoverBatch {
 			$prompt_tokens = self::matchTokens( $prompt );
 			$post_id       = 0;
 			$best_score    = 0;
+			$best_title    = '';
 
 			foreach ( $indexed as $candidate_id => $candidate ) {
 				if ( isset( $used[ $candidate_id ] ) ) {
@@ -410,6 +449,7 @@ class FalRecoverBatch {
 				if ( $score > $best_score ) {
 					$best_score = $score;
 					$post_id    = (int) $candidate_id;
+					$best_title = (string) $candidate['title'];
 				}
 			}
 			if ( $best_score < $min_score ) {
@@ -422,13 +462,15 @@ class FalRecoverBatch {
 				'prompt'     => $prompt,
 				'post_id'    => $post_id,
 				'post_title' => $post_id > 0 ? (string) ( $indexed[ $post_id ]['title'] ?? get_the_title( $post_id ) ) : '',
+				'score'      => $best_score,
 			);
 
 			if ( $post_id > 0 ) {
 				$used[ $post_id ] = true;
 				$matched[]        = $preview;
 			} else {
-				$unmatched[] = $preview;
+				$preview['near_post_title'] = $best_title;
+				$unmatched[]                = $preview;
 			}
 		}
 

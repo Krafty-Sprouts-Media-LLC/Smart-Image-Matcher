@@ -237,13 +237,21 @@
 				</tr>` );
 		} );
 		unmatched.forEach( ( item ) => {
+			const bits = [];
+			if ( 'number' === typeof item.score && item.score > 0 ) {
+				bits.push( `${ item.score }%` );
+			}
+			if ( item.near_post_title ) {
+				bits.push( `nearest: ${ item.near_post_title }` );
+			}
+			const detail = bits.length ? ` (${ bits.join( ' · ' ) })` : '';
 			rows.push( `
 				<tr>
 					<td>—</td>
 					<td>${ escHtml( item.request_id || '' ) }</td>
 					<td>${ escHtml( recoveryPrompt( item.prompt ) ) }</td>
 					<td><span class="sim-status sim-status-warn">${ escHtml(
-						i18n.recoveryUnmatched
+						i18n.recoveryUnmatched + detail
 					) }</span></td>
 				</tr>` );
 		} );

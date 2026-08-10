@@ -4,7 +4,7 @@ Tags: images, media library, alt text, featured image, automation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 3.2.24
+Stable tag: 3.2.25
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -95,6 +95,9 @@ No AI data is sent automatically — only when you explicitly trigger AI matchin
 The plugin stores match results and job metadata in your own database only. Update checks may contact GitHub (see External services). No post content leaves your server unless you explicitly use AI features with a configured provider.
 
 == Changelog ==
+
+= 3.2.25 =
+* Recovery matching now strips SEO title fluff (Causes/Fixes/Prevention) so focus keywords and real topic words can clear the 60% threshold; focus/target keywords remain part of the score.
 
 = 3.2.24 =
 * Fixed recovery preview fatal/timeouts on large sites by slim-loading fal history, matching only posts without featured images, and capping the preview batch.
