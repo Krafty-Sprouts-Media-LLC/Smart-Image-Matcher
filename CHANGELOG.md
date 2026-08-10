@@ -7,6 +7,38 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.2.23] - 10/08/2026
+
+### Added
+
+- Featured Images now includes a complete orphan-recovery UI: choose a fal history window, preview safe post matches, confirm once, and monitor background recovery progress.
+- One Action Scheduler job is queued per matched image, avoiding browser/REST timeouts during large recoveries.
+
+### Changed
+
+- Recovery candidate loading now batches posts and post meta efficiently.
+- Unmatched fal images remain untouched; the UI never imports them automatically.
+
+## [3.2.22] - 10/08/2026
+
+### Added
+
+- Automatic orphan recovery can query recent successful fal request history, including input/output payloads, then match generated images to posts missing featured images—no CSV or manual request IDs required.
+- Recovery records fal request/model IDs on imported attachments so retries cannot duplicate media.
+- Unit coverage for fal payload extraction and prompt-to-post recovery matching.
+
+### Changed
+
+- Async fal submit/poll is enabled by default again after queue lifecycle unit tests and a live fal-history → WordPress Media Library → featured-image recovery smoke test passed. Durable handles and request-history fallback prevent paid completions from being orphaned.
+
+## [3.2.21] - 10/08/2026
+
+### Fixed
+
+- **Async fal submit/poll is OFF by default** (`sim_ai_image_use_async_queue` filter). 3.2.18–3.2.20 could mark jobs failed (5‑minute deadline / wiped tracking) after fal had already billed and finished the image, leaving orphans on fal with nothing in WordPress. Generation again waits in one Action Scheduler worker until fal completes.
+- Poll path (if re-enabled): 30‑minute deadline, durable `_sim_fal_pending_*` post meta, keep fal handles on failure, retry on transient HTTP errors.
+- Recovery: `wp sim fal-recover --all` or `--post_id=… --request_id=… --model_id=…`, plus REST `POST /generate-images/recover`.
+
 ## [3.2.20] - 10/08/2026
 
 ### Fixed

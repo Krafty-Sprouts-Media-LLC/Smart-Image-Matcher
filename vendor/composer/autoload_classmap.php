@@ -7,6 +7,7 @@ $baseDir = dirname($vendorDir);
 
 return array(
     'Composer\\InstalledVersions' => $vendorDir . '/composer/InstalledVersions.php',
+    'SmartImageMatcher\\AI\\GenerationRejectionStore' => $baseDir . '/src/AI/GenerationRejectionStore.php',
     'SmartImageMatcher\\AI\\ImageModelCatalog' => $baseDir . '/src/AI/ImageModelCatalog.php',
     'SmartImageMatcher\\AI\\MatchPrompt' => $baseDir . '/src/AI/MatchPrompt.php',
     'SmartImageMatcher\\AI\\Matcher' => $baseDir . '/src/AI/Matcher.php',
@@ -19,9 +20,11 @@ return array(
     'SmartImageMatcher\\Abilities\\AbilityQueueBulkMatch' => $baseDir . '/src/Abilities/AbilityQueueBulkMatch.php',
     'SmartImageMatcher\\Abilities\\AbilityScoreImage' => $baseDir . '/src/Abilities/AbilityScoreImage.php',
     'SmartImageMatcher\\Abilities\\Registry' => $baseDir . '/src/Abilities/Registry.php',
+    'SmartImageMatcher\\Admin\\GenerateImagesBulkAction' => $baseDir . '/src/Admin/GenerateImagesBulkAction.php',
     'SmartImageMatcher\\CLI\\Commands' => $baseDir . '/src/CLI/Commands.php',
     'SmartImageMatcher\\Cache\\Cache' => $baseDir . '/src/Cache/Cache.php',
     'SmartImageMatcher\\Cache\\CachePluginCompat' => $baseDir . '/src/Cache/CachePluginCompat.php',
+    'SmartImageMatcher\\Compat\\WpAiFeaturedImageCompat' => $baseDir . '/src/Compat/WpAiFeaturedImageCompat.php',
     'SmartImageMatcher\\Container' => $baseDir . '/src/Container.php',
     'SmartImageMatcher\\Domain\\HeadingExtractor' => $baseDir . '/src/Domain/HeadingExtractor.php',
     'SmartImageMatcher\\Domain\\ImageRepository' => $baseDir . '/src/Domain/ImageRepository.php',
@@ -47,6 +50,7 @@ return array(
     'SmartImageMatcher\\Premium\\Analytics' => $baseDir . '/src/Premium/Analytics.php',
     'SmartImageMatcher\\Premium\\AutoMatchOnPublish' => $baseDir . '/src/Premium/AutoMatchOnPublish.php',
     'SmartImageMatcher\\Premium\\BulkProcessor' => $baseDir . '/src/Premium/BulkProcessor.php',
+    'SmartImageMatcher\\Premium\\FalRecoverBatch' => $baseDir . '/src/Premium/FalRecoverBatch.php',
     'SmartImageMatcher\\Premium\\FiaaCron' => $baseDir . '/src/Premium/FiaaCron.php',
     'SmartImageMatcher\\Premium\\License' => $baseDir . '/src/Premium/License.php',
     'SmartImageMatcher\\Premium\\ReviewQueue' => $baseDir . '/src/Premium/ReviewQueue.php',

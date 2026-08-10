@@ -4,7 +4,7 @@ Tags: images, media library, alt text, featured image, automation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 3.2.20
+Stable tag: 3.2.23
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -95,6 +95,17 @@ No AI data is sent automatically — only when you explicitly trigger AI matchin
 The plugin stores match results and job metadata in your own database only. Update checks may contact GitHub (see External services). No post content leaves your server unless you explicitly use AI features with a configured provider.
 
 == Changelog ==
+
+= 3.2.23 =
+* Added a Featured Images recovery UI: preview safe fal.ai matches, explicitly confirm, then recover every matched image through background jobs with live progress.
+* Unmatched fal images are never imported automatically.
+
+= 3.2.22 =
+* Restored parallel fal submit/poll after durable tracking, history-based recovery, queue lifecycle tests, and a live WordPress sideload smoke test.
+* Automatic fal history recovery no longer requires CSV or manually supplied request IDs.
+
+= 3.2.21 =
+* Async fal submit/poll disabled by default (prevents orphaned fal images). Added fal-recover CLI/REST for images that finished on fal but never landed in WordPress.
 
 = 3.2.20 =
 * Progress dock resumes from the server when sessionStorage is empty (e.g. modal closed before 3.2.19).

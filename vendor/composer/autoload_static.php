@@ -26,6 +26,7 @@ class ComposerStaticInitd1eee0a5073e3dab1344a5e361ab6e16
 
     public static $classMap = array (
         'Composer\\InstalledVersions' => __DIR__ . '/..' . '/composer/InstalledVersions.php',
+        'SmartImageMatcher\\AI\\GenerationRejectionStore' => __DIR__ . '/../..' . '/src/AI/GenerationRejectionStore.php',
         'SmartImageMatcher\\AI\\ImageModelCatalog' => __DIR__ . '/../..' . '/src/AI/ImageModelCatalog.php',
         'SmartImageMatcher\\AI\\MatchPrompt' => __DIR__ . '/../..' . '/src/AI/MatchPrompt.php',
         'SmartImageMatcher\\AI\\Matcher' => __DIR__ . '/../..' . '/src/AI/Matcher.php',
@@ -38,9 +39,11 @@ class ComposerStaticInitd1eee0a5073e3dab1344a5e361ab6e16
         'SmartImageMatcher\\Abilities\\AbilityQueueBulkMatch' => __DIR__ . '/../..' . '/src/Abilities/AbilityQueueBulkMatch.php',
         'SmartImageMatcher\\Abilities\\AbilityScoreImage' => __DIR__ . '/../..' . '/src/Abilities/AbilityScoreImage.php',
         'SmartImageMatcher\\Abilities\\Registry' => __DIR__ . '/../..' . '/src/Abilities/Registry.php',
+        'SmartImageMatcher\\Admin\\GenerateImagesBulkAction' => __DIR__ . '/../..' . '/src/Admin/GenerateImagesBulkAction.php',
         'SmartImageMatcher\\CLI\\Commands' => __DIR__ . '/../..' . '/src/CLI/Commands.php',
         'SmartImageMatcher\\Cache\\Cache' => __DIR__ . '/../..' . '/src/Cache/Cache.php',
         'SmartImageMatcher\\Cache\\CachePluginCompat' => __DIR__ . '/../..' . '/src/Cache/CachePluginCompat.php',
+        'SmartImageMatcher\\Compat\\WpAiFeaturedImageCompat' => __DIR__ . '/../..' . '/src/Compat/WpAiFeaturedImageCompat.php',
         'SmartImageMatcher\\Container' => __DIR__ . '/../..' . '/src/Container.php',
         'SmartImageMatcher\\Domain\\HeadingExtractor' => __DIR__ . '/../..' . '/src/Domain/HeadingExtractor.php',
         'SmartImageMatcher\\Domain\\ImageRepository' => __DIR__ . '/../..' . '/src/Domain/ImageRepository.php',
@@ -66,6 +69,7 @@ class ComposerStaticInitd1eee0a5073e3dab1344a5e361ab6e16
         'SmartImageMatcher\\Premium\\Analytics' => __DIR__ . '/../..' . '/src/Premium/Analytics.php',
         'SmartImageMatcher\\Premium\\AutoMatchOnPublish' => __DIR__ . '/../..' . '/src/Premium/AutoMatchOnPublish.php',
         'SmartImageMatcher\\Premium\\BulkProcessor' => __DIR__ . '/../..' . '/src/Premium/BulkProcessor.php',
+        'SmartImageMatcher\\Premium\\FalRecoverBatch' => __DIR__ . '/../..' . '/src/Premium/FalRecoverBatch.php',
         'SmartImageMatcher\\Premium\\FiaaCron' => __DIR__ . '/../..' . '/src/Premium/FiaaCron.php',
         'SmartImageMatcher\\Premium\\License' => __DIR__ . '/../..' . '/src/Premium/License.php',
         'SmartImageMatcher\\Premium\\ReviewQueue' => __DIR__ . '/../..' . '/src/Premium/ReviewQueue.php',

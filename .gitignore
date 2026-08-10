@@ -48,8 +48,10 @@ cache/
 
 # Dev/tooling folders
 .agent-skills/
+.composer-dev/
+.phpunit.cache/
+.phpunit.result.cache
 .cursor/
 .wp-ai/
 .kiro/
 docs/audit/
-tests/

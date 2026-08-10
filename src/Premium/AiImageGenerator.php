@@ -660,6 +660,238 @@ class AiImageGenerator {
 	}
 
 	/**
+	 * Durable post-meta key for in-flight fal queue handles (survives transient loss).
+	 *
+	 * @since 3.2.21
+	 * @param string $heading_hash Heading hash.
+	 * @return string
+	 */
+	public static function falPendingMetaKey( string $heading_hash ): string {
+		return '_sim_fal_pending_' . md5( $heading_hash );
+	}
+
+	/**
+	 * Store fal submit handles + generation context on the post.
+	 *
+	 * @since 3.2.21
+	 * @param int                  $post_id      Post ID.
+	 * @param string               $heading_hash Heading hash.
+	 * @param array<string, mixed> $payload      fal + context + submitted_at.
+	 * @return void
+	 */
+	public static function storeFalPending( int $post_id, string $heading_hash, array $payload ): void {
+		update_post_meta( $post_id, self::falPendingMetaKey( $heading_hash ), $payload );
+	}
+
+	/**
+	 * Read durable fal pending payload.
+	 *
+	 * @since 3.2.21
+	 * @param int    $post_id      Post ID.
+	 * @param string $heading_hash Heading hash.
+	 * @return array<string, mixed>|null
+	 */
+	public static function getFalPending( int $post_id, string $heading_hash ): ?array {
+		$data = get_post_meta( $post_id, self::falPendingMetaKey( $heading_hash ), true );
+		return is_array( $data ) ? $data : null;
+	}
+
+	/**
+	 * Clear durable fal pending payload after success or manual discard.
+	 *
+	 * @since 3.2.21
+	 * @param int    $post_id      Post ID.
+	 * @param string $heading_hash Heading hash.
+	 * @return void
+	 */
+	public static function clearFalPending( int $post_id, string $heading_hash ): void {
+		delete_post_meta( $post_id, self::falPendingMetaKey( $heading_hash ) );
+	}
+
+	/**
+	 * Find posts with durable fal pending meta (featured hash only by default).
+	 *
+	 * @since 3.2.21
+	 * @param string $heading_hash Heading hash to scan.
+	 * @param int    $limit        Max posts.
+	 * @return list<array{post_id:int,heading_hash:string,pending:array<string,mixed>}>
+	 */
+	public static function listFalPending( string $heading_hash = 'featured', int $limit = 200 ): array {
+		$meta_key = self::falPendingMetaKey( $heading_hash );
+		$query    = new \WP_Query(
+			array(
+				'post_type'              => 'any',
+				'post_status'            => 'any',
+				'posts_per_page'         => max( 1, min( 500, $limit ) ),
+				'fields'                 => 'ids',
+				'no_found_rows'          => true,
+				'update_post_meta_cache' => false,
+				'update_post_term_cache' => false,
+				'meta_query'             => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+					array(
+						'key'     => $meta_key,
+						'compare' => 'EXISTS',
+					),
+				),
+			)
+		);
+
+		$out = array();
+		foreach ( $query->posts as $post_id ) {
+			$post_id = (int) $post_id;
+			$pending = self::getFalPending( $post_id, $heading_hash );
+			if ( ! is_array( $pending ) ) {
+				continue;
+			}
+			$out[] = array(
+				'post_id'      => $post_id,
+				'heading_hash' => $heading_hash,
+				'pending'      => $pending,
+			);
+		}
+
+		return $out;
+	}
+
+	/**
+	 * Fetch a completed fal job and sideload it for a post.
+	 *
+	 * @since 3.2.21
+	 * @param int                  $post_id      Post ID.
+	 * @param string               $heading_hash Heading hash.
+	 * @param array<string, mixed> $pending      Pending payload (fal + context).
+	 * @return int|\WP_Error Attachment ID.
+	 */
+	public static function recoverFalJob( int $post_id, string $heading_hash, array $pending ) {
+		if ( $post_id <= 0 || ! current_user_can( 'edit_post', $post_id ) ) {
+			return new \WP_Error(
+				'smart_image_matcher_recover_forbidden',
+				__( 'Permission denied for fal recovery.', 'smart-image-matcher' )
+			);
+		}
+
+		$fal = isset( $pending['fal'] ) && is_array( $pending['fal'] ) ? $pending['fal'] : array();
+		$request_id   = (string) ( $fal['request_id'] ?? '' );
+		$response_url = (string) ( $fal['response_url'] ?? '' );
+		$model_id     = (string) ( $fal['model_id'] ?? '' );
+
+		if ( '' !== $request_id ) {
+			$existing = get_posts(
+				array(
+					'post_type'              => 'attachment',
+					'post_status'            => 'inherit',
+					'posts_per_page'         => 1,
+					'fields'                 => 'ids',
+					'no_found_rows'          => true,
+					'update_post_meta_cache' => false,
+					'update_post_term_cache' => false,
+					'meta_key'               => '_sim_fal_request_id', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+					'meta_value'             => $request_id, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+				)
+			);
+			if ( ! empty( $existing[0] ) ) {
+				$attachment_id = (int) $existing[0];
+				if ( 'featured' === $heading_hash && ! has_post_thumbnail( $post_id ) ) {
+					set_post_thumbnail( $post_id, $attachment_id );
+				}
+				self::clearFalPending( $post_id, $heading_hash );
+				self::setStatus(
+					$post_id,
+					$heading_hash,
+					array(
+						'status'         => 'done',
+						'attachment_id'  => $attachment_id,
+						'attachment_url' => (string) wp_get_attachment_url( $attachment_id ),
+						'recovered'      => true,
+					)
+				);
+				return $attachment_id;
+			}
+		}
+
+		$source = isset( $pending['source'] ) && is_array( $pending['source'] )
+			? $pending['source']
+			: null;
+		if ( null === $source && '' !== $response_url ) {
+			$source = ProviderBridge::fetchImageSource( $response_url );
+		}
+		if ( ( null === $source || is_wp_error( $source ) ) && '' !== $model_id && '' !== $request_id ) {
+			$source = ProviderBridge::fetchImageByRequestId( $model_id, $request_id );
+		}
+		if ( null === $source || is_wp_error( $source ) ) {
+			return is_wp_error( $source )
+				? $source
+				: new \WP_Error(
+					'smart_image_matcher_recover_no_source',
+					__( 'Could not fetch fal image. Need response_url or model_id + request_id.', 'smart-image-matcher' )
+				);
+		}
+
+		$context = isset( $pending['context'] ) && is_array( $pending['context'] ) ? $pending['context'] : array();
+		if ( empty( $context['post_id'] ) ) {
+			$context['post_id'] = $post_id;
+		}
+		if ( empty( $context['heading_hash'] ) ) {
+			$context['heading_hash'] = $heading_hash;
+		}
+		if ( empty( $context['heading_text'] ) ) {
+			$context['heading_text'] = (string) get_the_title( $post_id );
+		}
+		if ( empty( $context['purpose'] ) ) {
+			$context['purpose'] = ( 'featured' === $heading_hash ) ? 'featured' : 'heading';
+		}
+		if ( empty( $context['style'] ) ) {
+			$context['style'] = 'photo';
+		}
+		if ( empty( $context['image_prompt'] ) ) {
+			$context['image_prompt'] = (string) ( $context['brief'] ?? $context['heading_text'] );
+		}
+		if ( empty( $context['brief'] ) ) {
+			$context['brief'] = (string) $context['image_prompt'];
+		}
+
+		$generator = new self();
+		$result    = $generator->finalizeFromSource( $source, $context );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		$attachment_id = (int) $result;
+		if ( '' !== $request_id ) {
+			update_post_meta( $attachment_id, '_sim_fal_request_id', $request_id );
+		}
+		if ( '' !== $model_id ) {
+			update_post_meta( $attachment_id, '_sim_fal_model_id', $model_id );
+		}
+		if ( 'featured' === $heading_hash && ! get_post_meta( $attachment_id, '_sim_generated_vision_failed', true ) ) {
+			set_post_thumbnail( $post_id, $attachment_id );
+		}
+
+		self::clearFalPending( $post_id, $heading_hash );
+		self::setStatus(
+			$post_id,
+			$heading_hash,
+			array(
+				'status'         => 'done',
+				'attachment_id'  => $attachment_id,
+				'attachment_url' => (string) wp_get_attachment_url( $attachment_id ),
+				'recovered'      => true,
+			)
+		);
+
+		Logger::info(
+			'AiImageGenerator: recovered fal job',
+			array(
+				'post_id'       => $post_id,
+				'attachment_id' => $attachment_id,
+				'request_id'    => $request_id,
+			)
+		);
+
+		return $attachment_id;
+	}
+
+	/**
 	 * Sideload from a remote URL or inline binary payload.
 	 *
 	 * @since 3.1.3

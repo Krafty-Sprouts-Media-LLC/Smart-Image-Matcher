@@ -353,4 +353,222 @@ class Commands {
 
 		return $postIds;
 	}
+
+	/**
+	 * Recover completed fal.ai images that never landed in WordPress.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--all]
+	 * : Recover every post with stored fal pending meta.
+	 *
+	 * [--discover]
+	 * : Query recent successful fal requests and match them to posts automatically.
+	 *
+	 * [--hours=<n>]
+	 * : fal history lookback for --discover. Default: 48.
+	 *
+	 * [--dry-run]
+	 * : Preview automatic request-to-post matches without importing images.
+	 *
+	 * [--file=<path>]
+	 * : Optional fallback CSV: post_id,request_id[,model_id].
+	 *
+	 * [--request-ids=<list>]
+	 * : Comma/space-separated fal request ids (bulk).
+	 *
+	 * [--post_id=<id>]
+	 * : Recover one post (optional with --request_id).
+	 *
+	 * [--request_id=<uuid>]
+	 * : Single fal request id.
+	 *
+	 * [--model_id=<id>]
+	 * : fal model id (default: preferred SIM image model).
+	 *
+	 * [--match-posts]
+	 * : When rows lack post_id, match fal prompt text to posts missing a featured image.
+	 *
+	 * [--unattached]
+	 * : If no post match, still import into the media library (unassigned).
+	 *
+	 * [--heading_hash=<hash>]
+	 * : Heading hash. Default: featured.
+	 *
+	 * [--min_score=<n>]
+	 * : Min title→prompt match score 0–100 when using --match-posts. Default: 60.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *   wp sim fal-recover --discover --hours=48 --dry-run
+	 *   wp sim fal-recover --discover --hours=48
+	 *   wp sim fal-recover --all
+	 *   wp sim fal-recover --request-ids="id1,id2,id3" --match-posts --unattached
+	 *
+	 * @subcommand fal-recover
+	 * @since 3.2.21
+	 * @param string[]             $args      Unused.
+	 * @param array<string,string> $assocArgs Flags.
+	 * @return void
+	 */
+	public function fal_recover( array $args, array $assocArgs ): void { // phpcs:ignore NeutronStandard.Functions.TypeHint.NoArgumentTypeHint,Squiz.Commenting.FunctionComment.ParamNameNoMatch
+		$all         = isset( $assocArgs['all'] );
+		$discover    = isset( $assocArgs['discover'] );
+		$hours       = isset( $assocArgs['hours'] ) ? absint( $assocArgs['hours'] ) : 48;
+		$dry_run     = isset( $assocArgs['dry-run'] ) || isset( $assocArgs['dry_run'] );
+		$file        = isset( $assocArgs['file'] ) ? (string) $assocArgs['file'] : '';
+		$request_ids = isset( $assocArgs['request-ids'] ) ? (string) $assocArgs['request-ids'] : (string) ( $assocArgs['request_ids'] ?? '' );
+		$post_id     = absint( $assocArgs['post_id'] ?? 0 );
+		$heading_hash = sanitize_text_field( (string) ( $assocArgs['heading_hash'] ?? 'featured' ) );
+		$request_id  = sanitize_text_field( (string) ( $assocArgs['request_id'] ?? '' ) );
+		$model_id    = sanitize_text_field( (string) ( $assocArgs['model_id'] ?? '' ) );
+		$match_posts = isset( $assocArgs['match-posts'] ) || isset( $assocArgs['match_posts'] );
+		$unattached  = isset( $assocArgs['unattached'] );
+		$min_score   = isset( $assocArgs['min_score'] ) ? absint( $assocArgs['min_score'] ) : 60;
+
+		if ( '' === $model_id ) {
+			$model_id = (string) \SmartImageMatcher\Settings\Settings::get( 'ai_image_model' );
+		}
+
+		$options = array(
+			'heading_hash' => $heading_hash,
+			'model_id'     => $model_id,
+			'match_posts'  => $match_posts,
+			'unattached'   => $unattached,
+			'min_score'    => $min_score,
+		);
+
+		if ( $all ) {
+			$targets = \SmartImageMatcher\Premium\AiImageGenerator::listFalPending( $heading_hash, 500 );
+			\WP_CLI::log( sprintf( 'Found %d pending fal job(s) in post meta.', count( $targets ) ) );
+			$ok = 0;
+			foreach ( $targets as $row ) {
+				$result = \SmartImageMatcher\Premium\AiImageGenerator::recoverFalJob(
+					(int) $row['post_id'],
+					(string) $row['heading_hash'],
+					is_array( $row['pending'] ) ? $row['pending'] : array()
+				);
+				if ( is_wp_error( $result ) ) {
+					\WP_CLI::warning( sprintf( 'Post %d: %s', (int) $row['post_id'], $result->get_error_message() ) );
+					continue;
+				}
+				++$ok;
+				\WP_CLI::log( sprintf( 'Post %d → attachment %d', (int) $row['post_id'], (int) $result ) );
+			}
+			\WP_CLI::success( sprintf( 'Recovered %d of %d.', $ok, count( $targets ) ) );
+			return;
+		}
+
+		$rows = array();
+
+		if ( $discover ) {
+			$found = \SmartImageMatcher\Premium\FalRecoverBatch::discoverRecentRows( $hours, 500 );
+			if ( is_wp_error( $found ) ) {
+				\WP_CLI::error( $found->get_error_message() );
+			}
+			$rows                   = $found;
+			$options['match_posts'] = true;
+			\WP_CLI::log( sprintf( 'Discovered %d successful fal image request(s) from the last %d hour(s).', count( $rows ), $hours ) );
+			if ( $dry_run ) {
+				$preview = \SmartImageMatcher\Premium\FalRecoverBatch::previewMatches( $rows, $min_score );
+				foreach ( $preview['matched'] as $row ) {
+					\WP_CLI::log(
+						sprintf(
+							'MATCH request %s → post %d (%s)',
+							$row['request_id'],
+							(int) $row['post_id'],
+							$row['post_title']
+						)
+					);
+				}
+				foreach ( $preview['unmatched'] as $row ) {
+					\WP_CLI::warning( sprintf( 'UNMATCHED request %s: %s', $row['request_id'], $row['prompt'] ) );
+				}
+				\WP_CLI::success(
+					sprintf(
+						'Preview only: %d matched, %d unmatched. No images imported.',
+						count( $preview['matched'] ),
+						count( $preview['unmatched'] )
+					)
+				);
+				return;
+			}
+		} elseif ( '' !== $file ) {
+			$parsed = \SmartImageMatcher\Premium\FalRecoverBatch::parseCsvFile( $file );
+			if ( is_wp_error( $parsed ) ) {
+				\WP_CLI::error( $parsed->get_error_message() );
+			}
+			$rows = $parsed;
+			\WP_CLI::log( sprintf( 'Loaded %d row(s) from file.', count( $rows ) ) );
+		} elseif ( '' !== $request_ids ) {
+			foreach ( \SmartImageMatcher\Premium\FalRecoverBatch::parseRequestIdList( $request_ids ) as $rid ) {
+				$rows[] = array(
+					'post_id'    => 0,
+					'request_id' => $rid,
+					'model_id'   => $model_id,
+				);
+			}
+			\WP_CLI::log( sprintf( 'Loaded %d request id(s).', count( $rows ) ) );
+		} elseif ( $post_id > 0 ) {
+			if ( '' === $request_id ) {
+				$pending = \SmartImageMatcher\Premium\AiImageGenerator::getFalPending( $post_id, $heading_hash );
+				if ( is_array( $pending ) ) {
+					$result = \SmartImageMatcher\Premium\AiImageGenerator::recoverFalJob( $post_id, $heading_hash, $pending );
+					if ( is_wp_error( $result ) ) {
+						\WP_CLI::error( $result->get_error_message() );
+					}
+					\WP_CLI::success( sprintf( 'Post %d → attachment %d', $post_id, (int) $result ) );
+					return;
+				}
+				\WP_CLI::error( 'No pending meta. Pass --request_id or --file / --request-ids.' );
+			}
+			$rows[] = array(
+				'post_id'    => $post_id,
+				'request_id' => $request_id,
+				'model_id'   => $model_id,
+			);
+		} else {
+			\WP_CLI::error( 'Pass --discover, --all, --post_id, --request-ids, or --file.' );
+		}
+
+		if ( empty( $options['match_posts'] ) && ! $unattached ) {
+			foreach ( $rows as $row ) {
+				if ( empty( $row['post_id'] ) ) {
+					\WP_CLI::error( 'CSV/request list has rows without post_id. Add --match-posts and/or --unattached.' );
+				}
+			}
+		}
+
+		$result = \SmartImageMatcher\Premium\FalRecoverBatch::run( $rows, $options );
+		foreach ( $result['recovered'] as $row ) {
+			\WP_CLI::log(
+				sprintf(
+					'OK request %s → post %s attachment %d%s',
+					$row['request_id'],
+					(string) ( $row['post_id'] ?: '—' ),
+					(int) $row['attachment_id'],
+					! empty( $row['unattached'] ) ? ' (unattached)' : ''
+				)
+			);
+		}
+		foreach ( $result['failed'] as $row ) {
+			\WP_CLI::warning(
+				sprintf(
+					'FAIL request %s (post %s): %s',
+					$row['request_id'] ?? '',
+					(string) ( $row['post_id'] ?? '—' ),
+					$row['error'] ?? ''
+				)
+			);
+		}
+
+		\WP_CLI::success(
+			sprintf(
+				'Recovered %d, failed %d, skipped %d.',
+				count( $result['recovered'] ),
+				count( $result['failed'] ),
+				(int) $result['skipped']
+			)
+		);
+	}
 }

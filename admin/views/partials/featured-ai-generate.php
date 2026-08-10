@@ -67,12 +67,14 @@ unset( $sim_ai_post_types['attachment'] );
 					<?php
 					printf(
 						/* translators: %d: number of posts */
-						esc_html( _n(
-							'%d post was passed in. Scan to see which still need a featured image.',
-							'%d posts were passed in. Scan to see which still need a featured image.',
-							count( $sim_ai_prefill_ids ),
-							'smart-image-matcher'
-						) ),
+						esc_html(
+							_n(
+								'%d post was passed in. Scan to see which still need a featured image.',
+								'%d posts were passed in. Scan to see which still need a featured image.',
+								count( $sim_ai_prefill_ids ),
+								'smart-image-matcher'
+							)
+						),
 						count( $sim_ai_prefill_ids )
 					);
 					?>
@@ -169,6 +171,64 @@ unset( $sim_ai_post_types['attachment'] );
 			</div>
 			<p id="sim-generate-progress-status" class="description sim-run-status"></p>
 		</div>
+
+		<hr class="sim-card-divider" />
+
+		<section id="sim-fal-recovery" class="sim-recovery-panel" aria-labelledby="sim-fal-recovery-title">
+			<div class="sim-section-head">
+				<div>
+					<h3 id="sim-fal-recovery-title"><?php esc_html_e( 'Recover completed fal.ai images', 'smart-image-matcher' ); ?></h3>
+					<p class="description">
+						<?php esc_html_e( 'Find images that completed on fal.ai but never reached WordPress. Preview matches first, then recover all confirmed matches in the background.', 'smart-image-matcher' ); ?>
+					</p>
+				</div>
+			</div>
+
+			<div class="sim-recovery-controls">
+				<div class="sim-field">
+					<label for="sim-fal-recovery-hours"><?php esc_html_e( 'Look back', 'smart-image-matcher' ); ?></label>
+					<select id="sim-fal-recovery-hours">
+						<option value="24"><?php esc_html_e( 'Last 24 hours', 'smart-image-matcher' ); ?></option>
+						<option value="48" selected><?php esc_html_e( 'Last 48 hours', 'smart-image-matcher' ); ?></option>
+						<option value="72"><?php esc_html_e( 'Last 72 hours', 'smart-image-matcher' ); ?></option>
+						<option value="168"><?php esc_html_e( 'Last 7 days', 'smart-image-matcher' ); ?></option>
+					</select>
+				</div>
+				<div class="sim-form-actions">
+					<button type="button" id="sim-fal-recovery-preview-button" class="button" <?php disabled( ! $sim_ai_provider_ready ); ?>>
+						<?php esc_html_e( 'Preview Recovery', 'smart-image-matcher' ); ?>
+					</button>
+					<button type="button" id="sim-fal-recovery-run-button" class="button button-primary" disabled aria-disabled="true">
+						<?php esc_html_e( 'Recover Matched Images', 'smart-image-matcher' ); ?>
+					</button>
+				</div>
+			</div>
+
+			<div id="sim-fal-recovery-notice" aria-live="polite"></div>
+
+			<div id="sim-fal-recovery-summary" class="sim-info-rows" hidden>
+				<div class="sim-info-row">
+					<span><?php esc_html_e( 'Safe matches', 'smart-image-matcher' ); ?></span>
+					<strong id="sim-fal-recovery-matched">0</strong>
+				</div>
+				<div class="sim-info-row">
+					<span><?php esc_html_e( 'Unmatched (not imported)', 'smart-image-matcher' ); ?></span>
+					<strong id="sim-fal-recovery-unmatched">0</strong>
+				</div>
+			</div>
+
+			<table class="widefat striped sim-recent-table" id="sim-fal-recovery-table" hidden>
+				<thead>
+					<tr>
+						<th><?php esc_html_e( 'Post', 'smart-image-matcher' ); ?></th>
+						<th><?php esc_html_e( 'fal Request', 'smart-image-matcher' ); ?></th>
+						<th><?php esc_html_e( 'Prompt', 'smart-image-matcher' ); ?></th>
+						<th><?php esc_html_e( 'Status', 'smart-image-matcher' ); ?></th>
+					</tr>
+				</thead>
+				<tbody id="sim-fal-recovery-body"></tbody>
+			</table>
+		</section>
 	</div>
 </div>
 <?php // phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound ?>

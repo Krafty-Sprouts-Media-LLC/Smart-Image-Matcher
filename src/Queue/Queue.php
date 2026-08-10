@@ -76,6 +76,13 @@ class Queue {
 	const HOOK_AI_IMAGE_GEN_POLL = 'smart_image_matcher_queue_ai_image_gen_poll';
 
 	/**
+	 * Action hook: recover one completed fal image.
+	 *
+	 * @since 3.2.23
+	 */
+	const HOOK_FAL_RECOVER = 'smart_image_matcher_queue_fal_recover';
+
+	/**
 	 * Seconds between fal poll AS jobs.
 	 *
 	 * @since 3.2.18
@@ -87,7 +94,7 @@ class Queue {
 	 *
 	 * @since 3.2.18
 	 */
-	const AI_IMAGE_POLL_DEADLINE = 300;
+	const AI_IMAGE_POLL_DEADLINE = 1800;
 
 	// -------------------------------------------------------------------------
 	// Registration
@@ -102,14 +109,15 @@ class Queue {
 	 * @return void
 	 */
 	public static function registerHooks(): void {
-		add_action( self::HOOK_AI_MATCH,       array( JobRunner::class, 'runAiMatchJob' ), 10, 2 );
+		add_action( self::HOOK_AI_MATCH, array( JobRunner::class, 'runAiMatchJob' ), 10, 2 );
 		add_action( self::HOOK_INDEX_BACKFILL, array( JobRunner::class, 'runIndexBackfill' ) );
-		add_action( self::HOOK_BULK_MATCH,     array( JobRunner::class, 'runBulkMatchJob' ), 10, 3 );
-		add_action( self::HOOK_BULK_INSERT,    array( JobRunner::class, 'runBulkInsertJob' ), 10, 2 );
-		add_action( self::HOOK_FIAA_RUN,       array( JobRunner::class, 'runFiaaRunJob' ), 10, 1 );
+		add_action( self::HOOK_BULK_MATCH, array( JobRunner::class, 'runBulkMatchJob' ), 10, 3 );
+		add_action( self::HOOK_BULK_INSERT, array( JobRunner::class, 'runBulkInsertJob' ), 10, 2 );
+		add_action( self::HOOK_FIAA_RUN, array( JobRunner::class, 'runFiaaRunJob' ), 10, 1 );
 		add_action( self::HOOK_FIAA_AUDIT_CLEAR, array( JobRunner::class, 'runFiaaAuditClearJob' ), 10, 1 );
 		add_action( self::HOOK_AI_IMAGE_GEN, array( JobRunner::class, 'runAiImageGenJob' ), 10, 2 );
 		add_action( self::HOOK_AI_IMAGE_GEN_POLL, array( JobRunner::class, 'runAiImageGenPollJob' ), 10, 2 );
+		add_action( self::HOOK_FAL_RECOVER, array( JobRunner::class, 'runFalRecoverJob' ), 10, 2 );
 	}
 
 	// -------------------------------------------------------------------------
@@ -132,7 +140,10 @@ class Queue {
 
 		$actionId = as_enqueue_async_action(
 			self::HOOK_AI_MATCH,
-			array( 'post_id' => $postId, 'mode' => $mode ),
+			array(
+				'post_id' => $postId,
+				'mode'    => $mode,
+			),
 			self::GROUP
 		);
 
@@ -217,9 +228,12 @@ class Queue {
 			return;
 		}
 
-		Logger::warn( 'Queue: index backfill was incomplete with no pending action — resuming.', array(
-			'offset' => (int) ( $state['offset'] ?? 0 ),
-		) );
+		Logger::warn(
+			'Queue: index backfill was incomplete with no pending action — resuming.',
+			array(
+				'offset' => (int) ( $state['offset'] ?? 0 ),
+			)
+		);
 
 		as_enqueue_async_action( self::HOOK_INDEX_BACKFILL, array(), self::GROUP );
 	}
@@ -266,7 +280,11 @@ class Queue {
 
 		$actionId = as_enqueue_async_action(
 			self::HOOK_BULK_MATCH,
-			array( 'job_id' => $jobId, 'post_id' => $postId, 'config' => $config ),
+			array(
+				'job_id'  => $jobId,
+				'post_id' => $postId,
+				'config'  => $config,
+			),
 			self::GROUP
 		);
 
@@ -288,7 +306,10 @@ class Queue {
 
 		$actionId = as_enqueue_async_action(
 			self::HOOK_BULK_INSERT,
-			array( 'job_id' => $jobId, 'post_id' => $postId ),
+			array(
+				'job_id'  => $jobId,
+				'post_id' => $postId,
+			),
 			self::GROUP
 		);
 
@@ -386,6 +407,7 @@ class Queue {
 		if ( ! empty( $payload['force'] ) && function_exists( 'as_unschedule_all_actions' ) ) {
 			as_unschedule_all_actions( self::HOOK_AI_IMAGE_GEN, $stable_args, self::GROUP );
 			as_unschedule_all_actions( self::HOOK_AI_IMAGE_GEN_POLL, $stable_args, self::GROUP );
+			as_unschedule_all_actions( self::HOOK_FAL_RECOVER, $stable_args, self::GROUP );
 		} elseif ( empty( $payload['force'] ) && self::hasPendingAiImageGen( $post_id, $heading_hash ) ) {
 			Logger::info(
 				'Queue::enqueueAiImageGen: already queued/processing',
@@ -460,6 +482,46 @@ class Queue {
 	}
 
 	/**
+	 * Enqueue recovery for one completed fal image.
+	 *
+	 * The recovery payload is stored in post meta before this method is called,
+	 * keeping Action Scheduler arguments small and durable.
+	 *
+	 * @since 3.2.23
+	 * @param int    $post_id      Post ID.
+	 * @param string $heading_hash Heading hash.
+	 * @return string|null AS action ID, or null when unavailable/already queued.
+	 */
+	public function enqueueFalRecovery( int $post_id, string $heading_hash = 'featured' ): ?string {
+		if ( ! self::isAvailable() ) {
+			return null;
+		}
+
+		$post_id      = absint( $post_id );
+		$heading_hash = sanitize_text_field( $heading_hash );
+		if ( $post_id <= 0 || '' === $heading_hash ) {
+			return null;
+		}
+
+		$args = array(
+			'post_id'      => $post_id,
+			'heading_hash' => $heading_hash,
+		);
+		if ( as_has_scheduled_action( self::HOOK_FAL_RECOVER, $args, self::GROUP ) ) {
+			return null;
+		}
+
+		$action_id = as_enqueue_async_action(
+			self::HOOK_FAL_RECOVER,
+			$args,
+			self::GROUP,
+			true
+		);
+
+		return $action_id ? (string) $action_id : null;
+	}
+
+	/**
 	 * Whether a start or poll AS action is pending/running for this pair.
 	 *
 	 * @since 3.2.18
@@ -484,6 +546,9 @@ class Queue {
 		if ( as_has_scheduled_action( self::HOOK_AI_IMAGE_GEN_POLL, $args, self::GROUP ) ) {
 			return true;
 		}
+		if ( as_has_scheduled_action( self::HOOK_FAL_RECOVER, $args, self::GROUP ) ) {
+			return true;
+		}
 
 		return false;
 	}
@@ -503,7 +568,7 @@ class Queue {
 		$limit = max( 1, min( 200, $limit ) );
 		$found = array();
 
-		foreach ( array( self::HOOK_AI_IMAGE_GEN, self::HOOK_AI_IMAGE_GEN_POLL ) as $hook ) {
+		foreach ( array( self::HOOK_AI_IMAGE_GEN, self::HOOK_AI_IMAGE_GEN_POLL, self::HOOK_FAL_RECOVER ) as $hook ) {
 			$actions = as_get_scheduled_actions(
 				array(
 					'hook'     => $hook,
@@ -531,7 +596,7 @@ class Queue {
 				if ( null === $parsed ) {
 					continue;
 				}
-				$key = $parsed['post_id'] . ':' . $parsed['heading_hash'];
+				$key           = $parsed['post_id'] . ':' . $parsed['heading_hash'];
 				$found[ $key ] = $parsed;
 			}
 		}

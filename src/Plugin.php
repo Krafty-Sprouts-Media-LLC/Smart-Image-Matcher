@@ -178,6 +178,7 @@ class Plugin {
 				Queue::HOOK_FIAA_AUDIT_CLEAR,
 				Queue::HOOK_AI_IMAGE_GEN,
 				Queue::HOOK_AI_IMAGE_GEN_POLL,
+				Queue::HOOK_FAL_RECOVER,
 				Premium\FiaaCron::HOOK,
 			);
 
@@ -243,39 +244,48 @@ class Plugin {
 		$c = $this->container;
 
 		// Domain.
-		$c->bind( 'normalizer',     static fn() => new Normalizer() );
+		$c->bind( 'normalizer', static fn() => new Normalizer() );
 		$c->bind( 'heading.extractor', static fn() => new HeadingExtractor() );
-		$c->bind( 'image.repository',  static fn() => new ImageRepository() );
-		$c->bind( 'match.repository',  static fn() => new MatchRepository() );
-		$c->bind( 'matcher',        static fn( Container $c ) => new Matcher() );
+		$c->bind( 'image.repository', static fn() => new ImageRepository() );
+		$c->bind( 'match.repository', static fn() => new MatchRepository() );
+		$c->bind( 'matcher', static fn( Container $c ) => new Matcher() );
 
 		// Insertion.
-		$c->bind( 'heading.locator',   static fn() => new HeadingLocator() );
-		$c->bind( 'block.builder',     static fn() => new BlockBuilder() );
-		$c->bind( 'insertion.service', static fn( Container $c ) => new InsertionService(
-			$c->get( 'block.builder' )
-		) );
+		$c->bind( 'heading.locator', static fn() => new HeadingLocator() );
+		$c->bind( 'block.builder', static fn() => new BlockBuilder() );
+		$c->bind(
+			'insertion.service',
+			static fn( Container $c ) => new InsertionService(
+				$c->get( 'block.builder' )
+			)
+		);
 
 		// Featured Images.
-		$c->bind( 'slug.map.builder',      static fn() => new SlugMapBuilder() );
-		$c->bind( 'featured.image.service', static fn( Container $c ) => new FeaturedImageService(
-			$c->get( 'slug.map.builder' )
-		) );
+		$c->bind( 'slug.map.builder', static fn() => new SlugMapBuilder() );
+		$c->bind(
+			'featured.image.service',
+			static fn( Container $c ) => new FeaturedImageService(
+				$c->get( 'slug.map.builder' )
+			)
+		);
 
 		// Queue.
-		$c->bind( 'queue',      static fn() => new Queue() );
+		$c->bind( 'queue', static fn() => new Queue() );
 		$c->bind( 'job.runner', static fn() => new JobRunner() );
 
 		// REST controllers.
-		$c->bind( 'rest.match',          static fn() => new MatchController() );
-		$c->bind( 'rest.insert',         static fn() => new InsertController() );
+		$c->bind( 'rest.match', static fn() => new MatchController() );
+		$c->bind( 'rest.insert', static fn() => new InsertController() );
 		$c->bind( 'rest.featured_image', static fn() => new FeaturedImageController() );
-		$c->bind( 'rest.bulk',           static fn() => new BulkController() );
-		$c->bind( 'rest.image_gen',      static fn() => new ImageGenController() );
-		$c->bind( 'ai.prompt_builder',   static fn() => new AI\PromptBuilder() );
-		$c->bind( 'ai.image_generator',  static fn( Container $c ) => new Premium\AiImageGenerator(
-			$c->get( 'ai.prompt_builder' )
-		) );
+		$c->bind( 'rest.bulk', static fn() => new BulkController() );
+		$c->bind( 'rest.image_gen', static fn() => new ImageGenController() );
+		$c->bind( 'ai.prompt_builder', static fn() => new AI\PromptBuilder() );
+		$c->bind(
+			'ai.image_generator',
+			static fn( Container $c ) => new Premium\AiImageGenerator(
+				$c->get( 'ai.prompt_builder' )
+			)
+		);
 	}
 
 	/**
@@ -290,31 +300,35 @@ class Plugin {
 		// Settings page (admin only).
 		if ( is_admin() ) {
 			$settings = new Settings();
-			add_action( 'admin_menu',    array( $settings, 'registerMenus' ) );
-			add_action( 'admin_init',    array( $settings, 'register' ) );
-			add_action( 'admin_init',    array( $settings, 'redirectLegacyGenerateImagesPage' ), 1 );
+			add_action( 'admin_menu', array( $settings, 'registerMenus' ) );
+			add_action( 'admin_init', array( $settings, 'register' ) );
+			add_action( 'admin_init', array( $settings, 'redirectLegacyGenerateImagesPage' ), 1 );
 			add_action( 'admin_enqueue_scripts', array( $this, 'enqueueAdminAssets' ) );
-			add_action( 'admin_footer',  array( $this, 'renderModal' ) );
+			add_action( 'admin_footer', array( $this, 'renderModal' ) );
 
 			( new GenerateImagesBulkAction() )->register();
 		}
 
 		// REST API.
 		add_action( 'rest_api_init', array( $this, 'registerRestRoutes' ) );
-		add_action( 'rest_api_init', static function () {
-			// Suppress DB error output during REST requests.
-			// Errors still go to the debug log; they just don't corrupt the JSON response.
-			global $wpdb;
-			$wpdb->hide_errors();
-		}, 1 );
+		add_action(
+			'rest_api_init',
+			static function () {
+				// Suppress DB error output during REST requests.
+				// Errors still go to the debug log; they just don't corrupt the JSON response.
+				global $wpdb;
+				$wpdb->hide_errors();
+			},
+			1
+		);
 
 		// Action Scheduler job hooks.
 		Queue::registerHooks();
 
 		// Inverted index — keep in sync with the media library.
 		$imageRepo = $this->container->get( 'image.repository' );
-		add_action( 'add_attachment',    array( $imageRepo, 'indexImage' ) );
-		add_action( 'edit_attachment',   array( $imageRepo, 'indexImage' ) );
+		add_action( 'add_attachment', array( $imageRepo, 'indexImage' ) );
+		add_action( 'edit_attachment', array( $imageRepo, 'indexImage' ) );
 		add_action( 'delete_attachment', array( $imageRepo, 'removeImage' ) );
 
 		// Abilities API (WP 6.9+).
@@ -424,8 +438,13 @@ class Plugin {
 				'smart-image-matcher-gutenberg',
 				SMART_IMAGE_MATCHER_PLUGIN_URL . 'admin/js/src/gutenberg.js',
 				array(
-					'wp-plugins', 'wp-editor', 'wp-element', 'wp-components',
-					'wp-block-editor', 'wp-i18n', 'wp-data',
+					'wp-plugins',
+					'wp-editor',
+					'wp-element',
+					'wp-components',
+					'wp-block-editor',
+					'wp-i18n',
+					'wp-data',
 					'smart-image-matcher-svg-icons',
 				),
 				SMART_IMAGE_MATCHER_VERSION,
@@ -443,14 +462,14 @@ class Plugin {
 				'smart-image-matcher-modal',
 				'smartImageMatcherData',
 				array(
-					'ajaxUrl' => admin_url( 'admin-ajax.php' ),
-					'nonces'  => array(
+					'ajaxUrl'      => admin_url( 'admin-ajax.php' ),
+					'nonces'       => array(
 						// REST API uses the wp_rest nonce in X-WP-Nonce header.
 						'wpRest' => wp_create_nonce( 'wp_rest' ),
 					),
-					'postId'  => get_the_ID() ?: 0,
-					'debug'   => (bool) Settings::get( 'debug_mode' ),
-					'features' => array(
+					'postId'       => get_the_ID() ?: 0,
+					'debug'        => (bool) Settings::get( 'debug_mode' ),
+					'features'     => array(
 						'aiImageGeneration' => (bool) Settings::get( 'ai_image_generation_enabled' )
 							&& \SmartImageMatcher\AI\ProviderBridge::isImageGenerationAvailable(),
 					),
@@ -473,8 +492,8 @@ class Plugin {
 				'smart-image-matcher-featured-images',
 				'smartImageMatcherFiaa',
 				array(
-					'nonce' => wp_create_nonce( 'wp_rest' ),
-					'savedSettings' => array(
+					'nonce'              => wp_create_nonce( 'wp_rest' ),
+					'savedSettings'      => array(
 						'post_type'       => sanitize_key( (string) Settings::get( 'fiaa_manual_post_type' ) ),
 						'post_statuses'   => PostStatuses::sanitizeList( (string) Settings::get( 'fiaa_manual_post_statuses' ) ),
 						'featured_filter' => (string) Settings::get( 'fiaa_manual_featured_filter' ),
@@ -482,24 +501,24 @@ class Plugin {
 						'overwrite'       => (bool) Settings::get( 'fiaa_manual_overwrite' ),
 					),
 					'excludedImageSlugs' => (string) Settings::get( 'fiaa_excluded_image_slugs' ),
-					'i18n'  => array(
-						'starting'   => __( 'Starting Match Runner...', 'smart-image-matcher' ),
-						'running'    => __( 'Running...', 'smart-image-matcher' ),
-						'queued'     => __( 'Queued', 'smart-image-matcher' ),
-						'processing' => __( 'Processing', 'smart-image-matcher' ),
-						'completed'  => __( 'Run complete.', 'smart-image-matcher' ),
-						'cancelled'  => __( 'Run cancelled.', 'smart-image-matcher' ),
-						'failed'     => __( 'Run failed.', 'smart-image-matcher' ),
+					'i18n'               => array(
+						'starting'         => __( 'Starting Match Runner...', 'smart-image-matcher' ),
+						'running'          => __( 'Running...', 'smart-image-matcher' ),
+						'queued'           => __( 'Queued', 'smart-image-matcher' ),
+						'processing'       => __( 'Processing', 'smart-image-matcher' ),
+						'completed'        => __( 'Run complete.', 'smart-image-matcher' ),
+						'cancelled'        => __( 'Run cancelled.', 'smart-image-matcher' ),
+						'failed'           => __( 'Run failed.', 'smart-image-matcher' ),
 						/* translators: 1: processed count, 2: total count, 3: matched count, 4: skipped count, 5: unmatched count */
-						'progress'   => __( 'Processed %1$d of %2$d posts. Matched: %3$d | Skipped: %4$d | Unmatched: %5$d', 'smart-image-matcher' ),
+						'progress'         => __( 'Processed %1$d of %2$d posts. Matched: %3$d | Skipped: %4$d | Unmatched: %5$d', 'smart-image-matcher' ),
 						/* translators: 1: matched count, 2: skipped count, 3: unmatched count */
-						'summary'    => __( 'Matched: %1$d | Skipped: %2$d | Unmatched: %3$d', 'smart-image-matcher' ),
-						'stalled'    => __( 'The job is still queued. Action Scheduler has not picked it up yet.', 'smart-image-matcher' ),
-						'noApi'      => __( 'Match Runner controls could not load because wp.apiFetch is unavailable.', 'smart-image-matcher' ),
-						'saving'     => __( 'Saving run settings...', 'smart-image-matcher' ),
-						'saved'      => __( 'Run settings saved.', 'smart-image-matcher' ),
-						'saveFailed' => __( 'Could not save run settings.', 'smart-image-matcher' ),
-						'noStatuses' => __( 'Select at least one post status before running.', 'smart-image-matcher' ),
+						'summary'          => __( 'Matched: %1$d | Skipped: %2$d | Unmatched: %3$d', 'smart-image-matcher' ),
+						'stalled'          => __( 'The job is still queued. Action Scheduler has not picked it up yet.', 'smart-image-matcher' ),
+						'noApi'            => __( 'Match Runner controls could not load because wp.apiFetch is unavailable.', 'smart-image-matcher' ),
+						'saving'           => __( 'Saving run settings...', 'smart-image-matcher' ),
+						'saved'            => __( 'Run settings saved.', 'smart-image-matcher' ),
+						'saveFailed'       => __( 'Could not save run settings.', 'smart-image-matcher' ),
+						'noStatuses'       => __( 'Select at least one post status before running.', 'smart-image-matcher' ),
 						'exclusionsSaving' => __( 'Saving exclusions...', 'smart-image-matcher' ),
 						'exclusionsSaved'  => __( 'Excluded image filenames saved.', 'smart-image-matcher' ),
 						'exclusionsFailed' => __( 'Could not save excluded image filenames.', 'smart-image-matcher' ),
@@ -665,39 +684,58 @@ class Plugin {
 	 */
 	private function featuredAiGenerateI18n(): array {
 		return array(
-			'scanning'           => __( 'Scanning posts…', 'smart-image-matcher' ),
-			'scanFailed'         => __( 'Could not scan posts.', 'smart-image-matcher' ),
-			'noStatuses'         => __( 'Select at least one post status before scanning.', 'smart-image-matcher' ),
-			'noResults'          => __( 'No posts need a featured image for the current filters.', 'smart-image-matcher' ),
-			'scanComplete'       => __( 'Scan complete.', 'smart-image-matcher' ),
+			'scanning'                     => __( 'Scanning posts…', 'smart-image-matcher' ),
+			'scanFailed'                   => __( 'Could not scan posts.', 'smart-image-matcher' ),
+			'noStatuses'                   => __( 'Select at least one post status before scanning.', 'smart-image-matcher' ),
+			'noResults'                    => __( 'No posts need a featured image for the current filters.', 'smart-image-matcher' ),
+			'scanComplete'                 => __( 'Scan complete.', 'smart-image-matcher' ),
 			/* translators: %d: image count */
-			'confirmGenerate'    => __( 'Generate %d featured image(s)? Time varies by model — often a few minutes each.', 'smart-image-matcher' ),
-			'generating'         => __( 'Queueing generation jobs…', 'smart-image-matcher' ),
-			'generateFailed'     => __( 'Could not queue generation jobs.', 'smart-image-matcher' ),
-			'generateComplete'   => __( 'All jobs finished.', 'smart-image-matcher' ),
+			'confirmGenerate'              => __( 'Generate %d featured image(s)? Time varies by model — often a few minutes each.', 'smart-image-matcher' ),
+			'generating'                   => __( 'Queueing generation jobs…', 'smart-image-matcher' ),
+			'generateFailed'               => __( 'Could not queue generation jobs.', 'smart-image-matcher' ),
+			'generateComplete'             => __( 'All jobs finished.', 'smart-image-matcher' ),
 			/* translators: 1: completed count, 2: total count */
-			'progress'           => __( 'Completed %1$d of %2$d', 'smart-image-matcher' ),
-			'noApi'              => __( 'Generate Featured Images controls could not load because wp.apiFetch is unavailable.', 'smart-image-matcher' ),
-			'minute'             => __( 'minute', 'smart-image-matcher' ),
-			'minutes'            => __( 'minutes', 'smart-image-matcher' ),
-			'second'             => __( 'second', 'smart-image-matcher' ),
-			'seconds'            => __( 'seconds', 'smart-image-matcher' ),
-			'queued'             => __( 'Queued', 'smart-image-matcher' ),
-			'processing'         => __( 'Processing', 'smart-image-matcher' ),
-			'completed'          => __( 'Completed', 'smart-image-matcher' ),
-			'failed'             => __( 'Failed', 'smart-image-matcher' ),
-			'needsFeatured'      => __( 'Missing featured image', 'smart-image-matcher' ),
-			'alreadyHasFeatured' => __( 'Already has featured image', 'smart-image-matcher' ),
-			'noThumbnailSupport' => __( 'Post type does not support featured images', 'smart-image-matcher' ),
-			'alreadyGenerated'   => __( 'Already generated for this style', 'smart-image-matcher' ),
-			'rejected'           => __( 'Previously rejected', 'smart-image-matcher' ),
-			'notFound'           => __( 'Post not found', 'smart-image-matcher' ),
-			'noPermission'       => __( 'No permission', 'smart-image-matcher' ),
-			'skippedOther'       => __( 'Skipped', 'smart-image-matcher' ),
-			'estimateHint'       => __( 'Usually a few minutes per image (varies by model and queue).', 'smart-image-matcher' ),
+			'progress'                     => __( 'Completed %1$d of %2$d', 'smart-image-matcher' ),
+			'noApi'                        => __( 'Generate Featured Images controls could not load because wp.apiFetch is unavailable.', 'smart-image-matcher' ),
+			'minute'                       => __( 'minute', 'smart-image-matcher' ),
+			'minutes'                      => __( 'minutes', 'smart-image-matcher' ),
+			'second'                       => __( 'second', 'smart-image-matcher' ),
+			'seconds'                      => __( 'seconds', 'smart-image-matcher' ),
+			'queued'                       => __( 'Queued', 'smart-image-matcher' ),
+			'processing'                   => __( 'Processing', 'smart-image-matcher' ),
+			'completed'                    => __( 'Completed', 'smart-image-matcher' ),
+			'failed'                       => __( 'Failed', 'smart-image-matcher' ),
+			'needsFeatured'                => __( 'Missing featured image', 'smart-image-matcher' ),
+			'alreadyHasFeatured'           => __( 'Already has featured image', 'smart-image-matcher' ),
+			'noThumbnailSupport'           => __( 'Post type does not support featured images', 'smart-image-matcher' ),
+			'alreadyGenerated'             => __( 'Already generated for this style', 'smart-image-matcher' ),
+			'rejected'                     => __( 'Previously rejected', 'smart-image-matcher' ),
+			'notFound'                     => __( 'Post not found', 'smart-image-matcher' ),
+			'noPermission'                 => __( 'No permission', 'smart-image-matcher' ),
+			'skippedOther'                 => __( 'Skipped', 'smart-image-matcher' ),
+			'estimateHint'                 => __( 'Usually a few minutes per image (varies by model and queue).', 'smart-image-matcher' ),
 			/* translators: %d: image count */
-			'imagesCount'        => __( '%d to generate', 'smart-image-matcher' ),
-			'edit'               => __( 'Edit', 'smart-image-matcher' ),
+			'imagesCount'                  => __( '%d to generate', 'smart-image-matcher' ),
+			'edit'                         => __( 'Edit', 'smart-image-matcher' ),
+			'recoveryPreviewing'           => __( 'Checking recent completed fal.ai images…', 'smart-image-matcher' ),
+			'recoveryPreviewFailed'        => __( 'Could not preview fal.ai recovery.', 'smart-image-matcher' ),
+			/* translators: 1: matched count, 2: unmatched count */
+			'recoveryPreviewComplete'      => __( '%1$d safe match(es) found; %2$d will remain untouched.', 'smart-image-matcher' ),
+			'noRecoveryMatches'            => __( 'No safe matches were found. Nothing will be imported.', 'smart-image-matcher' ),
+			/* translators: %d: matched image count */
+			'confirmRecovery'              => __( 'Recover %d matched image(s) into WordPress? Unmatched images will not be imported.', 'smart-image-matcher' ),
+			'recoveryQueueing'             => __( 'Queueing matched images for background recovery…', 'smart-image-matcher' ),
+			'recoveryQueueFailed'          => __( 'Could not queue fal.ai recovery.', 'smart-image-matcher' ),
+			/* translators: %d: queued image count */
+			'recoveryQueued'               => __( '%d image(s) queued for recovery.', 'smart-image-matcher' ),
+			/* translators: 1: recovered count, 2: total count */
+			'recoveryProgress'             => __( 'Recovered %1$d of %2$d', 'smart-image-matcher' ),
+			'recoveryComplete'             => __( 'All matched images were recovered.', 'smart-image-matcher' ),
+			/* translators: %d: failed image count */
+			'recoveryCompleteWithFailures' => __( 'Recovery finished with %d failure(s).', 'smart-image-matcher' ),
+			'recoveryMatched'              => __( 'Safe match', 'smart-image-matcher' ),
+			'recoveryUnmatched'            => __( 'Not matched', 'smart-image-matcher' ),
+			'recovering'                   => __( 'Recovering', 'smart-image-matcher' ),
 		);
 	}
 
@@ -815,43 +853,55 @@ class Plugin {
 
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		// Pending matches abandoned for > 30 days.
-		$wpdb->query( $wpdb->prepare(
-			"DELETE FROM {$matches} WHERE status = %s AND created_at < DATE_SUB(NOW(), INTERVAL 30 DAY)",
-			'pending'
-		) );
+		$wpdb->query(
+			$wpdb->prepare(
+				"DELETE FROM {$matches} WHERE status = %s AND created_at < DATE_SUB(NOW(), INTERVAL 30 DAY)",
+				'pending'
+			)
+		);
 
 		// Rejected matches > 30 days.
-		$wpdb->query( $wpdb->prepare(
-			"DELETE FROM {$matches} WHERE status = %s AND created_at < DATE_SUB(NOW(), INTERVAL 30 DAY)",
-			'rejected'
-		) );
+		$wpdb->query(
+			$wpdb->prepare(
+				"DELETE FROM {$matches} WHERE status = %s AND created_at < DATE_SUB(NOW(), INTERVAL 30 DAY)",
+				'rejected'
+			)
+		);
 
 		// Approved matches > 90 days (audit trail past usefulness).
-		$wpdb->query( $wpdb->prepare(
-			"DELETE FROM {$matches} WHERE status = %s AND created_at < DATE_SUB(NOW(), INTERVAL 90 DAY)",
-			'approved'
-		) );
+		$wpdb->query(
+			$wpdb->prepare(
+				"DELETE FROM {$matches} WHERE status = %s AND created_at < DATE_SUB(NOW(), INTERVAL 90 DAY)",
+				'approved'
+			)
+		);
 
 		// Completed queue rows > 7 days.
-		$wpdb->query( $wpdb->prepare(
-			"DELETE FROM {$queue} WHERE status = %s AND finished_at < DATE_SUB(NOW(), INTERVAL 7 DAY)",
-			'completed'
-		) );
+		$wpdb->query(
+			$wpdb->prepare(
+				"DELETE FROM {$queue} WHERE status = %s AND finished_at < DATE_SUB(NOW(), INTERVAL 7 DAY)",
+				'completed'
+			)
+		);
 
 		// Failed queue rows > 30 days.
-		$wpdb->query( $wpdb->prepare(
-			"DELETE FROM {$queue} WHERE status = %s AND created_at < DATE_SUB(NOW(), INTERVAL 30 DAY)",
-			'failed'
-		) );
+		$wpdb->query(
+			$wpdb->prepare(
+				"DELETE FROM {$queue} WHERE status = %s AND created_at < DATE_SUB(NOW(), INTERVAL 30 DAY)",
+				'failed'
+			)
+		);
 
 		// Stuck processing rows > 24 h.
-		$wpdb->query( $wpdb->prepare(
-			"UPDATE {$queue} SET status = %s, error_message = %s
+		$wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$queue} SET status = %s, error_message = %s
 			 WHERE status = %s AND created_at < DATE_SUB(NOW(), INTERVAL 24 HOUR)",
-			'failed',
-			'Stuck in processing state for more than 24 hours.',
-			'processing'
-		) );
+				'failed',
+				'Stuck in processing state for more than 24 hours.',
+				'processing'
+			)
+		);
 		// phpcs:enable
 
 		// Clear expired plugin transients.

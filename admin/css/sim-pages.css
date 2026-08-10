@@ -437,10 +437,13 @@
 	color: #1a365d;
 }
 
+/* Component-scoped selectors intentionally override shared paragraph rules. */
+/* stylelint-disable-next-line no-descending-specificity */
 .sim-fiaa-notice-box p {
 	margin: 0;
 }
 
+/* stylelint-disable-next-line no-descending-specificity */
 .sim-fiaa-notice-box p + p {
 	margin-top: 8px;
 }
@@ -477,6 +480,7 @@
 	border-top: 1px solid #f0f0f1;
 }
 
+/* stylelint-disable-next-line no-descending-specificity */
 .sim-form-actions .description {
 	margin: 0;
 	flex: 1 1 220px;
@@ -811,6 +815,7 @@
 	padding-bottom: 10px;
 }
 
+/* stylelint-disable-next-line no-descending-specificity */
 .sim-section-head p {
 	margin-bottom: 0;
 	color: #646970;
@@ -825,6 +830,7 @@
 	padding-left: 0;
 }
 
+/* stylelint-disable-next-line no-descending-specificity */
 .sim-form-table td {
 	max-width: 760px;
 }
@@ -837,7 +843,39 @@
 	padding: 12px 0;
 }
 
+.sim-card-divider {
+	border: 0;
+	border-top: 1px solid #dcdcde;
+	margin: 24px 0;
+}
+
+.sim-recovery-panel {
+	max-width: 1040px;
+}
+
+.sim-recovery-controls {
+	display: flex;
+	align-items: end;
+	flex-wrap: wrap;
+	gap: 16px;
+	margin-top: 16px;
+}
+
+.sim-recovery-controls .sim-form-actions {
+	margin: 0;
+}
+
+#sim-fal-recovery-table td:nth-child(2) {
+	font-family: Consolas, Monaco, monospace;
+	font-size: 12px;
+}
+
+#sim-fal-recovery-table td:nth-child(3) {
+	max-width: 440px;
+}
+
 @media (max-width: 960px) {
+
 	.sim-metric-grid,
 	.sim-metric-grid-four,
 	.sim-info-grid,
@@ -862,6 +900,7 @@
 }
 
 @media (max-width: 782px) {
+
 	.sim-page-head,
 	.sim-card-head {
 		display: grid;

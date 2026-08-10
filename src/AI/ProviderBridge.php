@@ -332,6 +332,46 @@ class ProviderBridge {
 		return \KraftySprouts\AiProviderForFalAi\Queue\FalQueueClient::fetchImage( $response_url );
 	}
 
+	/**
+	 * Fetch a completed fal image by model + request id (recovery).
+	 *
+	 * @since 3.2.21
+	 * @param string $model_id   fal model id.
+	 * @param string $request_id Queue request id.
+	 * @return array{url:string,mime?:string}|\WP_Error
+	 */
+	public static function fetchImageByRequestId( string $model_id, string $request_id ) {
+		if ( ! self::supportsAsyncImageQueue() ) {
+			return new \WP_Error(
+				'smart_image_matcher_async_unavailable',
+				__( 'Async fal queue is not available. Update AI Provider for fal.ai.', 'smart-image-matcher' )
+			);
+		}
+
+		return \KraftySprouts\AiProviderForFalAi\Queue\FalQueueClient::fetchByRequestId( $model_id, $request_id );
+	}
+
+	/**
+	 * Discover recent successful fal image requests from account history.
+	 *
+	 * @since 3.2.22
+	 * @param string[] $model_ids fal model ids.
+	 * @param int      $hours     Lookback window.
+	 * @param int      $limit     Maximum requests.
+	 * @return list<array<string, mixed>>|\WP_Error
+	 */
+	public static function listRecentFalImageRequests( array $model_ids, int $hours = 48, int $limit = 500 ) {
+		$class = '\KraftySprouts\AiProviderForFalAi\Queue\FalQueueClient';
+		if ( ! class_exists( $class ) || ! method_exists( $class, 'listRecentRequests' ) ) {
+			return new \WP_Error(
+				'smart_image_matcher_fal_history_unavailable',
+				__( 'Automatic fal history recovery requires AI Provider for fal.ai 1.1.10 or newer.', 'smart-image-matcher' )
+			);
+		}
+
+		return $class::listRecentRequests( $model_ids, $hours, $limit );
+	}
+
 	// -------------------------------------------------------------------------
 	// Vision
 	// -------------------------------------------------------------------------

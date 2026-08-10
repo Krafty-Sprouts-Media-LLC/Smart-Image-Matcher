@@ -24,6 +24,7 @@ use SmartImageMatcher\Domain\HeadingExtractor;
 use SmartImageMatcher\Domain\PostStatuses;
 use SmartImageMatcher\FeaturedImages\FeaturedImageService;
 use SmartImageMatcher\Premium\AiImageGenerator;
+use SmartImageMatcher\Premium\FalRecoverBatch;
 use SmartImageMatcher\Queue\Queue;
 use SmartImageMatcher\Settings\Settings;
 
@@ -50,17 +51,17 @@ class ImageGenController extends Controller {
 					'callback'            => array( $this, 'enqueueGenerate' ),
 					'permission_callback' => array( $this, 'checkPermission' ),
 					'args'                => array(
-						'post_id' => array(
+						'post_id'       => array(
 							'type'              => 'integer',
 							'required'          => true,
 							'sanitize_callback' => 'absint',
 						),
-						'heading_hash' => array(
+						'heading_hash'  => array(
 							'type'              => 'string',
 							'required'          => true,
 							'sanitize_callback' => 'sanitize_text_field',
 						),
-						'heading_text' => array(
+						'heading_text'  => array(
 							'type'              => 'string',
 							'required'          => true,
 							'sanitize_callback' => 'sanitize_text_field',
@@ -71,14 +72,14 @@ class ImageGenController extends Controller {
 							'default'           => '',
 							'sanitize_callback' => 'sanitize_text_field',
 						),
-						'style' => array(
+						'style'         => array(
 							'type'              => 'string',
 							'required'          => false,
 							'default'           => 'photo',
 							'enum'              => array( 'photo', 'illustration' ),
 							'sanitize_callback' => 'sanitize_key',
 						),
-						'force' => array(
+						'force'         => array(
 							'type'    => 'boolean',
 							'default' => false,
 						),
@@ -96,7 +97,7 @@ class ImageGenController extends Controller {
 					'callback'            => array( $this, 'scanPosts' ),
 					'permission_callback' => array( $this, 'checkAdminPermission' ),
 					'args'                => array(
-						'post_type' => array(
+						'post_type'     => array(
 							'type'              => 'string',
 							'required'          => false,
 							'default'           => 'post',
@@ -111,7 +112,7 @@ class ImageGenController extends Controller {
 								'sanitize_callback' => 'sanitize_key',
 							),
 						),
-						'post_ids' => array(
+						'post_ids'      => array(
 							'type'     => 'array',
 							'required' => false,
 							'default'  => array(),
@@ -120,13 +121,13 @@ class ImageGenController extends Controller {
 								'sanitize_callback' => 'absint',
 							),
 						),
-						'max_posts' => array(
+						'max_posts'     => array(
 							'type'              => 'integer',
 							'required'          => false,
 							'default'           => 100,
 							'sanitize_callback' => 'absint',
 						),
-						'style' => array(
+						'style'         => array(
 							'type'              => 'string',
 							'required'          => false,
 							'default'           => 'photo',
@@ -147,7 +148,7 @@ class ImageGenController extends Controller {
 					'callback'            => array( $this, 'enqueueBulk' ),
 					'permission_callback' => array( $this, 'checkAdminPermission' ),
 					'args'                => array(
-						'items' => array(
+						'items'         => array(
 							'type'     => 'array',
 							'required' => true,
 							'items'    => array(
@@ -159,7 +160,7 @@ class ImageGenController extends Controller {
 								),
 							),
 						),
-						'style' => array(
+						'style'         => array(
 							'type'              => 'string',
 							'required'          => false,
 							'default'           => 'photo',
@@ -186,7 +187,7 @@ class ImageGenController extends Controller {
 					'callback'            => array( $this, 'getStatus' ),
 					'permission_callback' => array( $this, 'checkStatusPermission' ),
 					'args'                => array(
-						'post_id' => array(
+						'post_id'      => array(
 							'type'              => 'integer',
 							'required'          => true,
 							'sanitize_callback' => 'absint',
@@ -215,6 +216,93 @@ class ImageGenController extends Controller {
 
 		register_rest_route(
 			self::NAMESPACE,
+			'/generate-images/recover',
+			array(
+				array(
+					'methods'             => \WP_REST_Server::CREATABLE,
+					'callback'            => array( $this, 'recoverFalJobs' ),
+					'permission_callback' => array( $this, 'checkAdminPermission' ),
+					'args'                => array(
+						'post_id'         => array(
+							'type'              => 'integer',
+							'required'          => false,
+							'default'           => 0,
+							'sanitize_callback' => 'absint',
+						),
+						'heading_hash'    => array(
+							'type'              => 'string',
+							'required'          => false,
+							'default'           => 'featured',
+							'sanitize_callback' => 'sanitize_text_field',
+						),
+						'request_id'      => array(
+							'type'              => 'string',
+							'required'          => false,
+							'default'           => '',
+							'sanitize_callback' => 'sanitize_text_field',
+						),
+						'model_id'        => array(
+							'type'              => 'string',
+							'required'          => false,
+							'default'           => '',
+							'sanitize_callback' => 'sanitize_text_field',
+						),
+						'all_pending'     => array(
+							'type'     => 'boolean',
+							'required' => false,
+							'default'  => false,
+						),
+						'discover_recent' => array(
+							'type'     => 'boolean',
+							'required' => false,
+							'default'  => false,
+						),
+						'dry_run'         => array(
+							'type'     => 'boolean',
+							'required' => false,
+							'default'  => false,
+						),
+						'hours'           => array(
+							'type'              => 'integer',
+							'required'          => false,
+							'default'           => 48,
+							'sanitize_callback' => 'absint',
+						),
+						'request_ids'     => array(
+							'type'              => 'string',
+							'required'          => false,
+							'default'           => '',
+							'sanitize_callback' => 'sanitize_textarea_field',
+						),
+						'csv'             => array(
+							'type'              => 'string',
+							'required'          => false,
+							'default'           => '',
+							'sanitize_callback' => 'sanitize_textarea_field',
+						),
+						'match_posts'     => array(
+							'type'     => 'boolean',
+							'required' => false,
+							'default'  => false,
+						),
+						'unattached'      => array(
+							'type'     => 'boolean',
+							'required' => false,
+							'default'  => false,
+						),
+						'min_score'       => array(
+							'type'              => 'integer',
+							'required'          => false,
+							'default'           => 60,
+							'sanitize_callback' => 'absint',
+						),
+					),
+				),
+			)
+		);
+
+		register_rest_route(
+			self::NAMESPACE,
 			'/posts/(?P<post_id>[\d]+)/generate-image/reject',
 			array(
 				array(
@@ -222,12 +310,12 @@ class ImageGenController extends Controller {
 					'callback'            => array( $this, 'rejectGenerated' ),
 					'permission_callback' => array( $this, 'checkPermission' ),
 					'args'                => array(
-						'post_id' => array(
+						'post_id'       => array(
 							'type'              => 'integer',
 							'required'          => true,
 							'sanitize_callback' => 'absint',
 						),
-						'heading_hash' => array(
+						'heading_hash'  => array(
 							'type'              => 'string',
 							'required'          => true,
 							'sanitize_callback' => 'sanitize_text_field',
@@ -238,7 +326,7 @@ class ImageGenController extends Controller {
 							'default'           => '',
 							'sanitize_callback' => 'sanitize_text_field',
 						),
-						'style' => array(
+						'style'         => array(
 							'type'              => 'string',
 							'required'          => false,
 							'default'           => 'photo',
@@ -370,7 +458,7 @@ class ImageGenController extends Controller {
 		$seen         = array();
 
 		foreach ( $query->posts as $post_id ) {
-			$post_id = (int) $post_id;
+			$post_id          = (int) $post_id;
 			$seen[ $post_id ] = true;
 
 			$classified = $this->classifyFeaturedScanPost( $post_id, $style, $generator );
@@ -603,10 +691,10 @@ class ImageGenController extends Controller {
 				continue;
 			}
 
-			$heading_hash  = 'featured';
-			$heading_text  = (string) $post->post_title;
-			$item_keyword  = '' !== $focus_keyword ? $focus_keyword : PromptBuilder::getFocusKeyword( $post_id );
-			$section_text  = PromptBuilder::buildPostContext( $post );
+			$heading_hash = 'featured';
+			$heading_text = (string) $post->post_title;
+			$item_keyword = '' !== $focus_keyword ? $focus_keyword : PromptBuilder::getFocusKeyword( $post_id );
+			$section_text = PromptBuilder::buildPostContext( $post );
 
 			if ( $generator->findGenerated( $post_id, $heading_hash, $item_keyword, $style ) ) {
 				++$skipped;
@@ -923,6 +1011,203 @@ class ImageGenController extends Controller {
 	}
 
 	/**
+	 * Recover completed fal images into WordPress (orphan recovery).
+	 *
+	 * Modes:
+	 * - all_pending=true: complete every post with _sim_fal_pending_* meta
+	 * - discover_recent=true: query fal history and match requests automatically
+	 * - post_id + optional request_id/model_id: recover one post
+	 * - csv or request_ids: bulk recover (optionally match_posts / unattached)
+	 *
+	 * @since 3.2.21
+	 * @param \WP_REST_Request $request Request.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function recoverFalJobs( \WP_REST_Request $request ) {
+		$all_pending  = (bool) $request->get_param( 'all_pending' );
+		$discover     = (bool) $request->get_param( 'discover_recent' );
+		$dry_run      = (bool) $request->get_param( 'dry_run' );
+		$hours        = absint( $request->get_param( 'hours' ) );
+		$post_id      = (int) $request->get_param( 'post_id' );
+		$heading_hash = (string) $request->get_param( 'heading_hash' );
+		$request_id   = (string) $request->get_param( 'request_id' );
+		$model_id     = (string) $request->get_param( 'model_id' );
+		$csv          = (string) $request->get_param( 'csv' );
+		$request_ids  = (string) $request->get_param( 'request_ids' );
+		$match_posts  = (bool) $request->get_param( 'match_posts' );
+		$unattached   = (bool) $request->get_param( 'unattached' );
+		$min_score    = absint( $request->get_param( 'min_score' ) );
+
+		if ( '' === $heading_hash ) {
+			$heading_hash = 'featured';
+		}
+		if ( $min_score <= 0 ) {
+			$min_score = 60;
+		}
+		if ( $hours <= 0 ) {
+			$hours = 48;
+		}
+		if ( '' === $model_id ) {
+			$model_id = (string) Settings::get( 'ai_image_model' );
+		}
+
+		// Automatic fal history discovery or manually supplied fallback rows.
+		if ( $discover || '' !== $csv || '' !== $request_ids ) {
+			$rows = array();
+			if ( $discover ) {
+				$found = FalRecoverBatch::discoverRecentRows( $hours, 500 );
+				if ( is_wp_error( $found ) ) {
+					return $found;
+				}
+				$rows        = $found;
+				$match_posts = true;
+				$preview     = FalRecoverBatch::previewMatches( $rows, $min_score );
+
+				if ( $dry_run ) {
+					return rest_ensure_response(
+						array(
+							'preview'   => true,
+							'matched'   => $preview['matched'],
+							'unmatched' => $preview['unmatched'],
+							'total'     => count( $rows ),
+						)
+					);
+				}
+
+				$queued = FalRecoverBatch::queueMatched( $rows, $preview['matched'], $heading_hash );
+				return rest_ensure_response(
+					array(
+						'jobs'      => $queued['jobs'],
+						'queued'    => count( $queued['jobs'] ),
+						'failed'    => $queued['failed'],
+						'skipped'   => $queued['skipped'],
+						'unmatched' => count( $preview['unmatched'] ),
+						'total'     => count( $rows ),
+					)
+				);
+			} elseif ( '' !== $csv ) {
+				$parsed = FalRecoverBatch::parseCsvString( $csv );
+				if ( is_wp_error( $parsed ) ) {
+					return $parsed;
+				}
+				$rows = $parsed;
+			} else {
+				foreach ( FalRecoverBatch::parseRequestIdList( $request_ids ) as $rid ) {
+					$rows[] = array(
+						'post_id'    => 0,
+						'request_id' => $rid,
+						'model_id'   => $model_id,
+					);
+				}
+			}
+
+			$result = FalRecoverBatch::run(
+				$rows,
+				array(
+					'heading_hash' => $heading_hash,
+					'model_id'     => $model_id,
+					'match_posts'  => $match_posts,
+					'unattached'   => $unattached,
+					'min_score'    => $min_score,
+				)
+			);
+
+			return rest_ensure_response(
+				array(
+					'recovered' => $result['recovered'],
+					'failed'    => $result['failed'],
+					'skipped'   => $result['skipped'],
+					'total'     => count( $rows ),
+				)
+			);
+		}
+
+		$targets = array();
+
+		if ( $all_pending ) {
+			foreach ( AiImageGenerator::listFalPending( $heading_hash, 200 ) as $row ) {
+				$targets[] = array(
+					'post_id'      => (int) $row['post_id'],
+					'heading_hash' => (string) $row['heading_hash'],
+					'pending'      => $row['pending'],
+				);
+			}
+		} elseif ( $post_id > 0 ) {
+			if ( ! current_user_can( 'edit_post', $post_id ) ) {
+				return new \WP_Error(
+					'rest_forbidden',
+					__( 'You do not have permission to recover images for this post.', 'smart-image-matcher' ),
+					array( 'status' => 403 )
+				);
+			}
+			$pending = AiImageGenerator::getFalPending( $post_id, $heading_hash );
+			if ( ! is_array( $pending ) && '' !== $request_id ) {
+				$pending = array(
+					'fal'     => array(
+						'request_id' => $request_id,
+						'model_id'   => $model_id,
+					),
+					'context' => array(
+						'post_id'      => $post_id,
+						'heading_hash' => $heading_hash,
+						'heading_text' => get_the_title( $post_id ),
+						'purpose'      => ( 'featured' === $heading_hash ) ? 'featured' : 'heading',
+						'style'        => 'photo',
+					),
+				);
+			}
+			if ( ! is_array( $pending ) ) {
+				return new \WP_Error(
+					'smart_image_matcher_no_pending',
+					__( 'No fal pending data for this post. Provide request_id + model_id from the fal dashboard.', 'smart-image-matcher' ),
+					array( 'status' => 404 )
+				);
+			}
+			$targets[] = array(
+				'post_id'      => $post_id,
+				'heading_hash' => $heading_hash,
+				'pending'      => $pending,
+			);
+		} else {
+			return new \WP_Error(
+				'smart_image_matcher_bad_recover',
+				__( 'Pass discover_recent=true, all_pending=true, or post_id. Manual request_ids/csv remain available as fallbacks.', 'smart-image-matcher' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$recovered = array();
+		$failed    = array();
+
+		foreach ( $targets as $target ) {
+			$result = AiImageGenerator::recoverFalJob(
+				(int) $target['post_id'],
+				(string) $target['heading_hash'],
+				is_array( $target['pending'] ) ? $target['pending'] : array()
+			);
+			if ( is_wp_error( $result ) ) {
+				$failed[] = array(
+					'post_id' => (int) $target['post_id'],
+					'error'   => $result->get_error_message(),
+				);
+				continue;
+			}
+			$recovered[] = array(
+				'post_id'       => (int) $target['post_id'],
+				'attachment_id' => (int) $result,
+			);
+		}
+
+		return rest_ensure_response(
+			array(
+				'recovered' => $recovered,
+				'failed'    => $failed,
+				'total'     => count( $targets ),
+			)
+		);
+	}
+
+	/**
 	 * Record a user rejection so this combo is not auto-generated again.
 	 *
 	 * @since 3.2.0
@@ -984,9 +1269,9 @@ class ImageGenController extends Controller {
 		}
 
 		// Classic / fallback: strip tags and take a window after the heading text.
-		$plain    = wp_strip_all_tags( $content );
-		$needle   = $headings[ $index ]['text'] ?? '';
-		$pos      = ( '' !== $needle ) ? stripos( $plain, $needle ) : false;
+		$plain  = wp_strip_all_tags( $content );
+		$needle = $headings[ $index ]['text'] ?? '';
+		$pos    = ( '' !== $needle ) ? stripos( $plain, $needle ) : false;
 		if ( false === $pos ) {
 			return '';
 		}
@@ -1004,9 +1289,9 @@ class ImageGenController extends Controller {
 	 * @return string
 	 */
 	private function sectionFromBlocks( string $content, string $heading_hash ): string {
-		$blocks   = parse_blocks( $content );
-		$found    = false;
-		$chunks   = array();
+		$blocks    = parse_blocks( $content );
+		$found     = false;
+		$chunks    = array();
 		$extractor = new HeadingExtractor();
 		$all       = $extractor->extract( $content );
 
@@ -1018,13 +1303,13 @@ class ImageGenController extends Controller {
 		foreach ( $flat as $block ) {
 			$name = $block['blockName'] ?? '';
 			if ( 'core/heading' === $name ) {
-				$level     = (int) ( $block['attrs']['level'] ?? 2 );
-				$innerHtml = $block['innerHTML'] ?? '';
-				$text      = wp_strip_all_tags( $innerHtml );
-				$normalised = strtolower( $text );
-				$occurrence = $seen[ $normalised ] ?? 0;
+				$level               = (int) ( $block['attrs']['level'] ?? 2 );
+				$innerHtml           = $block['innerHTML'] ?? '';
+				$text                = wp_strip_all_tags( $innerHtml );
+				$normalised          = strtolower( $text );
+				$occurrence          = $seen[ $normalised ] ?? 0;
 				$seen[ $normalised ] = $occurrence + 1;
-				$hash = \SmartImageMatcher\Insertion\HeadingLocator::computeHash( $level, $normalised, $occurrence );
+				$hash                = \SmartImageMatcher\Insertion\HeadingLocator::computeHash( $level, $normalised, $occurrence );
 
 				if ( $found ) {
 					break;

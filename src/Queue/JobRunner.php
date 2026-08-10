@@ -45,7 +45,13 @@ class JobRunner {
 	 * @return void
 	 */
 	public static function runAiMatchJob( int $postId, string $mode = 'ai' ): void {
-		Logger::info( 'JobRunner: AI match job started', array( 'post_id' => $postId, 'mode' => $mode ) );
+		Logger::info(
+			'JobRunner: AI match job started',
+			array(
+				'post_id' => $postId,
+				'mode'    => $mode,
+			)
+		);
 
 		$post = get_post( $postId );
 		if ( ! $post instanceof \WP_Post ) {
@@ -57,7 +63,14 @@ class JobRunner {
 		$headings  = $extractor->extract( $post->post_content );
 
 		if ( empty( $headings ) ) {
-			set_transient( "smart_image_matcher_job_result_{$postId}", array( 'matches' => array(), 'done' => true ), 300 );
+			set_transient(
+				"smart_image_matcher_job_result_{$postId}",
+				array(
+					'matches' => array(),
+					'done'    => true,
+				),
+				300
+			);
 			return;
 		}
 
@@ -88,14 +101,30 @@ class JobRunner {
 				$matches = $kwMatcher->findKeywordMatches( $heading, $images );
 			}
 
-			$groups[] = array( 'heading' => $heading, 'matches' => $matches );
+			$groups[] = array(
+				'heading' => $heading,
+				'matches' => $matches,
+			);
 		}
 
 		( new MatchRepository() )->saveMatchGroups( $postId, $groups );
 
-		set_transient( "smart_image_matcher_job_result_{$postId}", array( 'matches' => $groups, 'done' => true ), 300 );
+		set_transient(
+			"smart_image_matcher_job_result_{$postId}",
+			array(
+				'matches' => $groups,
+				'done'    => true,
+			),
+			300
+		);
 
-		Logger::info( 'JobRunner: AI match job complete', array( 'post_id' => $postId, 'headings' => count( $groups ) ) );
+		Logger::info(
+			'JobRunner: AI match job complete',
+			array(
+				'post_id'  => $postId,
+				'headings' => count( $groups ),
+			)
+		);
 	}
 
 	/**
@@ -124,11 +153,13 @@ class JobRunner {
 
 		$result = $repo->backfillBatch( $offset, 200 );
 
-		$repo->saveBackfillState( array(
-			'offset'     => $result['next_offset'],
-			'done'       => $result['done'],
-			'updated_at' => current_time( 'mysql' ),
-		) );
+		$repo->saveBackfillState(
+			array(
+				'offset'     => $result['next_offset'],
+				'done'       => $result['done'],
+				'updated_at' => current_time( 'mysql' ),
+			)
+		);
 
 		if ( $result['done'] ) {
 			Logger::info( 'JobRunner: index backfill complete', array( 'total_indexed' => $result['next_offset'] ) );
@@ -154,7 +185,13 @@ class JobRunner {
 	 * @return void
 	 */
 	public static function runBulkMatchJob( string $jobId, int $postId, array $config ): void {
-		Logger::info( 'JobRunner: bulk match job', array( 'job_id' => $jobId, 'post_id' => $postId ) );
+		Logger::info(
+			'JobRunner: bulk match job',
+			array(
+				'job_id'  => $jobId,
+				'post_id' => $postId,
+			)
+		);
 
 		if ( self::isBulkJobCancelled( $jobId ) ) {
 			return;
@@ -183,10 +220,13 @@ class JobRunner {
 			$groups = array();
 
 			foreach ( $headings as $heading ) {
-				$terms   = $matcher->extractKeywords( $heading['text'] );
-				$images  = $repo->findCandidates( $terms );
-				$matches = $matcher->findKeywordMatches( $heading, $images );
-				$groups[] = array( 'heading' => $heading, 'matches' => $matches );
+				$terms    = $matcher->extractKeywords( $heading['text'] );
+				$images   = $repo->findCandidates( $terms );
+				$matches  = $matcher->findKeywordMatches( $heading, $images );
+				$groups[] = array(
+					'heading' => $heading,
+					'matches' => $matches,
+				);
 			}
 
 			( new MatchRepository() )->saveMatchGroups( $postId, $groups );
@@ -206,7 +246,13 @@ class JobRunner {
 	 * @return void
 	 */
 	public static function runBulkInsertJob( string $jobId, int $postId ): void {
-		Logger::info( 'JobRunner: bulk insert job', array( 'job_id' => $jobId, 'post_id' => $postId ) );
+		Logger::info(
+			'JobRunner: bulk insert job',
+			array(
+				'job_id'  => $jobId,
+				'post_id' => $postId,
+			)
+		);
 
 		if ( self::isBulkJobCancelled( $jobId ) ) {
 			return;
@@ -223,7 +269,7 @@ class JobRunner {
 		foreach ( $approved as $row ) {
 			$insertions[] = array(
 				'heading_hash' => (string) $row['heading_hash'],
-				'image_id'     => (int)    $row['image_id'],
+				'image_id'     => (int) $row['image_id'],
 			);
 		}
 
@@ -231,10 +277,13 @@ class JobRunner {
 		$result  = $service->bulkInsert( $postId, $insertions );
 
 		if ( is_wp_error( $result ) ) {
-			Logger::error( 'JobRunner: bulk insert failed', array(
-				'post_id' => $postId,
-				'error'   => $result->get_error_message(),
-			) );
+			Logger::error(
+				'JobRunner: bulk insert failed',
+				array(
+					'post_id' => $postId,
+					'error'   => $result->get_error_message(),
+				)
+			);
 		}
 	}
 
@@ -276,8 +325,8 @@ class JobRunner {
 			return;
 		}
 
-		$config   = isset( $totals['config'] ) && is_array( $totals['config'] ) ? $totals['config'] : array();
-		$postIds  = isset( $config['post_ids'] ) && is_array( $config['post_ids'] ) ? array_map( 'absint', $config['post_ids'] ) : array();
+		$config    = isset( $totals['config'] ) && is_array( $totals['config'] ) ? $totals['config'] : array();
+		$postIds   = isset( $config['post_ids'] ) && is_array( $config['post_ids'] ) ? array_map( 'absint', $config['post_ids'] ) : array();
 		$overwrite = ! empty( $config['overwrite'] );
 		$batchSize = isset( $config['batch_size'] ) ? (int) $config['batch_size'] : 20;
 		$batchSize = max( 1, min( 50, $batchSize ) );
@@ -326,7 +375,7 @@ class JobRunner {
 
 			$post = get_post( $postId );
 			if ( ! $post instanceof \WP_Post ) {
-				$totals['unmatched']++;
+				++$totals['unmatched'];
 				$totals['recent'][] = self::formatFiaaRecentItem(
 					$postId,
 					'',
@@ -334,8 +383,8 @@ class JobRunner {
 					__( 'Post not found.', 'smart-image-matcher' ),
 					array()
 				);
-				$totals['done']++;
-				$offset++;
+				++$totals['done'];
+				++$offset;
 				continue;
 			}
 
@@ -343,13 +392,13 @@ class JobRunner {
 			$reason = (string) ( $result['reason'] ?? '' );
 
 			if ( ! empty( $result['assigned'] ) ) {
-				$totals['matched']++;
+				++$totals['matched'];
 				$status = __( 'Matched', 'smart-image-matcher' );
 			} elseif ( __( 'Post already has a featured image.', 'smart-image-matcher' ) === $reason ) {
-				$totals['skipped']++;
+				++$totals['skipped'];
 				$status = __( 'Skipped', 'smart-image-matcher' );
 			} else {
-				$totals['unmatched']++;
+				++$totals['unmatched'];
 				$status = '' !== $reason ? $reason : __( 'Unmatched', 'smart-image-matcher' );
 			}
 
@@ -361,8 +410,8 @@ class JobRunner {
 				$result
 			);
 
-			$totals['done']++;
-			$offset++;
+			++$totals['done'];
+			++$offset;
 		}
 
 		$totals['done']   = min( $total, (int) $totals['done'] );
@@ -509,14 +558,14 @@ class JobRunner {
 			$status = (string) ( $result['status'] ?? '' );
 
 			if ( ! empty( $result['cleared'] ) ) {
-				$totals['matched']++;
+				++$totals['matched'];
 			} elseif (
 				__( 'No featured image.', 'smart-image-matcher' ) === $status
 				|| __( 'Already safe.', 'smart-image-matcher' ) === $status
 			) {
-				$totals['skipped']++;
+				++$totals['skipped'];
 			} else {
-				$totals['unmatched']++;
+				++$totals['unmatched'];
 			}
 
 			$totals['recent'][] = self::formatFiaaRecentItem(
@@ -527,8 +576,8 @@ class JobRunner {
 				$result
 			);
 
-			$totals['done']++;
-			$offset++;
+			++$totals['done'];
+			++$offset;
 		}
 
 		$totals['done']   = min( $total, (int) $totals['done'] );
@@ -618,7 +667,10 @@ class JobRunner {
 
 		$totals = json_decode( (string) ( $row['totals'] ?? '' ), true );
 		if ( ! is_array( $totals ) ) {
-			$totals = array( 'total' => 0, 'done' => 0 );
+			$totals = array(
+				'total' => 0,
+				'done'  => 0,
+			);
 		}
 
 		$totals['total'] = isset( $totals['total'] ) ? (int) $totals['total'] : 0;
@@ -676,7 +728,7 @@ class JobRunner {
 	private static function saveFiaaJobTotals( string $jobId, array $totals, string $status ): void {
 		global $wpdb;
 
-		$values = array(
+		$values  = array(
 			'status' => $status,
 			'totals' => wp_json_encode( $totals ),
 		);
@@ -684,7 +736,7 @@ class JobRunner {
 
 		if ( 'completed' === $status ) {
 			$values['finished_at'] = current_time( 'mysql' );
-			$formats[]            = '%s';
+			$formats[]             = '%s';
 		}
 
 		$wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
@@ -770,7 +822,13 @@ class JobRunner {
 
 		$generator = new \SmartImageMatcher\Premium\AiImageGenerator();
 
-		if ( \SmartImageMatcher\AI\ProviderBridge::supportsAsyncImageQueue() ) {
+		// Async is safe by default again: fal handles are persisted in post meta,
+		// failures retain recovery data, and request-id recovery reads fal's
+		// durable history payload before the image is sideloaded.
+		$use_async = \SmartImageMatcher\AI\ProviderBridge::supportsAsyncImageQueue()
+			&& (bool) apply_filters( 'sim_ai_image_use_async_queue', true );
+
+		if ( $use_async ) {
 			$result = $generator->submitForHeading(
 				$heading_hash,
 				$heading_text,
@@ -794,6 +852,16 @@ class JobRunner {
 			$fal     = isset( $result['fal'] ) && is_array( $result['fal'] ) ? $result['fal'] : array();
 			$context = isset( $result['context'] ) && is_array( $result['context'] ) ? $result['context'] : array();
 
+			\SmartImageMatcher\Premium\AiImageGenerator::storeFalPending(
+				$post_id,
+				$heading_hash,
+				array(
+					'fal'          => $fal,
+					'context'      => $context,
+					'submitted_at' => time(),
+				)
+			);
+
 			\SmartImageMatcher\Premium\AiImageGenerator::setStatus(
 				$post_id,
 				$heading_hash,
@@ -811,7 +879,8 @@ class JobRunner {
 				self::markAiImageGenFailed(
 					$post_id,
 					$heading_hash,
-					__( 'Could not schedule fal poll job.', 'smart-image-matcher' )
+					__( 'Could not schedule fal poll job.', 'smart-image-matcher' ),
+					true // keep fal handles for recovery
 				);
 			}
 
@@ -861,11 +930,19 @@ class JobRunner {
 		}
 
 		$status = \SmartImageMatcher\Premium\AiImageGenerator::getStatus( $post_id, $heading_hash );
+		if ( ( ! is_array( $status ) || empty( $status['fal'] ) ) ) {
+			$pending = \SmartImageMatcher\Premium\AiImageGenerator::getFalPending( $post_id, $heading_hash );
+			if ( is_array( $pending ) && ! empty( $pending['fal'] ) ) {
+				$status = $pending;
+			}
+		}
+
 		if ( ! is_array( $status ) || empty( $status['fal'] ) || ! is_array( $status['fal'] ) ) {
 			self::markAiImageGenFailed(
 				$post_id,
 				$heading_hash,
-				__( 'Missing fal tracking data for poll.', 'smart-image-matcher' )
+				__( 'Missing fal tracking data for poll.', 'smart-image-matcher' ),
+				true
 			);
 			return;
 		}
@@ -874,13 +951,15 @@ class JobRunner {
 		$request_id   = (string) ( $fal['request_id'] ?? '' );
 		$status_url   = (string) ( $fal['status_url'] ?? '' );
 		$response_url = (string) ( $fal['response_url'] ?? '' );
+		$model_id     = (string) ( $fal['model_id'] ?? '' );
 		$submitted_at = isset( $status['submitted_at'] ) ? (int) $status['submitted_at'] : time();
 
 		if ( '' === $status_url || '' === $response_url ) {
 			self::markAiImageGenFailed(
 				$post_id,
 				$heading_hash,
-				__( 'Invalid fal tracking URLs.', 'smart-image-matcher' )
+				__( 'Invalid fal tracking URLs.', 'smart-image-matcher' ),
+				true
 			);
 			return;
 		}
@@ -889,14 +968,23 @@ class JobRunner {
 			self::markAiImageGenFailed(
 				$post_id,
 				$heading_hash,
-				__( 'Timed out waiting for fal.ai to finish the image.', 'smart-image-matcher' )
+				__( 'Timed out waiting for fal.ai to finish the image. Use Recover fal jobs if the image completed on fal.', 'smart-image-matcher' ),
+				true
 			);
 			return;
 		}
 
 		$queue_status = \SmartImageMatcher\AI\ProviderBridge::pollImageStatus( $status_url, $request_id );
 		if ( is_wp_error( $queue_status ) ) {
-			self::markAiImageGenFailed( $post_id, $heading_hash, $queue_status->get_error_message() );
+			// Transient HTTP blips: re-poll instead of abandoning a paid fal job.
+			Logger::warn(
+				'JobRunner: fal poll status error — will retry',
+				array(
+					'post_id' => $post_id,
+					'error'   => $queue_status->get_error_message(),
+				)
+			);
+			( new Queue() )->enqueueAiImageGenPoll( $post_id, $heading_hash, 15 );
 			return;
 		}
 
@@ -906,8 +994,11 @@ class JobRunner {
 		}
 
 		$source = \SmartImageMatcher\AI\ProviderBridge::fetchImageSource( $response_url );
+		if ( is_wp_error( $source ) && '' !== $model_id && '' !== $request_id ) {
+			$source = \SmartImageMatcher\AI\ProviderBridge::fetchImageByRequestId( $model_id, $request_id );
+		}
 		if ( is_wp_error( $source ) ) {
-			self::markAiImageGenFailed( $post_id, $heading_hash, $source->get_error_message() );
+			self::markAiImageGenFailed( $post_id, $heading_hash, $source->get_error_message(), true );
 			return;
 		}
 
@@ -916,11 +1007,52 @@ class JobRunner {
 		$result    = $generator->finalizeFromSource( $source, $context );
 
 		if ( is_wp_error( $result ) ) {
-			self::markAiImageGenFailed( $post_id, $heading_hash, $result->get_error_message() );
+			self::markAiImageGenFailed( $post_id, $heading_hash, $result->get_error_message(), true );
 			return;
 		}
 
-		self::markAiImageGenDone( $post_id, $heading_hash, (int) $result );
+		$attachment_id = (int) $result;
+		if ( '' !== $request_id ) {
+			update_post_meta( $attachment_id, '_sim_fal_request_id', $request_id );
+		}
+		if ( '' !== $model_id ) {
+			update_post_meta( $attachment_id, '_sim_fal_model_id', $model_id );
+		}
+		\SmartImageMatcher\Premium\AiImageGenerator::clearFalPending( $post_id, $heading_hash );
+		self::markAiImageGenDone( $post_id, $heading_hash, $attachment_id );
+	}
+
+	/**
+	 * Recover one completed fal image in the background.
+	 *
+	 * @since 3.2.23
+	 * @param mixed $arg1 Post ID.
+	 * @param mixed $arg2 Heading hash.
+	 * @return void
+	 */
+	public static function runFalRecoverJob( $arg1, $arg2 = null ): void {
+		$post_id      = absint( $arg1 );
+		$heading_hash = sanitize_text_field( (string) $arg2 );
+		if ( $post_id <= 0 || '' === $heading_hash ) {
+			Logger::error( 'JobRunner: fal recovery missing ids' );
+			return;
+		}
+
+		$pending = \SmartImageMatcher\Premium\AiImageGenerator::getFalPending( $post_id, $heading_hash );
+		if ( ! is_array( $pending ) ) {
+			self::markAiImageGenFailed(
+				$post_id,
+				$heading_hash,
+				__( 'Missing fal recovery data.', 'smart-image-matcher' ),
+				true
+			);
+			return;
+		}
+
+		$result = \SmartImageMatcher\Premium\AiImageGenerator::recoverFalJob( $post_id, $heading_hash, $pending );
+		if ( is_wp_error( $result ) ) {
+			self::markAiImageGenFailed( $post_id, $heading_hash, $result->get_error_message(), true );
+		}
 	}
 
 	/**
@@ -963,23 +1095,52 @@ class JobRunner {
 	 * @param int    $post_id      Post ID.
 	 * @param string $heading_hash Heading hash.
 	 * @param string $message      Error message.
+	 * @param bool   $keep_fal     Keep fal handles in status/meta for recovery.
 	 * @return void
 	 */
-	private static function markAiImageGenFailed( int $post_id, string $heading_hash, string $message ): void {
-		\SmartImageMatcher\Premium\AiImageGenerator::setStatus(
-			$post_id,
-			$heading_hash,
-			array(
-				'status' => 'failed',
-				'error'  => $message,
-			)
+	private static function markAiImageGenFailed( int $post_id, string $heading_hash, string $message, bool $keep_fal = false ): void {
+		$payload = array(
+			'status' => 'failed',
+			'error'  => $message,
 		);
+
+		if ( $keep_fal ) {
+			$pending = \SmartImageMatcher\Premium\AiImageGenerator::getFalPending( $post_id, $heading_hash );
+			$status  = \SmartImageMatcher\Premium\AiImageGenerator::getStatus( $post_id, $heading_hash );
+			$fal     = null;
+			$context = null;
+			if ( is_array( $pending ) ) {
+				$fal     = $pending['fal'] ?? null;
+				$context = $pending['context'] ?? null;
+				if ( isset( $pending['submitted_at'] ) ) {
+					$payload['submitted_at'] = $pending['submitted_at'];
+				}
+			}
+			if ( is_array( $status ) ) {
+				$fal     = $fal ?? ( $status['fal'] ?? null );
+				$context = $context ?? ( $status['context'] ?? null );
+				if ( isset( $status['submitted_at'] ) ) {
+					$payload['submitted_at'] = $status['submitted_at'];
+				}
+			}
+			if ( is_array( $fal ) ) {
+				$payload['fal']         = $fal;
+				$payload['request_id']  = (string) ( $fal['request_id'] ?? '' );
+				$payload['recoverable'] = true;
+			}
+			if ( is_array( $context ) ) {
+				$payload['context'] = $context;
+			}
+		}
+
+		\SmartImageMatcher\Premium\AiImageGenerator::setStatus( $post_id, $heading_hash, $payload );
 		\SmartImageMatcher\Premium\AiImageGenerator::clearJobPayload( $post_id, $heading_hash );
 		Logger::warn(
 			'JobRunner: AI image gen failed',
 			array(
-				'post_id' => $post_id,
-				'error'   => $message,
+				'post_id'  => $post_id,
+				'error'    => $message,
+				'keep_fal' => $keep_fal,
 			)
 		);
 	}
@@ -1018,6 +1179,7 @@ class JobRunner {
 		);
 
 		\SmartImageMatcher\Premium\AiImageGenerator::clearJobPayload( $post_id, $heading_hash );
+		\SmartImageMatcher\Premium\AiImageGenerator::clearFalPending( $post_id, $heading_hash );
 
 		Logger::info(
 			'JobRunner: AI image gen done',
