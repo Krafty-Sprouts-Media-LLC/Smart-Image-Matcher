@@ -196,11 +196,23 @@ class FalRecoverBatch {
 	 * @param int $limit Maximum requests.
 	 * @return list<array<string, mixed>>|\WP_Error
 	 */
-	public static function discoverRecentRows( int $hours = 48, int $limit = 500 ) {
+	public static function discoverRecentRows( int $hours = 48, int $limit = 150 ) {
+		if ( function_exists( 'wp_raise_memory_limit' ) ) {
+			wp_raise_memory_limit( 'admin' );
+		}
+		if ( function_exists( 'set_time_limit' ) ) {
+			set_time_limit( 120 );
+		}
+
+		$preferred = (string) Settings::get( 'ai_image_model' );
+		$models    = ImageModelCatalog::isAllowed( $preferred )
+			? array( $preferred )
+			: ImageModelCatalog::allowedIds();
+
 		$requests = ProviderBridge::listRecentFalImageRequests(
-			ImageModelCatalog::allowedIds(),
+			$models,
 			$hours,
-			$limit
+			max( 1, min( 200, $limit ) )
 		);
 		if ( is_wp_error( $requests ) ) {
 			return $requests;
@@ -208,6 +220,9 @@ class FalRecoverBatch {
 
 		$rows = array();
 		foreach ( $requests as $request ) {
+			if ( ! is_array( $request ) ) {
+				continue;
+			}
 			$request_id  = sanitize_text_field( (string) ( $request['request_id'] ?? '' ) );
 			$model_id    = sanitize_text_field( (string) ( $request['endpoint_id'] ?? '' ) );
 			$status_code = absint( $request['status_code'] ?? 0 );
@@ -254,18 +269,37 @@ class FalRecoverBatch {
 	 * @return int 0–100.
 	 */
 	public static function scoreTitleInPrompt( string $title, string $prompt ): int {
-		$title_tokens  = array_values(
+		return self::scoreTokenOverlap(
+			self::matchTokens( $title ),
+			self::matchTokens( $prompt )
+		);
+	}
+
+	/**
+	 * Tokenize text for recovery matching (noise terms removed).
+	 *
+	 * @since 3.2.24
+	 * @param string $text Raw text.
+	 * @return list<string>
+	 */
+	public static function matchTokens( string $text ): array {
+		return array_values(
 			array_diff(
-				array_unique( Normalizer::normalize( wp_strip_all_tags( $title ) ) ),
+				array_unique( Normalizer::normalize( wp_strip_all_tags( $text ) ) ),
 				self::MATCH_NOISE_TOKENS
 			)
 		);
-		$prompt_tokens = array_values(
-			array_diff(
-				array_unique( Normalizer::normalize( wp_strip_all_tags( $prompt ) ) ),
-				self::MATCH_NOISE_TOKENS
-			)
-		);
+	}
+
+	/**
+	 * Score overlap between title/focus tokens and prompt tokens.
+	 *
+	 * @since 3.2.24
+	 * @param list<string> $title_tokens  Candidate tokens.
+	 * @param list<string> $prompt_tokens Prompt tokens.
+	 * @return int 0–100.
+	 */
+	public static function scoreTokenOverlap( array $title_tokens, array $prompt_tokens ): int {
 		if ( count( $title_tokens ) < 2 || array() === $prompt_tokens ) {
 			return 0;
 		}
@@ -339,20 +373,55 @@ class FalRecoverBatch {
 	 * @return array{matched:list<array<string,mixed>>,unmatched:list<array<string,mixed>>}
 	 */
 	public static function previewMatches( array $rows, int $min_score = 60 ): array {
+		if ( function_exists( 'set_time_limit' ) ) {
+			set_time_limit( 120 );
+		}
+
 		$candidates = self::loadCandidatePosts();
-		$used       = array();
-		$matched    = array();
-		$unmatched  = array();
+		$indexed    = array();
+		foreach ( $candidates as $post_id => $candidate ) {
+			$title = is_array( $candidate ) ? (string) ( $candidate['title'] ?? '' ) : (string) $candidate;
+			$focus = is_array( $candidate ) ? (string) ( $candidate['focus'] ?? '' ) : '';
+			$indexed[ (int) $post_id ] = array(
+				'title'        => $title,
+				'title_tokens' => self::matchTokens( $title ),
+				'focus_tokens' => self::matchTokens( $focus ),
+			);
+		}
+
+		$used      = array();
+		$matched   = array();
+		$unmatched = array();
 
 		foreach ( $rows as $row ) {
-			$prompt  = sanitize_textarea_field( (string) ( $row['prompt'] ?? '' ) );
-			$post_id = self::matchPromptToPost( $prompt, $candidates, $used, $min_score );
+			$prompt        = sanitize_textarea_field( (string) ( $row['prompt'] ?? '' ) );
+			$prompt_tokens = self::matchTokens( $prompt );
+			$post_id       = 0;
+			$best_score    = 0;
+
+			foreach ( $indexed as $candidate_id => $candidate ) {
+				if ( isset( $used[ $candidate_id ] ) ) {
+					continue;
+				}
+				$score = max(
+					self::scoreTokenOverlap( $candidate['title_tokens'], $prompt_tokens ),
+					self::scoreTokenOverlap( $candidate['focus_tokens'], $prompt_tokens )
+				);
+				if ( $score > $best_score ) {
+					$best_score = $score;
+					$post_id    = (int) $candidate_id;
+				}
+			}
+			if ( $best_score < $min_score ) {
+				$post_id = 0;
+			}
+
 			$preview = array(
 				'request_id' => sanitize_text_field( (string) ( $row['request_id'] ?? '' ) ),
 				'model_id'   => sanitize_text_field( (string) ( $row['model_id'] ?? '' ) ),
 				'prompt'     => $prompt,
 				'post_id'    => $post_id,
-				'post_title' => $post_id > 0 ? (string) get_the_title( $post_id ) : '',
+				'post_title' => $post_id > 0 ? (string) ( $indexed[ $post_id ]['title'] ?? get_the_title( $post_id ) ) : '',
 			);
 
 			if ( $post_id > 0 ) {
@@ -632,38 +701,48 @@ class FalRecoverBatch {
 	 */
 	private static function loadCandidatePosts(): array {
 		$types = get_post_types( array( 'public' => true ), 'names' );
-		$out   = array();
-		$page  = 1;
+		$types = array_values(
+			array_filter(
+				(array) $types,
+				static function ( $type ) {
+					return is_string( $type ) && post_type_supports( $type, 'thumbnail' );
+				}
+			)
+		);
+		if ( array() === $types ) {
+			return array();
+		}
+
+		$out  = array();
+		$page = 1;
 
 		do {
 			$q = new \WP_Query(
 				array(
 					'post_type'              => $types,
 					'post_status'            => array( 'publish', 'draft', 'pending', 'private', 'future' ),
-					'posts_per_page'         => 500,
+					'posts_per_page'         => 200,
 					'paged'                  => $page,
+					'fields'                 => 'ids',
 					'no_found_rows'          => true,
 					'update_post_meta_cache' => true,
 					'update_post_term_cache' => false,
+					'meta_query'             => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- Recovery needs posts missing thumbnails only.
+						array(
+							'key'     => '_thumbnail_id',
+							'compare' => 'NOT EXISTS',
+						),
+					),
 				)
 			);
 
-			foreach ( $q->posts as $post ) {
-				if ( ! $post instanceof \WP_Post ) {
-					continue;
-				}
-				$id = (int) $post->ID;
-				if ( ! post_type_supports( $post->post_type, 'thumbnail' ) ) {
-					continue;
-				}
-				if ( has_post_thumbnail( $id ) ) {
-					continue;
-				}
-				if ( ! current_user_can( 'edit_post', $id ) ) {
+			foreach ( $q->posts as $id ) {
+				$id = (int) $id;
+				if ( $id <= 0 || ! current_user_can( 'edit_post', $id ) ) {
 					continue;
 				}
 				$out[ $id ] = array(
-					'title'   => (string) $post->post_title,
+					'title'   => (string) get_the_title( $id ),
 					'content' => '',
 					'focus'   => \SmartImageMatcher\AI\PromptBuilder::getFocusKeyword( $id ),
 				);
@@ -672,7 +751,7 @@ class FalRecoverBatch {
 			++$page;
 			$page_count = count( $q->posts );
 			$out_count  = count( $out );
-		} while ( 500 === $page_count && $out_count < 5000 );
+		} while ( 200 === $page_count && $out_count < 2000 );
 
 		return $out;
 	}

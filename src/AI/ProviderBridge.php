@@ -365,7 +365,7 @@ class ProviderBridge {
 		if ( ! class_exists( $class ) || ! method_exists( $class, 'listRecentRequests' ) ) {
 			return new \WP_Error(
 				'smart_image_matcher_fal_history_unavailable',
-				__( 'Automatic fal history recovery requires AI Provider for fal.ai 1.1.10 or newer.', 'smart-image-matcher' )
+				__( 'Automatic fal history recovery requires AI Provider for fal.ai 1.1.11 or newer.', 'smart-image-matcher' )
 			);
 		}
 

@@ -7,6 +7,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.2.24] - 10/08/2026
+
+### Fixed
+
+- Recovery Preview no longer dies with a WordPress “critical error” on large libraries: fal history payloads are slimmed to prompt + image URL, candidate posts are limited to missing featured images, matching is pre-tokenized, and fatals return a REST error instead of an HTML crash page.
+
 ## [3.2.23] - 10/08/2026
 
 ### Added

@@ -59,6 +59,8 @@
 			imagesCount: '%d image(s)',
 			recoveryPreviewing: 'Checking recent completed fal.ai images…',
 			recoveryPreviewFailed: 'Could not preview fal.ai recovery.',
+			recoveryCriticalError:
+				'WordPress hit a critical error while previewing recovery. Update AI Provider for fal.ai to 1.1.11+, then try again. If it still fails, check wp-content/debug.log.',
 			recoveryPreviewComplete:
 				'%1$d safe match(es) found; %2$d will remain untouched.',
 			noRecoveryMatches:
@@ -335,6 +337,19 @@
 		);
 	}
 
+	function apiErrorMessage( err, fallback ) {
+		const raw = String(
+			( err && ( err.message || err.statusText ) ) || fallback || ''
+		);
+		if (
+			/critical error/i.test( raw ) ||
+			/<p>There has been a critical error/i.test( raw )
+		) {
+			return i18n.recoveryCriticalError;
+		}
+		return raw || fallback;
+	}
+
 	async function previewRecovery() {
 		stopRecoveryPolling();
 		recoveryPreview = null;
@@ -373,7 +388,7 @@
 		} catch ( err ) {
 			showRecoveryNotice(
 				'error',
-				err.message || i18n.recoveryPreviewFailed
+				apiErrorMessage( err, i18n.recoveryPreviewFailed )
 			);
 		} finally {
 			setRecoveryWorking( false );

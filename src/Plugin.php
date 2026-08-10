@@ -719,6 +719,7 @@ class Plugin {
 			'edit'                         => __( 'Edit', 'smart-image-matcher' ),
 			'recoveryPreviewing'           => __( 'Checking recent completed fal.ai images…', 'smart-image-matcher' ),
 			'recoveryPreviewFailed'        => __( 'Could not preview fal.ai recovery.', 'smart-image-matcher' ),
+			'recoveryCriticalError'        => __( 'WordPress hit a critical error while previewing recovery. Update AI Provider for fal.ai to 1.1.11+, then try again. If it still fails, check wp-content/debug.log.', 'smart-image-matcher' ),
 			/* translators: 1: matched count, 2: unmatched count */
 			'recoveryPreviewComplete'      => __( '%1$d safe match(es) found; %2$d will remain untouched.', 'smart-image-matcher' ),
 			'noRecoveryMatches'            => __( 'No safe matches were found. Nothing will be imported.', 'smart-image-matcher' ),

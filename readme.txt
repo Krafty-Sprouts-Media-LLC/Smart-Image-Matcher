@@ -4,7 +4,7 @@ Tags: images, media library, alt text, featured image, automation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 3.2.23
+Stable tag: 3.2.24
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -95,6 +95,9 @@ No AI data is sent automatically — only when you explicitly trigger AI matchin
 The plugin stores match results and job metadata in your own database only. Update checks may contact GitHub (see External services). No post content leaves your server unless you explicitly use AI features with a configured provider.
 
 == Changelog ==
+
+= 3.2.24 =
+* Fixed recovery preview fatal/timeouts on large sites by slim-loading fal history, matching only posts without featured images, and capping the preview batch.
 
 = 3.2.23 =
 * Added a Featured Images recovery UI: preview safe fal.ai matches, explicitly confirm, then recover every matched image through background jobs with live progress.

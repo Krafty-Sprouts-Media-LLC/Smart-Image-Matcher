@@ -1055,13 +1055,25 @@ class ImageGenController extends Controller {
 		if ( $discover || '' !== $csv || '' !== $request_ids ) {
 			$rows = array();
 			if ( $discover ) {
-				$found = FalRecoverBatch::discoverRecentRows( $hours, 500 );
-				if ( is_wp_error( $found ) ) {
-					return $found;
+				try {
+					$found = FalRecoverBatch::discoverRecentRows( $hours, 150 );
+					if ( is_wp_error( $found ) ) {
+						return $found;
+					}
+					$rows        = $found;
+					$match_posts = true;
+					$preview     = FalRecoverBatch::previewMatches( $rows, $min_score );
+				} catch ( \Throwable $e ) {
+					return new \WP_Error(
+						'smart_image_matcher_recover_fatal',
+						sprintf(
+							/* translators: %s: error message */
+							__( 'Recovery preview failed: %s', 'smart-image-matcher' ),
+							$e->getMessage()
+						),
+						array( 'status' => 500 )
+					);
 				}
-				$rows        = $found;
-				$match_posts = true;
-				$preview     = FalRecoverBatch::previewMatches( $rows, $min_score );
 
 				if ( $dry_run ) {
 					return rest_ensure_response(
@@ -1074,7 +1086,19 @@ class ImageGenController extends Controller {
 					);
 				}
 
-				$queued = FalRecoverBatch::queueMatched( $rows, $preview['matched'], $heading_hash );
+				try {
+					$queued = FalRecoverBatch::queueMatched( $rows, $preview['matched'], $heading_hash );
+				} catch ( \Throwable $e ) {
+					return new \WP_Error(
+						'smart_image_matcher_recover_fatal',
+						sprintf(
+							/* translators: %s: error message */
+							__( 'Recovery queue failed: %s', 'smart-image-matcher' ),
+							$e->getMessage()
+						),
+						array( 'status' => 500 )
+					);
+				}
 				return rest_ensure_response(
 					array(
 						'jobs'      => $queued['jobs'],
