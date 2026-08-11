@@ -237,21 +237,31 @@
 				</tr>` );
 		} );
 		unmatched.forEach( ( item ) => {
-			const bits = [];
-			if ( 'number' === typeof item.score && item.score > 0 ) {
-				bits.push( `${ item.score }%` );
+			let reason = item.reason ? String( item.reason ).trim() : '';
+			if ( ! reason ) {
+				const bits = [];
+				if ( 'number' === typeof item.score && item.score > 0 ) {
+					bits.push( `${ item.score }%` );
+				}
+				if ( item.near_post_title ) {
+					bits.push( `nearest: ${ item.near_post_title }` );
+				}
+				reason = bits.length
+					? `${ i18n.recoveryUnmatched } — ${ bits.join( ' · ' ) }`
+					: i18n.recoveryUnmatched;
 			}
-			if ( item.near_post_title ) {
-				bits.push( `nearest: ${ item.near_post_title }` );
-			}
-			const detail = bits.length ? ` (${ bits.join( ' · ' ) })` : '';
+			const nearCell = item.near_post_title
+				? `<span class="description">${ escHtml(
+						item.near_post_title
+				  ) }</span>`
+				: '—';
 			rows.push( `
 				<tr>
-					<td>—</td>
+					<td>${ nearCell }</td>
 					<td>${ escHtml( item.request_id || '' ) }</td>
 					<td>${ escHtml( recoveryPrompt( item.prompt ) ) }</td>
 					<td><span class="sim-status sim-status-warn">${ escHtml(
-						i18n.recoveryUnmatched + detail
+						reason
 					) }</span></td>
 				</tr>` );
 		} );

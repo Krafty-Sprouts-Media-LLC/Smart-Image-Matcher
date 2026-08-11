@@ -223,7 +223,7 @@ unset( $sim_ai_post_types['attachment'] );
 						<th><?php esc_html_e( 'Post', 'smart-image-matcher' ); ?></th>
 						<th><?php esc_html_e( 'fal Request', 'smart-image-matcher' ); ?></th>
 						<th><?php esc_html_e( 'Prompt', 'smart-image-matcher' ); ?></th>
-						<th><?php esc_html_e( 'Status', 'smart-image-matcher' ); ?></th>
+						<th><?php esc_html_e( 'Status / Reason', 'smart-image-matcher' ); ?></th>
 					</tr>
 				</thead>
 				<tbody id="sim-fal-recovery-body"></tbody>

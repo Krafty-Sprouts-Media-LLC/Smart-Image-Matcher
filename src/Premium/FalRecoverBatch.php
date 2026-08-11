@@ -571,6 +571,9 @@ class FalRecoverBatch {
 	/**
 	 * Preview automatic prompt-to-post assignments without importing images.
 	 *
+	 * Unmatched rows include a human-readable `reason` (and `reason_code`) so
+	 * operators can see why an image was left alone.
+	 *
 	 * @since 3.2.22
 	 * @param list<array<string, mixed>> $rows      Discovered fal rows.
 	 * @param int                        $min_score Minimum match score.
@@ -581,8 +584,67 @@ class FalRecoverBatch {
 			set_time_limit( 120 );
 		}
 
-		$candidates = self::loadCandidatePosts();
-		$indexed    = array();
+		$open_indexed = self::indexCandidates( self::loadCandidatePosts( true ) );
+		$taken_indexed = self::indexCandidates( self::loadCandidatePosts( false ) );
+
+		$used      = array();
+		$matched   = array();
+		$unmatched = array();
+
+		foreach ( $rows as $row ) {
+			$prompt        = sanitize_textarea_field( (string) ( $row['prompt'] ?? '' ) );
+			$prompt_tokens = self::matchTokens( $prompt );
+
+			$best_open = self::bestCandidateForPrompt( $open_indexed, $prompt_tokens, array() );
+			$best_free = self::bestCandidateForPrompt( $open_indexed, $prompt_tokens, $used );
+			$best_taken_pool = self::bestCandidateForPrompt( $taken_indexed, $prompt_tokens, array() );
+
+			$post_id = ( $best_free['score'] >= $min_score ) ? (int) $best_free['post_id'] : 0;
+
+			$preview = array(
+				'request_id' => sanitize_text_field( (string) ( $row['request_id'] ?? '' ) ),
+				'model_id'   => sanitize_text_field( (string) ( $row['model_id'] ?? '' ) ),
+				'prompt'     => $prompt,
+				'post_id'    => $post_id,
+				'post_title' => $post_id > 0 ? (string) ( $open_indexed[ $post_id ]['title'] ?? get_the_title( $post_id ) ) : '',
+				'score'      => $post_id > 0 ? (int) $best_free['score'] : 0,
+			);
+
+			if ( $post_id > 0 ) {
+				$used[ $post_id ] = true;
+				$matched[]        = $preview;
+				continue;
+			}
+
+			$explain = self::explainUnmatched(
+				$min_score,
+				$best_free,
+				$best_open,
+				$best_taken_pool,
+				$used
+			);
+			$preview['score']           = (int) $explain['score'];
+			$preview['near_post_title'] = (string) $explain['near_post_title'];
+			$preview['reason_code']     = (string) $explain['reason_code'];
+			$preview['reason']          = (string) $explain['reason'];
+			$unmatched[]                = $preview;
+		}
+
+		return array(
+			'matched'   => $matched,
+			'unmatched' => $unmatched,
+		);
+	}
+
+	/**
+	 * Tokenize candidate posts for recovery scoring.
+	 *
+	 * @since 3.2.28
+	 * @param array<int,array{title:string,content?:string,focus:string}|string> $candidates Candidates.
+	 * @return array<int,array{title:string,title_tokens:list<string>,focus_tokens:list<string>}>
+	 */
+	private static function indexCandidates( array $candidates ): array {
+		$indexed = array();
 		foreach ( $candidates as $post_id => $candidate ) {
 			$title = is_array( $candidate ) ? (string) ( $candidate['title'] ?? '' ) : (string) $candidate;
 			$focus = is_array( $candidate ) ? (string) ( $candidate['focus'] ?? '' ) : '';
@@ -592,57 +654,130 @@ class FalRecoverBatch {
 				'focus_tokens' => self::matchTokens( $focus ),
 			);
 		}
+		return $indexed;
+	}
 
-		$used      = array();
-		$matched   = array();
-		$unmatched = array();
-
-		foreach ( $rows as $row ) {
-			$prompt        = sanitize_textarea_field( (string) ( $row['prompt'] ?? '' ) );
-			$prompt_tokens = self::matchTokens( $prompt );
-			$post_id       = 0;
-			$best_score    = 0;
-			$best_title    = '';
-
-			foreach ( $indexed as $candidate_id => $candidate ) {
-				if ( isset( $used[ $candidate_id ] ) ) {
-					continue;
-				}
-				$score = max(
-					self::scoreTokenOverlap( $candidate['title_tokens'], $prompt_tokens ),
-					self::scoreTokenOverlap( $candidate['focus_tokens'], $prompt_tokens )
-				);
-				if ( $score > $best_score ) {
-					$best_score = $score;
-					$post_id    = (int) $candidate_id;
-					$best_title = (string) $candidate['title'];
-				}
+	/**
+	 * Highest-scoring candidate for a prompt, optionally skipping used posts.
+	 *
+	 * @since 3.2.28
+	 * @param array<int,array{title:string,title_tokens:list<string>,focus_tokens:list<string>}> $indexed Indexed posts.
+	 * @param list<string>                                                                       $prompt_tokens Prompt tokens.
+	 * @param array<int,true>                                                                    $used Used post ids.
+	 * @return array{post_id:int,score:int,title:string}
+	 */
+	private static function bestCandidateForPrompt( array $indexed, array $prompt_tokens, array $used ): array {
+		$best = array(
+			'post_id' => 0,
+			'score'   => 0,
+			'title'   => '',
+		);
+		foreach ( $indexed as $candidate_id => $candidate ) {
+			if ( isset( $used[ $candidate_id ] ) ) {
+				continue;
 			}
-			if ( $best_score < $min_score ) {
-				$post_id = 0;
-			}
-
-			$preview = array(
-				'request_id' => sanitize_text_field( (string) ( $row['request_id'] ?? '' ) ),
-				'model_id'   => sanitize_text_field( (string) ( $row['model_id'] ?? '' ) ),
-				'prompt'     => $prompt,
-				'post_id'    => $post_id,
-				'post_title' => $post_id > 0 ? (string) ( $indexed[ $post_id ]['title'] ?? get_the_title( $post_id ) ) : '',
-				'score'      => $best_score,
+			$score = max(
+				self::scoreTokenOverlap( $candidate['title_tokens'], $prompt_tokens ),
+				self::scoreTokenOverlap( $candidate['focus_tokens'], $prompt_tokens )
 			);
-
-			if ( $post_id > 0 ) {
-				$used[ $post_id ] = true;
-				$matched[]        = $preview;
-			} else {
-				$preview['near_post_title'] = $best_title;
-				$unmatched[]                = $preview;
+			if ( $score > $best['score'] ) {
+				$best = array(
+					'post_id' => (int) $candidate_id,
+					'score'   => $score,
+					'title'   => (string) $candidate['title'],
+				);
 			}
+		}
+		return $best;
+	}
+
+	/**
+	 * Human-readable explanation for an unmatched fal image.
+	 *
+	 * @since 3.2.28
+	 * @param int                                 $min_score       Threshold.
+	 * @param array{post_id:int,score:int,title:string} $best_free Open posts still free this batch.
+	 * @param array{post_id:int,score:int,title:string} $best_open All open (no-thumb) posts including claimed.
+	 * @param array{post_id:int,score:int,title:string} $best_taken Posts that already have a featured image.
+	 * @param array<int,true>                     $used            Claimed this preview/batch.
+	 * @return array{reason_code:string,reason:string,score:int,near_post_title:string}
+	 */
+	private static function explainUnmatched(
+		int $min_score,
+		array $best_free,
+		array $best_open,
+		array $best_taken,
+		array $used
+	): array {
+		// Strong match exists but already has a featured image — most common leftover.
+		if ( (int) $best_taken['score'] >= $min_score ) {
+			return array(
+				'reason_code'     => 'already_has_featured',
+				'reason'          => sprintf(
+					/* translators: 1: post title, 2: match percent */
+					__( 'Matching post already has a featured image: %1$s (%2$d%%)', 'smart-image-matcher' ),
+					(string) $best_taken['title'],
+					(int) $best_taken['score']
+				),
+				'score'           => (int) $best_taken['score'],
+				'near_post_title' => (string) $best_taken['title'],
+			);
+		}
+
+		// Would have matched an open post that another image in this batch already claimed.
+		if (
+			(int) $best_open['score'] >= $min_score
+			&& (int) $best_open['post_id'] > 0
+			&& isset( $used[ (int) $best_open['post_id'] ] )
+		) {
+			return array(
+				'reason_code'     => 'claimed_this_batch',
+				'reason'          => sprintf(
+					/* translators: 1: post title, 2: match percent */
+					__( 'Best match already claimed by another image this recovery: %1$s (%2$d%%)', 'smart-image-matcher' ),
+					(string) $best_open['title'],
+					(int) $best_open['score']
+				),
+				'score'           => (int) $best_open['score'],
+				'near_post_title' => (string) $best_open['title'],
+			);
+		}
+
+		if ( (int) $best_free['score'] > 0 ) {
+			return array(
+				'reason_code'     => 'below_threshold',
+				'reason'          => sprintf(
+					/* translators: 1: post title, 2: score percent, 3: required percent */
+					__( 'Nearest open post “%1$s” scored %2$d%% (need %3$d%%+)', 'smart-image-matcher' ),
+					(string) $best_free['title'],
+					(int) $best_free['score'],
+					$min_score
+				),
+				'score'           => (int) $best_free['score'],
+				'near_post_title' => (string) $best_free['title'],
+			);
+		}
+
+		if ( (int) $best_taken['score'] > 0 ) {
+			return array(
+				'reason_code'     => 'weak_has_featured',
+				'reason'          => sprintf(
+					/* translators: 1: post title, 2: score percent, 3: required percent */
+					__( 'Nearest post already has a featured image and scored only %2$d%%: %1$s (need %3$d%%+)', 'smart-image-matcher' ),
+					(string) $best_taken['title'],
+					(int) $best_taken['score'],
+					$min_score
+				),
+				'score'           => (int) $best_taken['score'],
+				'near_post_title' => (string) $best_taken['title'],
+			);
 		}
 
 		return array(
-			'matched'   => $matched,
-			'unmatched' => $unmatched,
+			'reason_code'     => 'no_subject_overlap',
+			'reason'          => __( 'No post subject/keyword overlapped this prompt enough to assign safely.', 'smart-image-matcher' ),
+			'score'           => 0,
+			'near_post_title' => '',
 		);
 	}
 
@@ -904,12 +1039,13 @@ class FalRecoverBatch {
 	}
 
 	/**
-	 * Candidate posts: public types supporting thumbnails, missing featured.
+	 * Candidate posts: public types supporting thumbnails.
 	 *
 	 * @since 3.2.21
+	 * @param bool $missing_thumbnail_only When true, only posts without a featured image.
 	 * @return array<int,array{title:string,content:string,focus:string}>
 	 */
-	private static function loadCandidatePosts(): array {
+	private static function loadCandidatePosts( bool $missing_thumbnail_only = true ): array {
 		$types = get_post_types( array( 'public' => true ), 'names' );
 		$types = array_values(
 			array_filter(
@@ -926,6 +1062,20 @@ class FalRecoverBatch {
 		$out  = array();
 		$page = 1;
 
+		$meta_query = $missing_thumbnail_only
+			? array(
+				array(
+					'key'     => '_thumbnail_id',
+					'compare' => 'NOT EXISTS',
+				),
+			)
+			: array(
+				array(
+					'key'     => '_thumbnail_id',
+					'compare' => 'EXISTS',
+				),
+			);
+
 		do {
 			$q = new \WP_Query(
 				array(
@@ -937,12 +1087,7 @@ class FalRecoverBatch {
 					'no_found_rows'          => true,
 					'update_post_meta_cache' => true,
 					'update_post_term_cache' => false,
-					'meta_query'             => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- Recovery needs posts missing thumbnails only.
-						array(
-							'key'     => '_thumbnail_id',
-							'compare' => 'NOT EXISTS',
-						),
-					),
+					'meta_query'             => $meta_query, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- Recovery matching / diagnostics need thumbnail state.
 				)
 			);
 
@@ -954,7 +1099,7 @@ class FalRecoverBatch {
 				$out[ $id ] = array(
 					'title'   => (string) get_the_title( $id ),
 					'content' => '',
-					'focus'   => \SmartImageMatcher\AI\PromptBuilder::getFocusKeyword( $id ),
+					'focus'   => PromptBuilder::getFocusKeyword( $id ),
 				);
 			}
 

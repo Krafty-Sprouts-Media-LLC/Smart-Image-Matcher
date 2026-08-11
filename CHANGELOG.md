@@ -7,6 +7,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.2.28] - 11/08/2026
+
+### Added
+
+- Recovery preview unmatched rows include an explicit `reason` / `reason_code`: matching post already has a featured image, best match claimed by another image this batch, nearest open post below the score threshold, or no safe subject overlap. The Status column shows that text instead of a bare “Not matched” label.
+
 ## [3.2.27] - 11/08/2026
 
 ### Fixed
