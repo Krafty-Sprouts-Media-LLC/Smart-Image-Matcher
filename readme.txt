@@ -4,7 +4,7 @@ Tags: images, media library, alt text, featured image, automation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 3.2.26
+Stable tag: 3.2.27
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -95,6 +95,9 @@ No AI data is sent automatically — only when you explicitly trigger AI matchin
 The plugin stores match results and job metadata in your own database only. Update checks may contact GitHub (see External services). No post content leaves your server unless you explicitly use AI features with a configured provider.
 
 == Changelog ==
+
+= 3.2.27 =
+* Fal recovery now names sideloaded attachments from the SEO focus/target keyword (same as normal AI generate), not the full post title.
 
 = 3.2.26 =
 * Fixed fal recovery jobs failing with “permission denied” under Action Scheduler (no logged-in user). Improved prompt↔title matching (why/my fluff, yellow/yellowing, subject-token requirement) and show the real error on failed recovery rows.

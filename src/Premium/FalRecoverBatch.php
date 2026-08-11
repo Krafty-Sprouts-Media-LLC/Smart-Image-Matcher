@@ -15,6 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 use SmartImageMatcher\AI\ImageModelCatalog;
+use SmartImageMatcher\AI\PromptBuilder;
 use SmartImageMatcher\AI\ProviderBridge;
 use SmartImageMatcher\Domain\Normalizer;
 use SmartImageMatcher\Logging\Logger;
@@ -701,13 +702,14 @@ class FalRecoverBatch {
 				),
 				'source'  => $source,
 				'context' => array(
-					'post_id'      => $post_id,
-					'heading_hash' => $heading_hash,
-					'heading_text' => get_the_title( $post_id ),
-					'purpose'      => ( 'featured' === $heading_hash ) ? 'featured' : 'heading',
-					'style'        => 'photo',
-					'image_prompt' => $prompt,
-					'brief'        => $prompt,
+					'post_id'       => $post_id,
+					'heading_hash'  => $heading_hash,
+					'heading_text'  => get_the_title( $post_id ),
+					'focus_keyword' => PromptBuilder::getFocusKeyword( $post_id ),
+					'purpose'       => ( 'featured' === $heading_hash ) ? 'featured' : 'heading',
+					'style'         => 'photo',
+					'image_prompt'  => $prompt,
+					'brief'         => $prompt,
 				),
 			);
 
@@ -856,13 +858,14 @@ class FalRecoverBatch {
 				),
 				'source'  => $source,
 				'context' => array(
-					'post_id'      => $post_id,
-					'heading_hash' => $heading_hash,
-					'heading_text' => get_the_title( $post_id ),
-					'purpose'      => ( 'featured' === $heading_hash ) ? 'featured' : 'heading',
-					'style'        => 'photo',
-					'image_prompt' => $prompt,
-					'brief'        => $prompt,
+					'post_id'       => $post_id,
+					'heading_hash'  => $heading_hash,
+					'heading_text'  => get_the_title( $post_id ),
+					'focus_keyword' => PromptBuilder::getFocusKeyword( $post_id ),
+					'purpose'       => ( 'featured' === $heading_hash ) ? 'featured' : 'heading',
+					'style'         => 'photo',
+					'image_prompt'  => $prompt,
+					'brief'         => $prompt,
 				),
 			);
 

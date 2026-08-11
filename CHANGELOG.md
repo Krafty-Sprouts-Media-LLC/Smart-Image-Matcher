@@ -7,6 +7,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.2.27] - 11/08/2026
+
+### Fixed
+
+- Fal recovery queued context without `focus_keyword`, so sideloaded media used the full post title for filename/title/alt. Recovery now loads Rank Math / Yoast / SEOPress / TSF focus keywords (same as normal AI generate), including a finalize-time fallback if context omitted it.
+
 ## [3.2.26] - 10/08/2026
 
 ### Fixed

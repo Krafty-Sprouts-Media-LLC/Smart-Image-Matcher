@@ -354,6 +354,10 @@ class AiImageGenerator {
 			);
 		}
 
+		if ( '' === $focus_keyword && $post_id > 0 ) {
+			$focus_keyword = PromptBuilder::getFocusKeyword( $post_id );
+		}
+
 		$title = $this->resolveTitle( $focus_keyword, $heading_text );
 		$attachment_id = $this->sideloadGeneratedImage( $source, $post_id, $title );
 
@@ -858,6 +862,9 @@ class AiImageGenerator {
 		}
 		if ( empty( $context['brief'] ) ) {
 			$context['brief'] = (string) $context['image_prompt'];
+		}
+		if ( empty( $context['focus_keyword'] ) ) {
+			$context['focus_keyword'] = PromptBuilder::getFocusKeyword( $post_id );
 		}
 
 		$generator = new self();
