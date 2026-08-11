@@ -309,7 +309,10 @@
 					setRecoveryRowStatus( job.post_id, i18n.completed, 'done' );
 				} else if ( 'failed' === state || 'error' === state ) {
 					++recoveryFailed;
-					setRecoveryRowStatus( job.post_id, i18n.failed, 'failed' );
+					const errLabel = status.error
+						? `${ i18n.failed }: ${ status.error }`
+						: i18n.failed;
+					setRecoveryRowStatus( job.post_id, errLabel, 'failed' );
 				} else {
 					stillActive.push( job );
 					setRecoveryRowStatus(

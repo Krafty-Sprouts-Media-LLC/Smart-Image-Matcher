@@ -67,16 +67,26 @@ class FalRecoverBatch {
 	 * @var list<string>
 	 */
 	private const MATCH_TITLE_BOILERPLATE_TOKENS = array(
+		'actually',
 		'cause',
 		'causes',
 		'complete',
 		'diagnose',
 		'diagnosis',
+		'explained',
 		'fix',
 		'fixes',
 		'guide',
 		'guides',
+		'here',
+		'heres',
+		'how',
+		'it',
+		'know',
+		'my',
+		'need',
 		'prevention',
+		'really',
 		'reason',
 		'reasons',
 		'solution',
@@ -92,6 +102,54 @@ class FalRecoverBatch {
 		'ultimate',
 		'way',
 		'ways',
+		'what',
+		'whats',
+		'when',
+		'where',
+		'which',
+		'who',
+		'why',
+		'your',
+	);
+
+	/**
+	 * Common symptom / descriptor tokens. Alone they must not decide a match
+	 * (e.g. yellow leaves → wrong plant). Subject/core tokens still must hit.
+	 *
+	 * @since 3.2.26
+	 * @var list<string>
+	 */
+	private const MATCH_SYMPTOM_TOKENS = array(
+		'bloom',
+		'blooming',
+		'brown',
+		'curl',
+		'curling',
+		'die',
+		'dying',
+		'droop',
+		'drooping',
+		'fall',
+		'falling',
+		'flower',
+		'flowering',
+		'grow',
+		'growing',
+		'leaf',
+		'leggy',
+		'sag',
+		'sagging',
+		'shrivel',
+		'small',
+		'split',
+		'turn',
+		'turning',
+		'wilt',
+		'wilting',
+		'wrinkle',
+		'wrinkled',
+		'yellow',
+		'yellowing',
 	);
 
 	/**
@@ -313,22 +371,90 @@ class FalRecoverBatch {
 	/**
 	 * Tokenize text for recovery matching (noise + SEO boilerplate removed).
 	 *
+	 * Light morphological stems so yellowing↔yellow and curling↔curled align.
+	 *
 	 * @since 3.2.24
 	 * @param string $text Raw text.
 	 * @return list<string>
 	 */
 	public static function matchTokens( string $text ): array {
-		return array_values(
-			array_diff(
-				array_unique( Normalizer::normalize( wp_strip_all_tags( $text ) ) ),
-				self::MATCH_NOISE_TOKENS,
-				self::MATCH_TITLE_BOILERPLATE_TOKENS
-			)
+		$raw = array_diff(
+			array_unique( Normalizer::normalize( wp_strip_all_tags( $text ) ) ),
+			self::MATCH_NOISE_TOKENS,
+			self::MATCH_TITLE_BOILERPLATE_TOKENS
 		);
+
+		$out = array();
+		foreach ( $raw as $token ) {
+			$token = self::stemMatchToken( (string) $token );
+			if ( '' !== $token ) {
+				$out[] = $token;
+			}
+		}
+
+		return array_values( array_unique( $out ) );
+	}
+
+	/**
+	 * Collapse common adjective/verb endings for recovery matching only.
+	 *
+	 * @since 3.2.26
+	 * @param string $token Normalized token.
+	 * @return string
+	 */
+	public static function stemMatchToken( string $token ): string {
+		// Normalizer keeps irregular plurals like "leaves" as-is (legacy bug);
+		// recovery matching needs the singular so symptom filters apply.
+		$irregular = array(
+			'leaves'   => 'leaf',
+			'tomatoes' => 'tomato',
+			'potatoes' => 'potato',
+			'children' => 'child',
+		);
+		if ( isset( $irregular[ $token ] ) ) {
+			$token = $irregular[ $token ];
+		}
+
+		$len = strlen( $token );
+		if ( $len > 5 && 'ing' === substr( $token, -3 ) ) {
+			$base = substr( $token, 0, -3 );
+			// yellowing → yellow, curling → curl (drop leftover consonant pairs lightly).
+			if ( strlen( $base ) > 3 && $base[ strlen( $base ) - 1 ] === $base[ strlen( $base ) - 2 ] ) {
+				$base = substr( $base, 0, -1 );
+			}
+			return $base;
+		}
+		if ( $len > 4 && 'ed' === substr( $token, -2 ) ) {
+			$base = substr( $token, 0, -2 );
+			if ( strlen( $base ) > 3 && $base[ strlen( $base ) - 1 ] === $base[ strlen( $base ) - 2 ] ) {
+				$base = substr( $base, 0, -1 );
+			}
+			return $base;
+		}
+		if ( $len > 4 && 'ly' === substr( $token, -2 ) ) {
+			return substr( $token, 0, -2 );
+		}
+
+		return $token;
+	}
+
+	/**
+	 * Subject / entity tokens from a title or focus phrase.
+	 *
+	 * @since 3.2.26
+	 * @param list<string> $tokens Match tokens.
+	 * @return list<string>
+	 */
+	public static function coreMatchTokens( array $tokens ): array {
+		return array_values( array_diff( $tokens, self::MATCH_SYMPTOM_TOKENS ) );
 	}
 
 	/**
 	 * Score overlap between title/focus tokens and prompt tokens.
+	 *
+	 * Requires at least one non-symptom "core" token hit when cores exist, so
+	 * generic yellow/leaves language cannot attach an image to the wrong plant.
+	 * Single-token focus keywords (after noise strip) can still match.
 	 *
 	 * @since 3.2.24
 	 * @param list<string> $title_tokens  Candidate tokens.
@@ -336,11 +462,50 @@ class FalRecoverBatch {
 	 * @return int 0–100.
 	 */
 	public static function scoreTokenOverlap( array $title_tokens, array $prompt_tokens ): int {
-		if ( count( $title_tokens ) < 2 || array() === $prompt_tokens ) {
+		if ( array() === $title_tokens || array() === $prompt_tokens ) {
 			return 0;
 		}
 
-		$hits = count( array_intersect( $title_tokens, $prompt_tokens ) );
+		$prompt_set = array_fill_keys( $prompt_tokens, true );
+		$hits       = 0;
+		foreach ( $title_tokens as $token ) {
+			if ( isset( $prompt_set[ $token ] ) ) {
+				++$hits;
+			}
+		}
+		if ( $hits < 1 ) {
+			return 0;
+		}
+
+		$core      = self::coreMatchTokens( $title_tokens );
+		$core_hits = 0;
+		foreach ( $core as $token ) {
+			if ( isset( $prompt_set[ $token ] ) ) {
+				++$core_hits;
+			}
+		}
+
+		// Titles that are only symptoms (rare) fall back to full coverage.
+		if ( array() !== $core && $core_hits < 1 ) {
+			return 0;
+		}
+
+		// Short focus keywords: one distinctive core hit is enough.
+		if ( count( $title_tokens ) === 1 ) {
+			return ( 1 === $hits ) ? 100 : 0;
+		}
+
+		// Prefer core coverage when we have subject words; otherwise full title %.
+		if ( array() !== $core ) {
+			$core_score = (int) round( 100 * ( $core_hits / count( $core ) ) );
+			$full_score = (int) round( 100 * ( $hits / count( $title_tokens ) ) );
+			// Need most subject words present (1/1, 2/2, or ≥2/3…).
+			if ( $core_hits < count( $core ) && $core_score < 67 ) {
+				return 0;
+			}
+			return max( $core_score, $full_score );
+		}
+
 		return (int) round( 100 * ( $hits / count( $title_tokens ) ) );
 	}
 

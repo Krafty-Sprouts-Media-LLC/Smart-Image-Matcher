@@ -763,7 +763,17 @@ class AiImageGenerator {
 	 * @return int|\WP_Error Attachment ID.
 	 */
 	public static function recoverFalJob( int $post_id, string $heading_hash, array $pending ) {
-		if ( $post_id <= 0 || ! current_user_can( 'edit_post', $post_id ) ) {
+		if ( $post_id <= 0 ) {
+			return new \WP_Error(
+				'smart_image_matcher_recover_invalid_post',
+				__( 'Invalid post for fal recovery.', 'smart-image-matcher' )
+			);
+		}
+
+		// Action Scheduler / cron workers have no logged-in user. Capability was
+		// already checked when the recovery job was queued from the admin UI.
+		$user_id = get_current_user_id();
+		if ( $user_id > 0 && ! current_user_can( 'edit_post', $post_id ) ) {
 			return new \WP_Error(
 				'smart_image_matcher_recover_forbidden',
 				__( 'Permission denied for fal recovery.', 'smart-image-matcher' )

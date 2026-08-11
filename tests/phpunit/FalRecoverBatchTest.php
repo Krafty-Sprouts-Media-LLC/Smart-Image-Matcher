@@ -134,6 +134,38 @@ final class FalRecoverBatchTest extends TestCase {
 	}
 
 	/**
+	 * yellow vs yellowing (and similar endings) must still match.
+	 *
+	 * @return void
+	 */
+	public function test_morphology_aligns_yellow_and_yellowing(): void {
+		$title  = 'Why Are My Corn Leaves Turning Yellow? Causes, Fixes, and Prevention';
+		$prompt = 'A realistic wide-angle photograph of a sunlit backyard garden row of young corn plants with pale yellowing leaves streaked along their veins.';
+
+		self::assertGreaterThanOrEqual(
+			60,
+			FalRecoverBatch::scoreTitleInPrompt( $title, $prompt )
+		);
+	}
+
+	/**
+	 * Generic symptom overlap without the subject plant must not match.
+	 *
+	 * @return void
+	 */
+	public function test_symptom_only_overlap_does_not_match_wrong_plant(): void {
+		$prompt = 'A close-up realistic photograph of a potted spider plant with long arching leaves drooping limply.';
+
+		self::assertLessThan(
+			60,
+			FalRecoverBatch::scoreTitleInPrompt(
+				'Plants That Repel Spiders: 12 Herbs, Flowers, and Trees That Actually Work',
+				$prompt
+			)
+		);
+	}
+
+	/**
 	 * Rank Math / Yoast focus keywords are scored and can beat a weak title.
 	 *
 	 * @return void

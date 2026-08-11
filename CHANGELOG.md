@@ -7,6 +7,13 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.2.26] - 10/08/2026
+
+### Fixed
+
+- Fal recovery background jobs failed for every match: `recoverFalJob()` required `current_user_can( 'edit_post' )`, but Action Scheduler runs with no logged-in user. Capability is now enforced only when a user is present (queue-time auth already happened).
+- Recovery matching still under-matched because title tokens kept `why`/`my` and `leaves`≠`leaf`, and `yellow`≠`yellowing`. Matching now strips question fluff, aligns light morphology, and requires a subject/core token hit so symptom-only overlap cannot assign the wrong plant. Failed recovery rows show the server error message.
+
 ## [3.2.25] - 10/08/2026
 
 ### Fixed
