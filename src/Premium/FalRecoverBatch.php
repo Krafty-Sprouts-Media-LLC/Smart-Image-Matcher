@@ -154,6 +154,37 @@ class FalRecoverBatch {
 	);
 
 	/**
+	 * Color / listicle fluff — never enough alone to assign an image
+	 * (e.g. “Foods That Are Green” must not match every green plant photo).
+	 *
+	 * @since 3.2.29
+	 * @var list<string>
+	 */
+	private const MATCH_GENERIC_TOKENS = array(
+		'best',
+		'black',
+		'blue',
+		'brown',
+		'color',
+		'colors',
+		'colour',
+		'colours',
+		'different',
+		'gray',
+		'green',
+		'grey',
+		'list',
+		'orange',
+		'pink',
+		'purple',
+		'red',
+		'type',
+		'types',
+		'white',
+		'yellow',
+	);
+
+	/**
 	 * Parse a CSV file into recovery rows.
 	 *
 	 * Accepted headers (case-insensitive): post_id, request_id, model_id
@@ -388,9 +419,10 @@ class FalRecoverBatch {
 		$out = array();
 		foreach ( $raw as $token ) {
 			$token = self::stemMatchToken( (string) $token );
-			if ( '' !== $token ) {
-				$out[] = $token;
+			if ( '' === $token || preg_match( '/^\d+$/', $token ) ) {
+				continue;
 			}
+			$out[] = $token;
 		}
 
 		return array_values( array_unique( $out ) );
@@ -447,15 +479,21 @@ class FalRecoverBatch {
 	 * @return list<string>
 	 */
 	public static function coreMatchTokens( array $tokens ): array {
-		return array_values( array_diff( $tokens, self::MATCH_SYMPTOM_TOKENS ) );
+		return array_values(
+			array_diff(
+				$tokens,
+				self::MATCH_SYMPTOM_TOKENS,
+				self::MATCH_GENERIC_TOKENS
+			)
+		);
 	}
 
 	/**
 	 * Score overlap between title/focus tokens and prompt tokens.
 	 *
-	 * Requires at least one non-symptom "core" token hit when cores exist, so
-	 * generic yellow/leaves language cannot attach an image to the wrong plant.
-	 * Single-token focus keywords (after noise strip) can still match.
+	 * Requires at least one non-symptom/non-color "core" token hit when cores
+	 * exist, so generic yellow/green listicles cannot steal plant photos.
+	 * Color-only or symptom-only titles score 0.
 	 *
 	 * @since 3.2.24
 	 * @param list<string> $title_tokens  Candidate tokens.
@@ -478,36 +516,33 @@ class FalRecoverBatch {
 			return 0;
 		}
 
-		$core      = self::coreMatchTokens( $title_tokens );
+		$core = self::coreMatchTokens( $title_tokens );
+		// Color/listicle-only titles (e.g. "Foods That Are Green") never match.
+		if ( array() === $core ) {
+			return 0;
+		}
+
 		$core_hits = 0;
 		foreach ( $core as $token ) {
 			if ( isset( $prompt_set[ $token ] ) ) {
 				++$core_hits;
 			}
 		}
-
-		// Titles that are only symptoms (rare) fall back to full coverage.
-		if ( array() !== $core && $core_hits < 1 ) {
+		if ( $core_hits < 1 ) {
 			return 0;
 		}
 
-		// Short focus keywords: one distinctive core hit is enough.
-		if ( count( $title_tokens ) === 1 ) {
-			return ( 1 === $hits ) ? 100 : 0;
+		// Short focus keywords: one distinctive subject token is enough.
+		if ( 1 === count( $core ) && 1 === $core_hits ) {
+			return 100;
 		}
 
-		// Prefer core coverage when we have subject words; otherwise full title %.
-		if ( array() !== $core ) {
-			$core_score = (int) round( 100 * ( $core_hits / count( $core ) ) );
-			$full_score = (int) round( 100 * ( $hits / count( $title_tokens ) ) );
-			// Need most subject words present (1/1, 2/2, or ≥2/3…).
-			if ( $core_hits < count( $core ) && $core_score < 67 ) {
-				return 0;
-			}
-			return max( $core_score, $full_score );
+		$core_score = (int) round( 100 * ( $core_hits / count( $core ) ) );
+		$full_score = (int) round( 100 * ( $hits / count( $title_tokens ) ) );
+		if ( $core_hits < count( $core ) && $core_score < 67 ) {
+			return 0;
 		}
-
-		return (int) round( 100 * ( $hits / count( $title_tokens ) ) );
+		return max( $core_score, $full_score );
 	}
 
 	/**
@@ -575,17 +610,19 @@ class FalRecoverBatch {
 	 * operators can see why an image was left alone.
 	 *
 	 * @since 3.2.22
-	 * @param list<array<string, mixed>> $rows      Discovered fal rows.
-	 * @param int                        $min_score Minimum match score.
+	 * @param list<array<string, mixed>> $rows          Discovered fal rows.
+	 * @param int                        $min_score     Minimum match score.
+	 * @param list<string>               $post_statuses Post statuses to consider (default publish).
 	 * @return array{matched:list<array<string,mixed>>,unmatched:list<array<string,mixed>>}
 	 */
-	public static function previewMatches( array $rows, int $min_score = 60 ): array {
+	public static function previewMatches( array $rows, int $min_score = 60, array $post_statuses = array( 'publish' ) ): array {
 		if ( function_exists( 'set_time_limit' ) ) {
 			set_time_limit( 120 );
 		}
 
-		$open_indexed = self::indexCandidates( self::loadCandidatePosts( true ) );
-		$taken_indexed = self::indexCandidates( self::loadCandidatePosts( false ) );
+		$post_statuses = self::sanitizeRecoveryStatuses( $post_statuses );
+		$open_indexed  = self::indexCandidates( self::loadCandidatePosts( true, $post_statuses ) );
+		$taken_indexed = self::indexCandidates( self::loadCandidatePosts( false, $post_statuses ) );
 
 		$used      = array();
 		$matched   = array();
@@ -1039,13 +1076,26 @@ class FalRecoverBatch {
 	}
 
 	/**
+	 * Sanitize post statuses for recovery matching.
+	 *
+	 * @since 3.2.29
+	 * @param list<string>|string $statuses Raw statuses.
+	 * @return list<string>
+	 */
+	public static function sanitizeRecoveryStatuses( $statuses ): array {
+		$clean = \SmartImageMatcher\Domain\PostStatuses::sanitizeList( $statuses );
+		return array() === $clean ? array( 'publish' ) : $clean;
+	}
+
+	/**
 	 * Candidate posts: public types supporting thumbnails.
 	 *
 	 * @since 3.2.21
-	 * @param bool $missing_thumbnail_only When true, only posts without a featured image.
+	 * @param bool         $missing_thumbnail_only When true, only posts without a featured image.
+	 * @param list<string> $post_statuses          Post statuses to include.
 	 * @return array<int,array{title:string,content:string,focus:string}>
 	 */
-	private static function loadCandidatePosts( bool $missing_thumbnail_only = true ): array {
+	private static function loadCandidatePosts( bool $missing_thumbnail_only = true, array $post_statuses = array( 'publish' ) ): array {
 		$types = get_post_types( array( 'public' => true ), 'names' );
 		$types = array_values(
 			array_filter(
@@ -1059,8 +1109,9 @@ class FalRecoverBatch {
 			return array();
 		}
 
-		$out  = array();
-		$page = 1;
+		$post_statuses = self::sanitizeRecoveryStatuses( $post_statuses );
+		$out           = array();
+		$page          = 1;
 
 		$meta_query = $missing_thumbnail_only
 			? array(
@@ -1080,7 +1131,7 @@ class FalRecoverBatch {
 			$q = new \WP_Query(
 				array(
 					'post_type'              => $types,
-					'post_status'            => array( 'publish', 'draft', 'pending', 'private', 'future' ),
+					'post_status'            => $post_statuses,
 					'posts_per_page'         => 200,
 					'paged'                  => $page,
 					'fields'                 => 'ids',

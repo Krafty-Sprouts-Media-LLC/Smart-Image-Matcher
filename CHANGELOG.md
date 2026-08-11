@@ -7,6 +7,13 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.2.29] - 11/08/2026
+
+### Fixed
+
+- Recovery was reporting wrong “already has featured” nearest posts for color listicles (`35 Different Foods That Are Green`, etc.) because color-only focus keywords scored 100% against any green/yellow plant prompt. Color/listicle fluff is no longer a valid subject token.
+- Recovery candidate matching now respects the Featured Images **Post Status** checkboxes (defaults to `publish` if none selected), so drafts/private posts can be excluded.
+
 ## [3.2.28] - 11/08/2026
 
 ### Added

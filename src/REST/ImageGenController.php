@@ -296,6 +296,12 @@ class ImageGenController extends Controller {
 							'default'           => 60,
 							'sanitize_callback' => 'absint',
 						),
+						'post_statuses'   => array(
+							'type'              => 'string',
+							'required'          => false,
+							'default'           => 'publish',
+							'sanitize_callback' => 'sanitize_text_field',
+						),
 					),
 				),
 			)
@@ -1037,6 +1043,7 @@ class ImageGenController extends Controller {
 		$match_posts  = (bool) $request->get_param( 'match_posts' );
 		$unattached   = (bool) $request->get_param( 'unattached' );
 		$min_score    = absint( $request->get_param( 'min_score' ) );
+		$post_statuses = FalRecoverBatch::sanitizeRecoveryStatuses( $request->get_param( 'post_statuses' ) );
 
 		if ( '' === $heading_hash ) {
 			$heading_hash = 'featured';
@@ -1062,7 +1069,7 @@ class ImageGenController extends Controller {
 					}
 					$rows        = $found;
 					$match_posts = true;
-					$preview     = FalRecoverBatch::previewMatches( $rows, $min_score );
+					$preview     = FalRecoverBatch::previewMatches( $rows, $min_score, $post_statuses );
 				} catch ( \Throwable $e ) {
 					return new \WP_Error(
 						'smart_image_matcher_recover_fatal',

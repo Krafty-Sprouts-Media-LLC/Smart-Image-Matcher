@@ -195,6 +195,13 @@
 		return select ? parseInt( select.value || 48, 10 ) : 48;
 	}
 
+	function recoveryPostStatuses() {
+		const statuses = qa( 'input[name="post_statuses[]"]:checked' ).map(
+			( input ) => input.value
+		);
+		return statuses.length ? statuses : [ 'publish' ];
+	}
+
 	function recoveryPrompt( value ) {
 		const prompt = String( value || '' );
 		return prompt.length > 140 ? `${ prompt.slice( 0, 137 ) }…` : prompt;
@@ -385,6 +392,7 @@
 					discover_recent: true,
 					dry_run: true,
 					hours: recoveryHours(),
+					post_statuses: recoveryPostStatuses().join( ',' ),
 				},
 			} );
 			recoveryPreview = result;
@@ -439,6 +447,7 @@
 				data: {
 					discover_recent: true,
 					hours: recoveryHours(),
+					post_statuses: recoveryPostStatuses().join( ',' ),
 				},
 			} );
 

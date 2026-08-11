@@ -119,6 +119,47 @@ final class FalRecoverBatchTest extends TestCase {
 	}
 
 	/**
+	 * Color listicles must not match plant photos that merely share a color word.
+	 *
+	 * @return void
+	 */
+	public function test_color_listicle_does_not_match_green_plant_photo(): void {
+		$prompt = 'A realistic close-up photograph of a large rubber plant with broad oval leaves, one side glossy and deep green catching soft window light.';
+
+		self::assertLessThan(
+			60,
+			FalRecoverBatch::scoreTitleInPrompt(
+				'35 Different Foods That Are Green',
+				$prompt
+			)
+		);
+		self::assertLessThan(
+			60,
+			FalRecoverBatch::scorePostAgainstPrompt(
+				'35 Different Foods That Are Green',
+				'',
+				$prompt,
+				'green foods'
+			)
+		);
+	}
+
+	/**
+	 * Real plant subject still matches when color words are present.
+	 *
+	 * @return void
+	 */
+	public function test_plant_subject_still_matches_with_color_words_in_prompt(): void {
+		$title  = 'Why Are My Corn Leaves Turning Yellow? Causes, Fixes, and Prevention';
+		$prompt = 'A realistic wide-angle photograph of a sunlit backyard garden row of young corn plants with pale yellowing leaves streaked along their veins.';
+
+		self::assertGreaterThanOrEqual(
+			60,
+			FalRecoverBatch::scoreTitleInPrompt( $title, $prompt )
+		);
+	}
+
+	/**
 	 * SEO title fluff ("Causes, Fixes, Prevention") must not dilute the score.
 	 *
 	 * @return void
