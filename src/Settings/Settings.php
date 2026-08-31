@@ -223,6 +223,13 @@ class Settings {
 			return 'dashicons-format-image';
 		}
 
+		// Comments / non-ASCII break wp.svgPainter (atob/btoa) and CSS data-URIs.
+		$svg = preg_replace( '/<!--.*?-->/s', '', $svg );
+		$svg = is_string( $svg ) ? trim( $svg ) : '';
+		if ( '' === $svg || 0 !== strpos( $svg, '<svg' ) ) {
+			return 'dashicons-format-image';
+		}
+
 		return 'data:image/svg+xml;base64,' . base64_encode( $svg );
 	}
 

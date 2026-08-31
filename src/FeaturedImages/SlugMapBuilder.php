@@ -57,19 +57,35 @@ class SlugMapBuilder {
 		global $wpdb;
 
 		$rows = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
-			"SELECT ID, post_name
-			 FROM {$wpdb->posts}
-			 WHERE post_type   = 'attachment'
-			   AND post_status = 'inherit'
-			   AND post_name  <> ''",
+			"SELECT p.ID, p.post_name, m.meta_value AS attached_file
+			 FROM {$wpdb->posts} p
+			 LEFT JOIN {$wpdb->postmeta} m
+			   ON m.post_id = p.ID AND m.meta_key = '_wp_attached_file'
+			 WHERE p.post_type   = 'attachment'
+			   AND p.post_status = 'inherit'
+			   AND p.post_name  <> ''",
 			ARRAY_A
 		);
 
 		$map = array();
 		if ( is_array( $rows ) ) {
 			foreach ( $rows as $row ) {
-				if ( isset( $row['post_name'] ) && ! isset( $map[ $row['post_name'] ] ) ) {
-					$map[ (string) $row['post_name'] ] = (int) $row['ID'];
+				$id = (int) ( $row['ID'] ?? 0 );
+				if ( $id <= 0 ) {
+					continue;
+				}
+				$keys = array( (string) ( $row['post_name'] ?? '' ) );
+				$file = (string) ( $row['attached_file'] ?? '' );
+				if ( '' !== $file ) {
+					$base = function_exists( 'wp_basename' ) ? wp_basename( $file ) : basename( $file );
+					if ( is_string( $base ) && '' !== $base ) {
+						$keys[] = $base;
+					}
+				}
+				foreach ( $keys as $key ) {
+					if ( '' !== $key && ! isset( $map[ $key ] ) ) {
+						$map[ $key ] = $id;
+					}
 				}
 			}
 		}

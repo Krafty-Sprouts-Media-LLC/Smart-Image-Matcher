@@ -335,7 +335,7 @@ class FeaturedImageService {
 	 * @return bool
 	 */
 	public function isExcludedImageSlug( string $imageSlug ): bool {
-		$normalized = $this->normalizeSlug( $imageSlug );
+		$normalized = $this->normalizeImageMatchSlug( $imageSlug );
 		if ( '' === $normalized ) {
 			return false;
 		}
@@ -357,7 +357,7 @@ class FeaturedImageService {
 	 */
 	public function scoreSlugMatch( string $postSlug, string $imageSlug ): array {
 		$postSlug  = $this->normalizeSlug( $postSlug );
-		$imageSlug = $this->normalizeSlug( $imageSlug );
+		$imageSlug = $this->normalizeImageMatchSlug( $imageSlug );
 
 		if ( '' === $postSlug || '' === $imageSlug ) {
 			return array( 'score' => 0, 'method' => 'empty', 'shared_terms' => 0 );
@@ -547,17 +547,21 @@ class FeaturedImageService {
 
 		$best_score = 0;
 		$best_id    = 0;
+		$best_len   = 0;
 
 		foreach ( $slug_map as $image_slug => $attachment_id ) {
 			if ( $this->isExcludedImageSlug( (string) $image_slug ) ) {
 				continue;
 			}
 
-			$scored = $this->scoreSlugMatch( (string) $post->post_name, (string) $image_slug );
-			$score  = (int) ( $scored['score'] ?? 0 );
-			if ( $score > $best_score ) {
+			$scored     = $this->scoreSlugMatch( (string) $post->post_name, (string) $image_slug );
+			$score      = (int) ( $scored['score'] ?? 0 );
+			$match_slug = $this->normalizeImageMatchSlug( (string) $image_slug );
+			$match_len  = strlen( $match_slug );
+			if ( $score > $best_score || ( $score === $best_score && $score > 0 && $match_len > $best_len ) ) {
 				$best_score = $score;
 				$best_id    = (int) $attachment_id;
+				$best_len   = $match_len;
 			}
 		}
 
@@ -699,7 +703,13 @@ class FeaturedImageService {
 
 		usort(
 			$autoCandidates,
-			static fn( $a, $b ) => (int) $b['score'] <=> (int) $a['score']
+			static function ( $a, $b ) {
+				$score = (int) $b['score'] <=> (int) $a['score'];
+				if ( 0 !== $score ) {
+					return $score;
+				}
+				return strlen( (string) $b['image_slug'] ) <=> strlen( (string) $a['image_slug'] );
+			}
 		);
 
 		$best   = $autoCandidates[0];
@@ -787,7 +797,7 @@ class FeaturedImageService {
 
 		$slugs = array();
 		foreach ( $parts as $part ) {
-			$slug = $this->normalizeSlug( (string) $part );
+			$slug = $this->normalizeImageMatchSlug( (string) $part );
 			if ( '' === $slug ) {
 				continue;
 			}
@@ -807,6 +817,17 @@ class FeaturedImageService {
 	 */
 	private function normalizeSlug( string $slug ): string {
 		return ( new Sanitizer() )->normalizeImageSlug( $slug );
+	}
+
+	/**
+	 * Normalize an attachment slug for featured matching (strips -2 / -scaled-1).
+	 *
+	 * @since 3.3.3
+	 * @param string $slug Raw image slug or filename.
+	 * @return string
+	 */
+	private function normalizeImageMatchSlug( string $slug ): string {
+		return ( new Sanitizer() )->peelWpMediaCopySuffix( $this->normalizeSlug( $slug ) );
 	}
 
 	/**
@@ -851,7 +872,7 @@ class FeaturedImageService {
 	private function getCandidatePostIdsForImageSlug( string $imageSlug, array $allowedTypes ): array {
 		global $wpdb;
 
-		$imageSlug = $this->normalizeSlug( $imageSlug );
+		$imageSlug = $this->normalizeImageMatchSlug( $imageSlug );
 		if ( '' === $imageSlug || empty( $allowedTypes ) ) {
 			return array();
 		}

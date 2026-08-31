@@ -170,8 +170,7 @@ class InsertController extends Controller {
 			return $result;
 		}
 
-		// Update audit trail.
-		( new MatchRepository() )->markApproved( $postId, $imageId, $headingHash );
+		( new MatchRepository() )->markInserted( $postId, $imageId, $headingHash );
 
 		return rest_ensure_response( array(
 			'inserted'     => true,
@@ -219,10 +218,9 @@ class InsertController extends Controller {
 			return $result;
 		}
 
-		// Update audit trail for each insertion.
 		$repo = new MatchRepository();
 		foreach ( $insertions as $item ) {
-			$repo->markApproved( $postId, $item['image_id'], $item['heading_hash'] );
+			$repo->markInserted( $postId, $item['image_id'], $item['heading_hash'] );
 		}
 
 		return rest_ensure_response( array(

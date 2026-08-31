@@ -115,7 +115,7 @@ class FeaturedImageServiceTest extends TestCase {
 	}
 
 	/**
-	 * Deduped image slug suffix should still auto-assign via reverse prefix.
+	 * WordPress duplicate suffix (-2) on the featured file still exact-matches.
 	 *
 	 * @return void
 	 */
@@ -129,7 +129,8 @@ class FeaturedImageServiceTest extends TestCase {
 
 		$this->assertTrue( $result['matched'] );
 		$this->assertSame( 404, $result['attachment_id'] );
-		$this->assertSame( 'reverse_prefix', $result['method'] );
+		$this->assertSame( 'exact', $result['method'] );
+		$this->assertSame( 100, $result['score'] );
 	}
 
 	/**

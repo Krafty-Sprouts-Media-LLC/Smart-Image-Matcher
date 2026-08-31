@@ -23,6 +23,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 use SmartImageMatcher\FeaturedImages\FeaturedImageService;
+use SmartImageMatcher\Insertion\BlockBuilder;
+use SmartImageMatcher\Insertion\InsertionService;
 use SmartImageMatcher\Logging\Logger;
 use SmartImageMatcher\Queue\Queue;
 use SmartImageMatcher\Settings\Sanitizer;
@@ -644,6 +646,61 @@ class BulkController extends Controller {
 	}
 
 	/**
+	 * Drop pending rows whose heading (or featured slot) already has an image.
+	 *
+	 * Editor scans store every carousel candidate as pending. Those rows stay
+	 * in Review after an insert unless they are filtered here.
+	 *
+	 * @since 3.3.3
+	 * @param array<int, array<string, mixed>> $rows Match rows.
+	 * @return array<int, array<string, mixed>>
+	 */
+	public static function omitInsertedHeadings( array $rows ): array {
+		$insertion = new InsertionService( new BlockBuilder() );
+		$kept      = array();
+
+		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+			if ( self::pendingRowAlreadyHasImage( $row, $insertion ) ) {
+				continue;
+			}
+			$kept[] = $row;
+		}
+
+		return $kept;
+	}
+
+	/**
+	 * Whether this pending row is already satisfied in post content.
+	 *
+	 * @since 3.3.3
+	 * @param array<string, mixed> $row       Match row.
+	 * @param InsertionService     $insertion Insertion service.
+	 * @return bool
+	 */
+	private static function pendingRowAlreadyHasImage( array $row, InsertionService $insertion ): bool {
+		$post_id = isset( $row['post_id'] ) ? (int) $row['post_id'] : 0;
+		$hash    = isset( $row['heading_hash'] ) ? (string) $row['heading_hash'] : '';
+		$tag     = isset( $row['heading_tag'] ) ? (string) $row['heading_tag'] : '';
+
+		if ( $post_id <= 0 ) {
+			return true;
+		}
+
+		if ( 'featured' === $hash || 'featured' === $tag ) {
+			return function_exists( 'has_post_thumbnail' ) && has_post_thumbnail( $post_id );
+		}
+
+		if ( '' === $hash ) {
+			return false;
+		}
+
+		return $insertion->headingHasFollowingImage( $post_id, $hash );
+	}
+
+	/**
 	 * Paginated review queue grouped by article.
 	 *
 	 * @since 3.3.0
@@ -749,7 +806,15 @@ class BulkController extends Controller {
 		);
 		// phpcs:enable
 
-		$articles = self::groupMatchesByPost( self::attachImageUrls( is_array( $rows ) ? $rows : array() ) );
+		$rows     = self::omitInsertedHeadings( self::attachImageUrls( is_array( $rows ) ? $rows : array() ) );
+		$articles = array_values(
+			array_filter(
+				self::groupMatchesByPost( $rows ),
+				static function ( $article ) {
+					return is_array( $article ) && ! empty( $article['headings'] );
+				}
+			)
+		);
 
 		return rest_ensure_response(
 			array(

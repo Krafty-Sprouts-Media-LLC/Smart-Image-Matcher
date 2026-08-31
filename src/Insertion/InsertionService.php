@@ -373,13 +373,95 @@ class InsertionService {
 				continue;
 			}
 
-			$next = $blocks[ $i + 1 ] ?? null;
+			return $this->followingSiblingIsImage( $blocks, $i + 1 );
+		}
+
+		return false;
+	}
+
+	/**
+	 * True when the next meaningful sibling is an image (skip empty spacers).
+	 *
+	 * @since 3.3.3
+	 * @param array<int, array<string, mixed>> $blocks Block list.
+	 * @param int                              $start  Index after the heading.
+	 * @return bool
+	 */
+	private function followingSiblingIsImage( array $blocks, int $start ): bool {
+		$count = count( $blocks );
+
+		for ( $j = $start; $j < $count; $j++ ) {
+			$next = $blocks[ $j ];
 			if ( ! is_array( $next ) ) {
-				return false;
+				continue;
+			}
+			if ( $this->blockIsIgnorable( $next ) ) {
+				continue;
 			}
 
-			$name = (string) ( $next['blockName'] ?? '' );
-			return in_array( $name, array( 'core/image', 'core/gallery' ), true );
+			return $this->blockContainsImage( $next );
+		}
+
+		return false;
+	}
+
+	/**
+	 * Empty paragraphs, spacers, and whitespace-only freeform blocks.
+	 *
+	 * @since 3.3.3
+	 * @param array<string, mixed> $block Block.
+	 * @return bool
+	 */
+	private function blockIsIgnorable( array $block ): bool {
+		$name = (string) ( $block['blockName'] ?? '' );
+
+		if ( '' === $name ) {
+			return '' === trim( (string) ( $block['innerHTML'] ?? '' ) );
+		}
+
+		if ( in_array( $name, array( 'core/spacer', 'core/separator' ), true ) ) {
+			return true;
+		}
+
+		if ( 'core/paragraph' === $name ) {
+			return '' === trim( wp_strip_all_tags( (string) ( $block['innerHTML'] ?? '' ) ) );
+		}
+
+		return false;
+	}
+
+	/**
+	 * Image, gallery, media-text, or a wrapper whose first real child is one.
+	 *
+	 * @since 3.3.3
+	 * @param array<string, mixed> $block Block.
+	 * @return bool
+	 */
+	private function blockContainsImage( array $block ): bool {
+		$name = (string) ( $block['blockName'] ?? '' );
+
+		if ( in_array( $name, array( 'core/image', 'core/gallery', 'core/media-text' ), true ) ) {
+			return true;
+		}
+
+		$inner = $block['innerBlocks'] ?? array();
+		if ( ! is_array( $inner ) || empty( $inner ) ) {
+			return false;
+		}
+
+		if ( ! in_array( $name, array( 'core/group', 'core/columns', 'core/column', 'core/cover' ), true ) ) {
+			return false;
+		}
+
+		foreach ( $inner as $child ) {
+			if ( ! is_array( $child ) ) {
+				continue;
+			}
+			if ( $this->blockIsIgnorable( $child ) ) {
+				continue;
+			}
+
+			return $this->blockContainsImage( $child );
 		}
 
 		return false;
@@ -421,11 +503,17 @@ class InsertionService {
 			}
 
 			$after = ltrim( substr( $content, $end_pos ) );
+			$after = preg_replace(
+				'/^(?:<!--\s*wp:(?:spacer|separator)\b.*?\/-->\s*|<p(?:\s[^>]*)?>\s*<\/p>\s*)+/is',
+				'',
+				$after
+			);
+			$after = is_string( $after ) ? ltrim( $after ) : '';
 			if ( '' === $after ) {
 				return false;
 			}
 
-			if ( preg_match( '/^(<!--\s*wp:(?:image|gallery)\b|<img\b|\[gallery\b|\[caption\b)/i', $after ) ) {
+			if ( preg_match( '/^(<!--\s*wp:(?:image|gallery|media-text)\b|<img\b|\[gallery\b|\[caption\b)/i', $after ) ) {
 				return true;
 			}
 

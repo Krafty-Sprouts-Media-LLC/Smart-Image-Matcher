@@ -177,6 +177,7 @@ class ArticleProcessor {
 	 */
 	private function processFeatured( \WP_Post $post, array &$counts, int $auto, int $review_min, bool $can_generate, bool $overwrite ): void {
 		if ( ! $this->featured->needsFeaturedImage( (int) $post->ID, $overwrite ) ) {
+			$this->matches->clearPendingForHeading( (int) $post->ID, 'featured' );
 			return;
 		}
 
@@ -228,6 +229,7 @@ class ArticleProcessor {
 			}
 
 			if ( $this->insertion->headingHasFollowingImage( (int) $post->ID, $hash ) ) {
+				$this->matches->clearPendingForHeading( (int) $post->ID, $hash );
 				++$counts['skipped'];
 				continue;
 			}
@@ -301,6 +303,13 @@ class ArticleProcessor {
 		}
 
 		$counts['inserted'] += count( $insertions );
+		foreach ( $insertions as $item ) {
+			$this->matches->markInserted(
+				(int) $post->ID,
+				(int) $item['image_id'],
+				(string) $item['heading_hash']
+			);
+		}
 	}
 
 	/**
@@ -332,6 +341,7 @@ class ArticleProcessor {
 	): void {
 		if ( MatchDecision::INSERT === $action && $is_featured && $image_id > 0 ) {
 			set_post_thumbnail( (int) $post->ID, $image_id );
+			$this->matches->markInserted( (int) $post->ID, $image_id, $heading_hash );
 			++$counts['inserted'];
 			return;
 		}

@@ -1,8 +1,6 @@
 <!--
-  Plugin icon for Smart Image Matcher (GitHub / Plugin Update Checker / wp.org).
-  Photo frame + check. Same mark as the admin menu, on a rounded tile.
-  @package SmartImageMatcher
-  @since   3.3.1
+  WordPress.org / Plugin Update Checker icon only (256×256).
+  Do not use this file as the wp-admin menu icon — that is assets/menu-icon.svg.
 -->
 <svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="Smart Image Matcher">
 	<rect width="256" height="256" rx="56" fill="#2271b1"/>

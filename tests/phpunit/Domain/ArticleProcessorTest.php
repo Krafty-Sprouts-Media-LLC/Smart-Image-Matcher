@@ -71,7 +71,10 @@ class ArticleProcessorTest extends TestCase {
 	 */
 	public function test_high_score_heading_inserts_and_does_not_generate(): void {
 		$generation = $this->recordingFallback( true );
-		$processor  = $this->processor( 100, 42, false, $generation );
+		$matches    = $this->createMock( MatchRepository::class );
+		$matches->expects( $this->once() )->method( 'markInserted' )->with( 10, 42, 'hash-goldfinch' );
+		$matches->expects( $this->never() )->method( 'upsertPending' );
+		$processor = $this->processor( 100, 42, false, $generation, $matches );
 
 		$result = $processor->process( 10 );
 
@@ -137,7 +140,12 @@ class ArticleProcessorTest extends TestCase {
 	 */
 	public function test_heading_with_existing_image_is_skipped(): void {
 		$generation = $this->recordingFallback( true );
-		$processor  = $this->processor( 100, 42, true, $generation );
+		$matches    = $this->createMock( MatchRepository::class );
+		$matches->expects( $this->atLeastOnce() )->method( 'clearPendingForHeading' )->with(
+			$this->equalTo( 10 ),
+			$this->logicalOr( $this->equalTo( 'hash-goldfinch' ), $this->equalTo( 'featured' ) )
+		);
+		$processor  = $this->processor( 100, 42, true, $generation, $matches );
 
 		$result = $processor->process( 10 );
 

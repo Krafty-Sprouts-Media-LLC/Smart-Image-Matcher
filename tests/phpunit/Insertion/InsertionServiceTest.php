@@ -163,4 +163,40 @@ class InsertionServiceTest extends TestCase {
 		$this->assertTrue( $this->service->headingHasFollowingImage( 13, $hash ) );
 		unset( $GLOBALS['sim_test_parse_blocks'] );
 	}
+
+	/** @test */
+	public function gutenberg_heading_reports_image_after_empty_paragraph(): void {
+		$hash = HeadingLocator::computeHash( 2, 'bald eagle', 0 );
+		$post = new \WP_Post();
+		$post->ID = 14;
+		$post->post_content = '<!-- wp:heading --><h2>Bald Eagle</h2><!-- /wp:heading -->';
+		$GLOBALS['sim_test_get_post'] = static function () use ( $post ) {
+			return $post;
+		};
+		$GLOBALS['sim_test_parse_blocks'] = static function () {
+			return array(
+				array(
+					'blockName'   => 'core/heading',
+					'innerHTML'   => '<h2>Bald Eagle</h2>',
+					'attrs'       => array( 'level' => 2 ),
+					'innerBlocks' => array(),
+				),
+				array(
+					'blockName'   => 'core/paragraph',
+					'innerHTML'   => '<p></p>',
+					'attrs'       => array(),
+					'innerBlocks' => array(),
+				),
+				array(
+					'blockName'   => 'core/image',
+					'innerHTML'   => '<figure><img src="bald-eagle.jpg" /></figure>',
+					'attrs'       => array( 'id' => 99 ),
+					'innerBlocks' => array(),
+				),
+			);
+		};
+
+		$this->assertTrue( $this->service->headingHasFollowingImage( 14, $hash ) );
+		unset( $GLOBALS['sim_test_parse_blocks'] );
+	}
 }

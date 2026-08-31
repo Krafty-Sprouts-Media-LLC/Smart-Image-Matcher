@@ -91,7 +91,7 @@ class AbilityInsertImage {
 			return $result;
 		}
 
-		( new \SmartImageMatcher\Domain\MatchRepository() )->markApproved( $postId, $imageId, $headingHash );
+		( new \SmartImageMatcher\Domain\MatchRepository() )->markInserted( $postId, $imageId, $headingHash );
 
 		return array( 'inserted' => true, 'post_id' => $postId );
 	}

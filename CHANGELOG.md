@@ -7,6 +7,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.3.3] - 31/08/2026
+
+### Fixed
+
+- Review hid headings that already have an image in the article (including leftover editor-carousel candidates at 100%). Auto-insert now marks the heading inserted and deletes other pending rows for that heading.
+- Featured slug matching treats WordPress copies (`-2`, `-scaled-1`) as the original filename so a primary-keyword file still scores 100% (previously 88%, below auto-insert). The attachment file basename is indexed when it differs from `post_name`. Short species files still lose to that exact slug; keep them on Excluded Image Filenames when they prefix a longer URL.
+- Admin menu icon is the original landscape silhouette again. The photo+check tile stays in `assets/icon.svg` for GitHub / wp.org only; using it in the menu made the SIM item blank.
+
 ## [3.3.2] - 31/08/2026
 
 ### Added

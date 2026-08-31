@@ -154,6 +154,45 @@ class MatchRepository {
 	}
 
 	/**
+	 * Record a successful insert: approve the chosen image and drop other
+	 * pending candidates for the same heading (editor carousel leftovers).
+	 *
+	 * @since 3.3.3
+	 * @param int    $postId      Post ID.
+	 * @param int    $imageId     Inserted attachment ID.
+	 * @param string $headingHash Heading hash, or "featured".
+	 * @return void
+	 */
+	public function markInserted( int $postId, int $imageId, string $headingHash ): void {
+		$this->markApproved( $postId, $imageId, $headingHash );
+		$this->clearPendingForHeading( $postId, $headingHash );
+	}
+
+	/**
+	 * Delete pending rows for one post + heading (including featured).
+	 *
+	 * @since 3.3.3
+	 * @param int    $postId      Post ID.
+	 * @param string $headingHash Heading hash, or "featured".
+	 * @return void
+	 */
+	public function clearPendingForHeading( int $postId, string $headingHash ): void {
+		global $wpdb;
+
+		$table = $wpdb->prefix . 'smart_image_matcher_matches';
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$wpdb->query(
+			$wpdb->prepare(
+				"DELETE FROM {$table} WHERE post_id = %d AND heading_hash = %s AND status = %s",
+				$postId,
+				$headingHash,
+				'pending'
+			)
+		);
+	}
+
+	/**
 	 * Mark a match row as rejected.
 	 *
 	 * @since 3.0.0

@@ -4,7 +4,7 @@ Tags: images, media library, alt text, featured image, automation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 3.3.2
+Stable tag: 3.3.3
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -95,6 +95,11 @@ No AI data is sent automatically — only when you explicitly trigger AI matchin
 The plugin stores match results and job metadata in your own database only. Update checks may contact GitHub (see External services). No post content leaves your server unless you explicitly use AI features with a configured provider.
 
 == Changelog ==
+
+= 3.3.3 =
+* Review no longer lists headings that already have an image in the article. Auto-insert at or above the threshold now clears leftover pending carousel rows for that heading.
+* Featured matching still uses the post slug / primary-keyword filename. WordPress `-2` / `-scaled-1` copies of that file now count as an exact match. Short species files are still blocked with Excluded Image Filenames.
+* Admin menu uses the original landscape icon again. The photo+check square is only for plugin updates / wp.org (`assets/icon.svg`).
 
 = 3.3.2 =
 * Review rows show the matched image filename next to the heading.

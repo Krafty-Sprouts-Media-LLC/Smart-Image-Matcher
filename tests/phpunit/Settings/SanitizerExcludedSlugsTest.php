@@ -66,6 +66,21 @@ class SanitizerExcludedSlugsTest extends TestCase {
 		);
 	}
 
+	public function test_scaled_numbered_copy_peels_to_original_slug(): void {
+		$this->assertSame(
+			'avian-flu-regulations-in-wyoming',
+			$this->sanitizer->peelWpMediaCopySuffix(
+				$this->sanitizer->normalizeImageSlug( 'avian-flu-regulations-in-wyoming-scaled-1.jpg' )
+			)
+		);
+		$this->assertSame(
+			'avian-flu-regulations-in-wyoming',
+			$this->sanitizer->peelWpMediaCopySuffix(
+				$this->sanitizer->normalizeImageSlug( 'avian-flu-regulations-in-wyoming-2.jpg' )
+			)
+		);
+	}
+
 	/**
 	 * @return void
 	 */

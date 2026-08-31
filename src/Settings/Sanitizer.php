@@ -144,7 +144,7 @@ class Sanitizer {
 
 		$slugs = array();
 		foreach ( $parts as $part ) {
-			$slug = $this->normalizeImageSlug( (string) $part );
+			$slug = $this->peelWpMediaCopySuffix( $this->normalizeImageSlug( (string) $part ) );
 			if ( '' === $slug ) {
 				continue;
 			}
@@ -191,9 +191,37 @@ class Sanitizer {
 
 		$slug = strtolower( $slug );
 		$slug = (string) preg_replace( '/\.[a-z0-9]{2,5}$/', '', $slug );
-		$slug = (string) preg_replace( '/-(?:scaled|\d+x\d+)$/', '', $slug );
+		do {
+			$prev = $slug;
+			$slug = (string) preg_replace( '/-(?:scaled|\d+x\d+)$/', '', $slug );
+		} while ( $slug !== $prev && '' !== $slug );
 		$slug = (string) preg_replace( '/[^a-z0-9]+/', '-', $slug );
 		return trim( $slug, '-' );
+	}
+
+	/**
+	 * Strip WordPress attachment copy suffixes (-2, -scaled-1) from an image slug.
+	 *
+	 * Applied to filenames only, never to post permalink slugs (those may
+	 * legitimately end in a year or number).
+	 *
+	 * @since 3.3.3
+	 * @param string $slug Already-normalized image slug.
+	 * @return string
+	 */
+	public function peelWpMediaCopySuffix( string $slug ): string {
+		$slug = trim( $slug );
+		if ( '' === $slug ) {
+			return '';
+		}
+
+		do {
+			$prev = $slug;
+			$next = preg_replace( '/-(?:scaled|\d+x\d+|[1-9]\d?)$/', '', $slug );
+			$slug = is_string( $next ) ? $next : $slug;
+		} while ( $slug !== $prev && '' !== $slug );
+
+		return $slug;
 	}
 
 	/**
@@ -204,7 +232,7 @@ class Sanitizer {
 	 * @return bool
 	 */
 	public function isExcludedImageSlug( string $imageSlug ): bool {
-		$normalized = $this->normalizeImageSlug( $imageSlug );
+		$normalized = $this->peelWpMediaCopySuffix( $this->normalizeImageSlug( $imageSlug ) );
 		if ( '' === $normalized ) {
 			return false;
 		}
@@ -233,7 +261,7 @@ class Sanitizer {
 
 		$slugs = array();
 		foreach ( $parts as $part ) {
-			$slug = $this->normalizeImageSlug( (string) $part );
+			$slug = $this->peelWpMediaCopySuffix( $this->normalizeImageSlug( (string) $part ) );
 			if ( '' === $slug ) {
 				continue;
 			}

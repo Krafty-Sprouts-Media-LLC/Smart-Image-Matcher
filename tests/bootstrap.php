@@ -164,6 +164,13 @@ if ( file_exists( $tests_dir . '/includes/functions.php' ) ) {
 			}
 			return null;
 		}
+		function has_post_thumbnail( $post = null ) {
+			if ( isset( $GLOBALS['sim_test_has_post_thumbnail'] ) && is_callable( $GLOBALS['sim_test_has_post_thumbnail'] ) ) {
+				return (bool) $GLOBALS['sim_test_has_post_thumbnail']( $post );
+			}
+			$id = is_object( $post ) ? (int) $post->ID : (int) $post;
+			return ! empty( $GLOBALS['sim_test_post_meta'][ $id ]['_thumbnail_id'] );
+		}
 		function post_type_supports( $type = '', $feature = '' ) {
 			unset( $type, $feature );
 			return true;
