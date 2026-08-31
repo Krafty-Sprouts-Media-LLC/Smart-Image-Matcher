@@ -39,7 +39,7 @@ class ReviewQueue {
 	 * @return void
 	 */
 	public function register(): void {
-		add_action( 'admin_menu', array( $this, 'registerMenu' ) );
+		// Review lives on Bulk Processor → Review. Do not register a submenu.
 	}
 
 	/**
@@ -48,15 +48,14 @@ class ReviewQueue {
 	 * @since 3.0.0
 	 * @return void
 	 */
+	/**
+	 * Review Queue is no longer a separate submenu (3.3.0).
+	 *
+	 * @since 3.0.0
+	 * @return void
+	 */
 	public function registerMenu(): void {
-		$this->pageHook = (string) add_submenu_page(
-			'smart-image-matcher',
-			__( 'Smart Image Matcher - Review Queue', 'smart-image-matcher' ),
-			__( 'Review Queue', 'smart-image-matcher' ),
-			'manage_options',
-			'smart-image-matcher-review-queue',
-			array( $this, 'renderPage' )
-		);
+		// Intentionally empty — review is Bulk Processor → Review.
 	}
 
 	/**

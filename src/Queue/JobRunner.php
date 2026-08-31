@@ -17,10 +17,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+use SmartImageMatcher\Domain\ArticleProcessor;
 use SmartImageMatcher\Domain\HeadingExtractor;
 use SmartImageMatcher\Domain\ImageRepository;
 use SmartImageMatcher\Domain\Matcher;
 use SmartImageMatcher\Domain\MatchRepository;
+use SmartImageMatcher\FeaturedImages\FeaturedImageService;
+use SmartImageMatcher\FeaturedImages\SlugMapBuilder;
 use SmartImageMatcher\Insertion\BlockBuilder;
 use SmartImageMatcher\Insertion\InsertionService;
 use SmartImageMatcher\Logging\Logger;
@@ -185,54 +188,157 @@ class JobRunner {
 	 * @return void
 	 */
 	public static function runBulkMatchJob( string $jobId, int $postId, array $config ): void {
-		Logger::info(
-			'JobRunner: bulk match job',
-			array(
-				'job_id'  => $jobId,
-				'post_id' => $postId,
-			)
-		);
+		self::runArticleProcessJob( $postId, $jobId, is_array( $config ) ? $config : array() );
+	}
 
-		if ( self::isBulkJobCancelled( $jobId ) ) {
+	/**
+	 * Process one article: insert strong matches, park review, generate or skip.
+	 *
+	 * Hooked to Queue::HOOK_PROCESS_ARTICLE. Bulk jobs pass a parent $job_id
+	 * so cancel/progress still work. Cron and publish pass an empty job id.
+	 *
+	 * @since 3.3.0
+	 * @param int                  $post_id Post ID.
+	 * @param string               $job_id  Parent bulk job ID, or empty.
+	 * @param array<string, mixed> $config  Job options.
+	 * @return void
+	 */
+	public static function runArticleProcessJob( int $post_id, string $job_id = '', array $config = array() ): void {
+		$config = is_array( $config ) ? $config : array();
+
+		if ( 'generate-featured' === ( $config['mode'] ?? '' ) ) {
+			self::runGenerateFeaturedJob( $post_id, $job_id, $config );
 			return;
 		}
 
-		self::markBulkJobStarted( $jobId );
+		Logger::info(
+			'JobRunner: article process job',
+			array(
+				'job_id'  => $job_id,
+				'post_id' => $post_id,
+			)
+		);
+
+		if ( '' !== $job_id && self::isBulkJobCancelled( $job_id ) ) {
+			return;
+		}
+
+		if ( '' !== $job_id ) {
+			self::markBulkJobStarted( $job_id );
+		}
+
+		$counts = array(
+			'inserted'  => 0,
+			'review'    => 0,
+			'generated' => 0,
+			'skipped'   => 0,
+		);
 
 		try {
-			$post = get_post( $postId );
-			if ( ! $post instanceof \WP_Post ) {
-				return;
+			$options = array();
+			if ( isset( $config['min_score'] ) ) {
+				$options['review_min'] = (int) $config['min_score'];
+			}
+			if ( ! empty( $config['overwrite_featured'] ) || ! empty( $config['overwrite'] ) ) {
+				$options['overwrite_featured'] = true;
 			}
 
-			$extractor = new HeadingExtractor();
-			$headings  = $extractor->extract( $post->post_content );
-
-			if ( empty( $headings ) ) {
-				return;
-			}
-
-			$matcher   = new Matcher();
-			$hierarchy = isset( $config['hierarchy_mode'] ) ? (string) $config['hierarchy_mode'] : (string) Settings::get( 'hierarchy_mode' );
-			$headings  = $matcher->filterByHierarchy( $headings, $hierarchy );
-
-			$repo   = new ImageRepository();
-			$groups = array();
-
-			foreach ( $headings as $heading ) {
-				$terms    = $matcher->extractKeywords( $heading['text'] );
-				$images   = $repo->findCandidates( $terms );
-				$matches  = $matcher->findKeywordMatches( $heading, $images );
-				$groups[] = array(
-					'heading' => $heading,
-					'matches' => $matches,
-				);
-			}
-
-			( new MatchRepository() )->saveMatchGroups( $postId, $groups );
+			$counts = self::makeArticleProcessor()->process( $post_id, $options );
 		} finally {
-			self::incrementBulkJobDone( $jobId );
+			if ( '' !== $job_id ) {
+				self::incrementBulkJobDone( $job_id, is_array( $counts ) ? $counts : array() );
+			}
 		}
+	}
+
+	/**
+	 * Queue featured-image generation for one post missing a real featured image.
+	 *
+	 * @since 3.3.0
+	 * @param int                  $post_id Post ID.
+	 * @param string               $job_id  Parent bulk job ID.
+	 * @param array<string, mixed> $config  May include style (photo|illustration).
+	 * @return void
+	 */
+	private static function runGenerateFeaturedJob( int $post_id, string $job_id, array $config ): void {
+		$want_style = isset( $config['style'] ) ? sanitize_key( (string) $config['style'] ) : '';
+
+		if ( '' !== $job_id && self::isBulkJobCancelled( $job_id ) ) {
+			return;
+		}
+
+		if ( '' !== $job_id ) {
+			self::markBulkJobStarted( $job_id );
+		}
+
+		$counts = array(
+			'inserted'  => 0,
+			'review'    => 0,
+			'generated' => 0,
+			'skipped'   => 1,
+		);
+
+		try {
+			if ( FeaturedImageService::hasActionableFeaturedImage( $post_id ) ) {
+				return;
+			}
+
+			$generation = class_exists( \SmartImageMatcher\Premium\ArticleGenerationFallback::class )
+				? new \SmartImageMatcher\Premium\ArticleGenerationFallback()
+				: null;
+
+			if ( null === $generation || ! $generation->isAvailable() ) {
+				return;
+			}
+
+			$style_filter = static function ( $style ) use ( $want_style ) {
+				if ( 'illustration' === $want_style || 'photo' === $want_style ) {
+					return $want_style;
+				}
+				return $style;
+			};
+			add_filter( 'sim_generation_fallback_style', $style_filter );
+
+			try {
+				$post    = get_post( $post_id );
+				$title   = $post instanceof \WP_Post ? (string) $post->post_title : '';
+				$excerpt = $post instanceof \WP_Post ? \SmartImageMatcher\AI\PromptBuilder::buildPostContext( $post ) : '';
+
+				if ( $generation->enqueue( $post_id, 'featured', $title, $excerpt ) ) {
+					$counts['generated'] = 1;
+					$counts['skipped']   = 0;
+				}
+			} finally {
+				remove_filter( 'sim_generation_fallback_style', $style_filter );
+			}
+		} finally {
+			if ( '' !== $job_id ) {
+				self::incrementBulkJobDone( $job_id, $counts );
+			}
+		}
+	}
+
+	/**
+	 * Build the article processor, attaching the premium generation adapter when present.
+	 *
+	 * @since 3.3.0
+	 * @return ArticleProcessor
+	 */
+	private static function makeArticleProcessor(): ArticleProcessor {
+		$generation = null;
+		if ( class_exists( \SmartImageMatcher\Premium\ArticleGenerationFallback::class ) ) {
+			$generation = new \SmartImageMatcher\Premium\ArticleGenerationFallback();
+		}
+
+		return new ArticleProcessor(
+			new Matcher(),
+			new ImageRepository(),
+			new HeadingExtractor(),
+			new InsertionService( new BlockBuilder() ),
+			new MatchRepository(),
+			new FeaturedImageService( new SlugMapBuilder() ),
+			$generation
+		);
 	}
 
 	/**
@@ -647,10 +753,11 @@ class JobRunner {
 	 * Increment bulk job progress and mark complete when all posts are scanned.
 	 *
 	 * @since 3.0.0
-	 * @param string $jobId Job ID.
+	 * @param string               $jobId  Job ID.
+	 * @param array<string, mixed> $counts Optional per-article outcome counts.
 	 * @return void
 	 */
-	private static function incrementBulkJobDone( string $jobId ): void {
+	private static function incrementBulkJobDone( string $jobId, array $counts = array() ): void {
 		global $wpdb;
 
 		$row = $wpdb->get_row( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
@@ -675,6 +782,10 @@ class JobRunner {
 
 		$totals['total'] = isset( $totals['total'] ) ? (int) $totals['total'] : 0;
 		$totals['done']  = min( $totals['total'], ( isset( $totals['done'] ) ? (int) $totals['done'] : 0 ) + 1 );
+
+		foreach ( array( 'inserted', 'review', 'generated', 'skipped' ) as $key ) {
+			$totals[ $key ] = ( isset( $totals[ $key ] ) ? (int) $totals[ $key ] : 0 ) + (int) ( $counts[ $key ] ?? 0 );
+		}
 
 		$status     = $totals['total'] > 0 && $totals['done'] >= $totals['total'] ? 'completed' : 'processing';
 		$finishedAt = 'completed' === $status ? current_time( 'mysql' ) : null;

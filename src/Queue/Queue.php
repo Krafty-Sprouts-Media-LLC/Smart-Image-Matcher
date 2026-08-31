@@ -69,6 +69,13 @@ class Queue {
 	const HOOK_AI_IMAGE_GEN = 'smart_image_matcher_queue_ai_image_gen';
 
 	/**
+	 * Action hook: process one article (featured + headings).
+	 *
+	 * @since 3.3.0
+	 */
+	const HOOK_PROCESS_ARTICLE = 'smart_image_matcher_queue_process_article';
+
+	/**
 	 * Action hook: poll fal for a submitted AI image job.
 	 *
 	 * @since 3.2.18
@@ -112,6 +119,7 @@ class Queue {
 		add_action( self::HOOK_AI_MATCH, array( JobRunner::class, 'runAiMatchJob' ), 10, 2 );
 		add_action( self::HOOK_INDEX_BACKFILL, array( JobRunner::class, 'runIndexBackfill' ) );
 		add_action( self::HOOK_BULK_MATCH, array( JobRunner::class, 'runBulkMatchJob' ), 10, 3 );
+		add_action( self::HOOK_PROCESS_ARTICLE, array( JobRunner::class, 'runArticleProcessJob' ), 10, 3 );
 		add_action( self::HOOK_BULK_INSERT, array( JobRunner::class, 'runBulkInsertJob' ), 10, 2 );
 		add_action( self::HOOK_FIAA_RUN, array( JobRunner::class, 'runFiaaRunJob' ), 10, 1 );
 		add_action( self::HOOK_FIAA_AUDIT_CLEAR, array( JobRunner::class, 'runFiaaAuditClearJob' ), 10, 1 );
@@ -289,6 +297,62 @@ class Queue {
 		);
 
 		return $actionId ? (string) $actionId : null;
+	}
+
+	/**
+	 * Enqueue one-article processing (featured + headings).
+	 *
+	 * @since 3.3.0
+	 * @param int                  $post_id Post ID.
+	 * @param string               $job_id  Parent bulk job ID, or empty for cron/publish.
+	 * @param array<string, mixed> $config  Job options (review_min, overwrite_featured).
+	 * @return string|null
+	 */
+	public function enqueueProcessArticle( int $post_id, string $job_id = '', array $config = array() ): ?string {
+		if ( ! self::isAvailable() ) {
+			return null;
+		}
+
+		$action_id = as_enqueue_async_action(
+			self::HOOK_PROCESS_ARTICLE,
+			array(
+				'post_id' => $post_id,
+				'job_id'  => $job_id,
+				'config'  => $config,
+			),
+			self::GROUP
+		);
+
+		return $action_id ? (string) $action_id : null;
+	}
+
+	/**
+	 * Unschedule pending process-article actions for a parent bulk job.
+	 *
+	 * Args must match enqueueProcessArticle() exactly (AS does not partial-match).
+	 *
+	 * @since 3.3.0
+	 * @param string               $job_id        Parent job ID.
+	 * @param int[]                $post_ids      Post IDs stored on the parent row.
+	 * @param array<string, mixed> $action_config Config passed to each action (no post_ids).
+	 * @return void
+	 */
+	public function unscheduleProcessArticleJob( string $job_id, array $post_ids, array $action_config ): void {
+		if ( ! self::isAvailable() || ! function_exists( 'as_unschedule_all_actions' ) || '' === $job_id ) {
+			return;
+		}
+
+		foreach ( $post_ids as $post_id ) {
+			as_unschedule_all_actions(
+				self::HOOK_PROCESS_ARTICLE,
+				array(
+					'post_id' => (int) $post_id,
+					'job_id'  => $job_id,
+					'config'  => $action_config,
+				),
+				self::GROUP
+			);
+		}
 	}
 
 	/**

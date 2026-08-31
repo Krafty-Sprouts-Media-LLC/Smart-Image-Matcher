@@ -48,6 +48,12 @@ class Sanitizer {
 
 			'confidence_threshold' => max( 0, min( 100, (int) ( $raw['confidence_threshold'] ?? 70 ) ) ),
 
+			'auto_insert_threshold' => ( static function () use ( $raw ) {
+				$review = max( 0, min( 100, (int) ( $raw['confidence_threshold'] ?? 70 ) ) );
+				$auto   = max( 0, min( 100, (int) ( $raw['auto_insert_threshold'] ?? 90 ) ) );
+				return $auto < $review ? $review : $auto;
+			} )(),
+
 			'hierarchy_mode' => in_array( $raw['hierarchy_mode'] ?? '', array( 'all', 'primary', 'smart' ), true )
 				? $raw['hierarchy_mode']
 				: $current['hierarchy_mode'],

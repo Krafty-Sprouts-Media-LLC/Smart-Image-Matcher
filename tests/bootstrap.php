@@ -98,9 +98,25 @@ if ( file_exists( $tests_dir . '/includes/functions.php' ) ) {
 		function stripslashes_deep( $value ) {
 			return is_array( $value ) ? array_map( 'stripslashes_deep', $value ) : stripslashes( $value );
 		}
-		function parse_blocks( $content ) { return []; }
+		function parse_blocks( $content ) {
+			if ( isset( $GLOBALS['sim_test_parse_blocks'] ) && is_callable( $GLOBALS['sim_test_parse_blocks'] ) ) {
+				return $GLOBALS['sim_test_parse_blocks']( $content );
+			}
+			return array();
+		}
 		function has_blocks( $content ) { return strpos( $content, '<!-- wp:' ) !== false; }
-		function wp_get_attachment_url() { return ''; }
+		function wp_get_attachment_url( $attachment_id = 0 ) {
+			if ( isset( $GLOBALS['sim_test_attachment_url'] ) && is_callable( $GLOBALS['sim_test_attachment_url'] ) ) {
+				return $GLOBALS['sim_test_attachment_url']( $attachment_id );
+			}
+			return '';
+		}
+		function wp_get_attachment_image_url( $attachment_id, $size = 'thumbnail' ) {
+			if ( isset( $GLOBALS['sim_test_attachment_image_url'] ) && is_callable( $GLOBALS['sim_test_attachment_image_url'] ) ) {
+				return $GLOBALS['sim_test_attachment_image_url']( $attachment_id, $size );
+			}
+			return '';
+		}
 		function get_post_meta( $post_id, $key = '', $single = false ) {
 			$value = $GLOBALS['sim_test_post_meta'][ (int) $post_id ][ (string) $key ] ?? null;
 			return $single ? ( $value ?? '' ) : ( null === $value ? array() : array( $value ) );
@@ -129,7 +145,17 @@ if ( file_exists( $tests_dir . '/includes/functions.php' ) ) {
 		function wp_get_attachment_caption() { return ''; }
 		function get_attached_file() { return ''; }
 		function wp_update_post() { return 1; }
-		function get_post() { return null; }
+		function get_post( $post = null, $output = 'OBJECT', $filter = 'raw' ) {
+			unset( $output, $filter );
+			if ( isset( $GLOBALS['sim_test_get_post'] ) && is_callable( $GLOBALS['sim_test_get_post'] ) ) {
+				return $GLOBALS['sim_test_get_post']( $post );
+			}
+			return null;
+		}
+		function post_type_supports( $type = '', $feature = '' ) {
+			unset( $type, $feature );
+			return true;
+		}
 		function clean_post_cache() {}
 		function rest_ensure_response( $data ) { return $data; }
 		function set_post_thumbnail() {}
@@ -160,7 +186,17 @@ if ( file_exists( $tests_dir . '/includes/functions.php' ) ) {
 		function wp_clear_scheduled_hook( $hook ) {
 			$GLOBALS['sim_test_wp_cron_cleared'][] = $hook;
 		}
-		function current_time( $type = 'mysql' ) { return '2000-01-01 00:00:00'; }
+		function current_time( $type = 'mysql' ) {
+			unset( $type );
+			return '2000-01-01 00:00:00';
+		}
+		function admin_url( $path = '' ) {
+			return 'https://example.com/wp-admin/' . ltrim( (string) $path, '/' );
+		}
+		function get_edit_post_link( $id = 0, $context = 'display' ) {
+			unset( $context );
+			return admin_url( 'post.php?post=' . (int) $id . '&action=edit' );
+		}
 		// get_posts is deliberately overridable per-test via this global
 		// callable hook — unit tests set $GLOBALS['sim_test_get_posts'] to
 		// a closure that inspects the query args and returns attachment IDs.
@@ -169,6 +205,10 @@ if ( file_exists( $tests_dir . '/includes/functions.php' ) ) {
 				return $GLOBALS['sim_test_get_posts']( $args );
 			}
 			return array();
+		}
+
+		if ( ! class_exists( 'WP_REST_Controller' ) ) {
+			class WP_REST_Controller {}
 		}
 
 		if ( ! class_exists( 'WP_Error' ) ) {

@@ -20,6 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 use SmartImageMatcher\Admin\GenerateImagesBulkAction;
 use SmartImageMatcher\Abilities\Registry as AbilitiesRegistry;
 use SmartImageMatcher\Cache\Cache;
+use SmartImageMatcher\Domain\ArticleProcessor;
 use SmartImageMatcher\Domain\Matcher;
 use SmartImageMatcher\Domain\Normalizer;
 use SmartImageMatcher\Domain\HeadingExtractor;
@@ -174,6 +175,7 @@ class Plugin {
 				Queue::HOOK_INDEX_BACKFILL,
 				Queue::HOOK_BULK_MATCH,
 				Queue::HOOK_BULK_INSERT,
+				Queue::HOOK_PROCESS_ARTICLE,
 				Queue::HOOK_FIAA_RUN,
 				Queue::HOOK_FIAA_AUDIT_CLEAR,
 				Queue::HOOK_AI_IMAGE_GEN,
@@ -269,6 +271,29 @@ class Plugin {
 			)
 		);
 
+		if ( class_exists( Premium\ArticleGenerationFallback::class ) ) {
+			$c->bind(
+				'generation.fallback',
+				static fn() => new Premium\ArticleGenerationFallback()
+			);
+		}
+
+		$c->bind(
+			'article.processor',
+			static function ( Container $c ) {
+				$generation = $c->has( 'generation.fallback' ) ? $c->get( 'generation.fallback' ) : null;
+				return new ArticleProcessor(
+					$c->get( 'matcher' ),
+					$c->get( 'image.repository' ),
+					$c->get( 'heading.extractor' ),
+					$c->get( 'insertion.service' ),
+					$c->get( 'match.repository' ),
+					$c->get( 'featured.image.service' ),
+					$generation
+				);
+			}
+		);
+
 		// Queue.
 		$c->bind( 'queue', static fn() => new Queue() );
 		$c->bind( 'job.runner', static fn() => new JobRunner() );
@@ -302,7 +327,6 @@ class Plugin {
 			$settings = new Settings();
 			add_action( 'admin_menu', array( $settings, 'registerMenus' ) );
 			add_action( 'admin_init', array( $settings, 'register' ) );
-			add_action( 'admin_init', array( $settings, 'redirectLegacyGenerateImagesPage' ), 1 );
 			add_action( 'admin_enqueue_scripts', array( $this, 'enqueueAdminAssets' ) );
 			add_action( 'admin_footer', array( $this, 'renderModal' ) );
 

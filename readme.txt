@@ -4,7 +4,7 @@ Tags: images, media library, alt text, featured image, automation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 3.2.29
+Stable tag: 3.3.0
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -95,6 +95,18 @@ No AI data is sent automatically — only when you explicitly trigger AI matchin
 The plugin stores match results and job metadata in your own database only. Update checks may contact GitHub (see External services). No post content leaves your server unless you explicitly use AI features with a configured provider.
 
 == Changelog ==
+
+= 3.3.0 =
+* Article processing: insert strong library matches, send the middle band to Review, generate only when the library would skip.
+* Bulk Processor is Run | Review (no wizard). Review is grouped by article. Run labels use time and counts, not job IDs. Filter All pending or Last run.
+* Admin menu is Dashboard, Bulk Processor, and Settings. Featured Images and Review Queue screens are removed.
+* Generate featured confirms the count first. Fal.ai recovery and unsafe-featured cleanup moved onto Bulk Processor. Posts-list bulk actions prefills Bulk for admins.
+
+= 3.2.31 =
+* Added an auto-insert threshold. Automation will use it to insert strong library matches without review.
+
+= 3.2.30 =
+* Bulk Processor review step now shows real media thumbnails instead of broken images (it was pointing `<img>` at a JSON REST URL).
 
 = 3.2.29 =
 * Recovery matching respects Post Status checkboxes (default publish) and no longer lets color listicles (“Foods That Are Green/Yellow…”) steal plant photos via color-only keywords.

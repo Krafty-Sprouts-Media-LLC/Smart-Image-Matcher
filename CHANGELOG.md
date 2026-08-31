@@ -7,6 +7,34 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.3.0] - 31/08/2026
+
+### Added
+
+- Article processor: one Action Scheduler job per post inserts strong library matches, parks the middle band for Review, and generates only in the skip band when on-demand generation is on.
+- Bulk Processor is now a persistent Run | Review desk (no numbered wizard). Review is grouped by article. Operators see run labels like “Today 09:14 · 40 articles · Inserted 28 · Review 7”, never a queue hash. Review filters All pending vs Last run.
+- Generate-featured Run confirms the count first (N missing featured images). Style, overwrite-featured, fal.ai recovery, and unsafe-featured cleanup live on Bulk (Run / Review) instead of the removed Featured Images page.
+- Posts list bulk actions: Process articles… and Generate featured images… open Bulk Processor with the selection prefilled (admins). Editors without `manage_options` still get the list-screen generate modal.
+
+### Changed
+
+- SIM admin menu is Dashboard, Bulk Processor, and Settings only. Featured Images and Review Queue pages are removed (no URL redirects). Dashboard CTAs go to Bulk Run / Review. Last run tile opens Bulk Run.
+- Scheduled automation and first-publish now enqueue the article processor instead of featured-only matching.
+- Generate missing featured images is a Run mode with a hard confirm modal. Manual Bulk runs enqueue `HOOK_PROCESS_ARTICLE` (cancel unschedules those actions; deactivate clears them too).
+- Running a selection collapses filters behind Change selection.
+
+## [3.2.31] - 31/08/2026
+
+### Added
+
+- Auto-insert threshold (%) on Settings → Matching. Scores at or above this value will insert without review once article processing ships. Review floor remains the existing confidence threshold.
+
+## [3.2.30] - 31/08/2026
+
+### Fixed
+
+- Bulk Processor review thumbnails were broken because `<img src>` pointed at `/wp-json/wp/v2/media/{id}` (JSON, not an image). The matches API now returns a real attachment preview URL.
+
 ## [3.2.29] - 11/08/2026
 
 ### Fixed

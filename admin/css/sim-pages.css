@@ -137,6 +137,23 @@
 	color: #646970;
 }
 
+a.sim-metric-link {
+	text-decoration: none;
+	color: inherit;
+	border-top-color: #2271b1;
+}
+
+a.sim-metric-link:hover,
+a.sim-metric-link:focus {
+	box-shadow: 0 0 0 1px #2271b1;
+}
+
+.sim-metric strong.sim-metric-text {
+	font-size: 15px;
+	line-height: 1.35;
+	font-weight: 600;
+}
+
 .sim-delta {
 	border-radius: 999px;
 	font-size: 12px;

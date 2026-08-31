@@ -164,14 +164,21 @@ class FiaaCron {
 
 		$this->saveScheduledJob( $jobId, count( $postIds ), $config );
 
-		$queued = ( new Queue() )->enqueueFiaaRun( $jobId );
+		$queue  = new Queue();
+		$queued = 0;
+		foreach ( $postIds as $postId ) {
+			$actionId = $queue->enqueueProcessArticle( (int) $postId, $jobId, $config );
+			if ( $actionId ) {
+				++$queued;
+			}
+		}
 
-		if ( null === $queued ) {
-			Logger::error( 'FiaaCron: could not queue scheduled run job.', array( 'job_id' => $jobId ) );
+		if ( 0 === $queued ) {
+			Logger::error( 'FiaaCron: could not queue scheduled article jobs.', array( 'job_id' => $jobId ) );
 			return;
 		}
 
-		Logger::info( 'FiaaCron: scheduled run queued', array( 'job_id' => $jobId, 'total_posts' => count( $postIds ) ) );
+		Logger::info( 'FiaaCron: scheduled run queued', array( 'job_id' => $jobId, 'total_posts' => count( $postIds ), 'queued' => $queued ) );
 	}
 
 	/**
@@ -304,9 +311,12 @@ class FiaaCron {
 			'type'          => 'fiaa_scheduled',
 			'total'         => $total,
 			'done'          => 0,
+			'inserted'      => 0,
+			'review'        => 0,
+			'generated'     => 0,
+			'skipped'       => 0,
 			'offset'        => 0,
 			'matched'       => 0,
-			'skipped'       => 0,
 			'unmatched'     => 0,
 			'recent'        => array(),
 			'config'        => $config,

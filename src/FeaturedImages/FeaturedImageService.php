@@ -490,6 +490,79 @@ class FeaturedImageService {
 	}
 
 	/**
+	 * Whether this post should receive a featured-image decision.
+	 *
+	 * @since 3.3.0
+	 * @param int  $post_id   Post ID.
+	 * @param bool $overwrite Replace an existing featured image.
+	 * @return bool
+	 */
+	public function needsFeaturedImage( int $post_id, bool $overwrite = false ): bool {
+		$post = get_post( $post_id );
+		if ( ! $post instanceof \WP_Post ) {
+			return false;
+		}
+
+		if ( ! post_type_supports( (string) $post->post_type, 'thumbnail' ) ) {
+			return false;
+		}
+
+		if ( $overwrite ) {
+			return true;
+		}
+
+		return ! self::hasActionableFeaturedImage( $post_id );
+	}
+
+	/**
+	 * Best slug-match score for a post. Does not assign.
+	 *
+	 * Ignores the legacy FIAA auto-assign method gate so MatchDecision owns
+	 * insert vs review.
+	 *
+	 * @since 3.3.0
+	 * @param int $post_id Post ID.
+	 * @return array{score:int,attachment_id:int}
+	 */
+	public function scoreBestForPost( int $post_id ): array {
+		$empty = array(
+			'score'         => 0,
+			'attachment_id' => 0,
+		);
+
+		$post = get_post( $post_id );
+		if ( ! $post instanceof \WP_Post || empty( $post->post_name ) ) {
+			return $empty;
+		}
+
+		$slug_map = $this->slugMap->get();
+		if ( empty( $slug_map ) ) {
+			return $empty;
+		}
+
+		$best_score = 0;
+		$best_id    = 0;
+
+		foreach ( $slug_map as $image_slug => $attachment_id ) {
+			if ( $this->isExcludedImageSlug( (string) $image_slug ) ) {
+				continue;
+			}
+
+			$scored = $this->scoreSlugMatch( (string) $post->post_name, (string) $image_slug );
+			$score  = (int) ( $scored['score'] ?? 0 );
+			if ( $score > $best_score ) {
+				$best_score = $score;
+				$best_id    = (int) $attachment_id;
+			}
+		}
+
+		return array(
+			'score'         => $best_score,
+			'attachment_id' => $best_id,
+		);
+	}
+
+	/**
 	 * Detect site-wide placeholder featured attachments (KSM Extensions fallback, etc.).
 	 *
 	 * @since 3.2.7

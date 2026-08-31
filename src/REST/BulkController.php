@@ -22,9 +22,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-use SmartImageMatcher\Domain\MatchRepository;
+use SmartImageMatcher\FeaturedImages\FeaturedImageService;
 use SmartImageMatcher\Logging\Logger;
 use SmartImageMatcher\Queue\Queue;
+use SmartImageMatcher\Settings\Settings;
 
 /**
  * Class BulkController
@@ -66,9 +67,11 @@ class BulkController extends Controller {
 					'featured_filter' => array( 'type' => 'string', 'enum' => array( 'any', 'missing', 'has' ), 'default' => 'any', 'sanitize_callback' => 'sanitize_key' ),
 					'content_filter' => array( 'type' => 'string', 'enum' => array( 'any', 'has_headings', 'no_images', 'not_processed' ), 'default' => 'any', 'sanitize_callback' => 'sanitize_key' ),
 					'max_posts'  => array( 'type' => 'integer', 'minimum' => 1, 'maximum' => 5000, 'default' => 5000, 'sanitize_callback' => 'absint' ),
-					'mode'       => array( 'type' => 'string',  'enum' => array( 'keyword', 'ai' ), 'default' => 'keyword' ),
+					'mode'       => array( 'type' => 'string',  'enum' => array( 'keyword', 'ai', 'process', 'generate-featured' ), 'default' => 'process' ),
 					'min_score'  => array( 'type' => 'integer', 'minimum' => 0, 'maximum' => 100, 'default' => 70, 'sanitize_callback' => 'absint' ),
 					'overwrite'  => array( 'type' => 'boolean', 'default' => false ),
+					'style'      => array( 'type' => 'string',  'enum' => array( 'photo', 'illustration' ), 'default' => 'photo', 'sanitize_callback' => 'sanitize_key' ),
+					'dry_run'    => array( 'type' => 'boolean', 'default' => false ),
 				),
 			),
 			array(
@@ -115,6 +118,35 @@ class BulkController extends Controller {
 			'methods'             => \WP_REST_Server::CREATABLE,
 			'callback'            => array( $this, 'insertApproved' ),
 			'permission_callback' => array( $this, 'checkAdminPermission' ),
+		) );
+
+		register_rest_route( self::NAMESPACE, '/review', array(
+			array(
+				'methods'             => \WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'getReview' ),
+				'permission_callback' => array( $this, 'checkAdminPermission' ),
+				'args'                => array(
+					'page'     => array( 'type' => 'integer', 'minimum' => 1, 'default' => 1, 'sanitize_callback' => 'absint' ),
+					'per_page' => array( 'type' => 'integer', 'minimum' => 1, 'maximum' => 50, 'default' => 20, 'sanitize_callback' => 'absint' ),
+					'slot'     => array( 'type' => 'string', 'enum' => array( 'all', 'heading', 'featured' ), 'default' => 'all', 'sanitize_callback' => 'sanitize_key' ),
+					'run'      => array( 'type' => 'string', 'enum' => array( 'all', 'last' ), 'default' => 'all', 'sanitize_callback' => 'sanitize_key' ),
+				),
+			),
+		) );
+
+		register_rest_route( self::NAMESPACE, '/review/insert-approved', array(
+			'methods'             => \WP_REST_Server::CREATABLE,
+			'callback'            => array( $this, 'insertApprovedPending' ),
+			'permission_callback' => array( $this, 'checkAdminPermission' ),
+		) );
+
+		register_rest_route( self::NAMESPACE, '/review/approve-above', array(
+			'methods'             => \WP_REST_Server::CREATABLE,
+			'callback'            => array( $this, 'approveAbove' ),
+			'permission_callback' => array( $this, 'checkAdminPermission' ),
+			'args'                => array(
+				'run' => array( 'type' => 'string', 'enum' => array( 'all', 'last' ), 'default' => 'all', 'sanitize_callback' => 'sanitize_key' ),
+			),
 		) );
 	}
 
@@ -165,28 +197,64 @@ class BulkController extends Controller {
 			$postIds = $this->getPostIdsForJob( $postType, $filters );
 		}
 
-		if ( empty( $postIds ) ) {
-			return new \WP_Error( 'smart_image_matcher_no_posts', __( 'No posts found for this job.', 'smart-image-matcher' ), array( 'status' => 400 ) );
+		if ( 'generate-featured' === $mode && ! empty( $postIds ) ) {
+			$postIds = array_values(
+				array_filter(
+					$postIds,
+					static function ( $postId ) {
+						return ! FeaturedImageService::hasActionableFeaturedImage( (int) $postId );
+					}
+				)
+			);
 		}
 
-		// Create a unique job ID.
-		$jobId  = 'smart_image_matcher_' . substr( md5( uniqid( '', true ) ), 0, 12 );
-		$config = array(
+		$postIds = array_map( 'intval', $postIds );
+
+		if ( (bool) $request->get_param( 'dry_run' ) ) {
+			return rest_ensure_response(
+				array(
+					'total' => count( $postIds ),
+					'mode'  => $mode,
+				)
+			);
+		}
+
+		if ( empty( $postIds ) ) {
+			$message = 'generate-featured' === $mode
+				? __( 'No posts in this selection are missing a featured image.', 'smart-image-matcher' )
+				: __( 'No posts found for this job.', 'smart-image-matcher' );
+			return new \WP_Error( 'smart_image_matcher_no_posts', $message, array( 'status' => 400 ) );
+		}
+
+		$overwrite = (bool) $request->get_param( 'overwrite' );
+		$style     = (string) $request->get_param( 'style' );
+		if ( 'illustration' !== $style ) {
+			$style = 'photo';
+		}
+
+		$actionConfig = array(
 			'mode'      => $mode,
 			'min_score' => $minScore,
 			'post_type' => $postType,
 			'filters'   => $filters,
+			'overwrite' => $overwrite,
+			'style'     => $style,
 		);
+		$parentConfig             = $actionConfig;
+		$parentConfig['post_ids'] = $postIds;
 
-		// Store job metadata.
-		$this->saveJob( $jobId, 'queued', count( $postIds ), $config );
+		// Create a unique job ID.
+		$jobId = 'smart_image_matcher_' . substr( md5( uniqid( '', true ) ), 0, 12 );
+
+		// Store job metadata (includes post_ids for cancel). Per-action config stays slim.
+		$this->saveJob( $jobId, 'queued', count( $postIds ), $parentConfig );
 
 		// Enqueue one AS action per post.
 		$queue  = new Queue();
 		$queued = 0;
 
 		foreach ( $postIds as $postId ) {
-			$actionId = $queue->enqueueBulkMatchPost( $jobId, (int) $postId, $config );
+			$actionId = $queue->enqueueProcessArticle( (int) $postId, $jobId, $actionConfig );
 			if ( $actionId ) {
 				$queued++;
 			}
@@ -200,6 +268,8 @@ class BulkController extends Controller {
 			'total'     => count( $postIds ),
 			'status'    => 'queued',
 			'post_type' => $postType,
+			'config'    => $actionConfig,
+			'mode'      => $mode,
 		) );
 	}
 
@@ -278,13 +348,37 @@ class BulkController extends Controller {
 			&& class_exists( 'ActionScheduler' )
 			&& \ActionScheduler::is_initialized()
 		) {
-			as_unschedule_all_actions( Queue::HOOK_BULK_MATCH,  array( 'job_id' => $jobId ), Queue::GROUP );
+			$job          = $this->fetchJob( $jobId );
+			$parentConfig = array();
+			if ( is_array( $job ) ) {
+				$hydrated     = $this->hydrateJobRow( $job );
+				$parentConfig = isset( $hydrated['config'] ) && is_array( $hydrated['config'] ) ? $hydrated['config'] : array();
+			}
+
+			$postIds      = isset( $parentConfig['post_ids'] ) && is_array( $parentConfig['post_ids'] ) ? $parentConfig['post_ids'] : array();
+			$actionConfig = self::actionConfigFromParent( $parentConfig );
+			( new Queue() )->unscheduleProcessArticleJob( $jobId, $postIds, $actionConfig );
+
+			// Legacy in-flight jobs from before 3.3.0 used HOOK_BULK_MATCH.
+			as_unschedule_all_actions( Queue::HOOK_BULK_MATCH, array( 'job_id' => $jobId ), Queue::GROUP );
 			as_unschedule_all_actions( Queue::HOOK_BULK_INSERT, array( 'job_id' => $jobId ), Queue::GROUP );
 		}
 
 		$this->updateJobStatus( $jobId, 'cancelled' );
 
 		return rest_ensure_response( array( 'job_id' => $jobId, 'status' => 'cancelled' ) );
+	}
+
+	/**
+	 * Per-article Action Scheduler config (parent row may also store post_ids).
+	 *
+	 * @since 3.3.0
+	 * @param array<string, mixed> $parent Parent job config.
+	 * @return array<string, mixed>
+	 */
+	public static function actionConfigFromParent( array $parent ): array {
+		unset( $parent['post_ids'] );
+		return $parent;
 	}
 
 	// -------------------------------------------------------------------------
@@ -369,12 +463,307 @@ class BulkController extends Controller {
 		}
 		// phpcs:enable
 
+		$rows = self::attachImageUrls( $rows ?: array() );
+
 		return rest_ensure_response( array(
-			'matches'  => $rows ?: array(),
+			'articles' => self::groupMatchesByPost( $rows ),
+			'matches'  => $rows,
 			'total'    => $total,
 			'page'     => $page,
 			'per_page' => $perPage,
 		) );
+	}
+
+	/**
+	 * Attach a browser-loadable preview URL to each match row.
+	 *
+	 * The review table must use a real media file URL, not `/wp-json/wp/v2/media/{id}`
+	 * (that endpoint returns JSON, which browsers render as a broken image).
+	 *
+	 * @since 3.2.30
+	 *
+	 * @param array<int, array<string, mixed>> $rows Match rows from the database.
+	 * @return array<int, array<string, mixed>>
+	 */
+	public static function attachImageUrls( array $rows ): array {
+		$ids = array();
+		foreach ( $rows as $row ) {
+			$id = isset( $row['image_id'] ) ? (int) $row['image_id'] : 0;
+			if ( $id > 0 ) {
+				$ids[] = $id;
+			}
+		}
+
+		if ( ! empty( $ids ) && function_exists( '_prime_post_caches' ) ) {
+			_prime_post_caches( array_values( array_unique( $ids ) ), true );
+		}
+
+		foreach ( $rows as $index => $row ) {
+			$image_id = isset( $row['image_id'] ) ? (int) $row['image_id'] : 0;
+			$url      = '';
+
+			if ( $image_id > 0 ) {
+				$thumb = wp_get_attachment_image_url( $image_id, 'medium' );
+				if ( is_string( $thumb ) && '' !== $thumb ) {
+					$url = $thumb;
+				} else {
+					$full = wp_get_attachment_url( $image_id );
+					$url  = is_string( $full ) ? $full : '';
+				}
+			}
+
+			$rows[ $index ]['image_url'] = $url;
+		}
+
+		return $rows;
+	}
+
+	/**
+	 * Group flat match rows into one article per post_id.
+	 *
+	 * @since 3.3.0
+	 * @param array<int, array<string, mixed>> $rows Match rows (with image_url already attached).
+	 * @return array<int, array<string, mixed>>
+	 */
+	public static function groupMatchesByPost( array $rows ): array {
+		$grouped = array();
+
+		foreach ( $rows as $row ) {
+			$post_id = isset( $row['post_id'] ) ? (int) $row['post_id'] : 0;
+			if ( $post_id <= 0 ) {
+				continue;
+			}
+
+			if ( ! isset( $grouped[ $post_id ] ) ) {
+				$edit = function_exists( 'get_edit_post_link' ) ? get_edit_post_link( $post_id, 'raw' ) : '';
+				if ( ! is_string( $edit ) || '' === $edit ) {
+					$edit = admin_url( 'post.php?post=' . $post_id . '&action=edit' );
+				}
+
+				$grouped[ $post_id ] = array(
+					'post_id'    => $post_id,
+					'post_title' => isset( $row['post_title'] ) ? (string) $row['post_title'] : '',
+					'edit_url'   => $edit,
+					'headings'   => array(),
+				);
+			}
+
+			$grouped[ $post_id ]['headings'][] = $row;
+		}
+
+		return array_values( $grouped );
+	}
+
+	/**
+	 * Paginated review queue grouped by article.
+	 *
+	 * @since 3.3.0
+	 * @param \WP_REST_Request $request Request.
+	 * @return \WP_REST_Response
+	 */
+	public function getReview( \WP_REST_Request $request ) {
+		$page    = max( 1, (int) $request->get_param( 'page' ) );
+		$perPage = max( 1, min( 50, (int) $request->get_param( 'per_page' ) ) );
+		$slot    = sanitize_key( (string) $request->get_param( 'slot' ) );
+		$run     = sanitize_key( (string) $request->get_param( 'run' ) );
+
+		global $wpdb;
+
+		$matchesTable = esc_sql( $wpdb->prefix . 'smart_image_matcher_matches' );
+		$where        = array( "m.status = 'pending'" );
+		$args         = array();
+
+		if ( 'featured' === $slot ) {
+			$where[] = "( m.heading_hash = 'featured' OR m.heading_tag = 'featured' )";
+		} elseif ( 'heading' === $slot ) {
+			$where[] = "m.heading_hash <> 'featured' AND ( m.heading_tag IS NULL OR m.heading_tag <> 'featured' )";
+		}
+
+		if ( 'last' === $run ) {
+			$last = $this->fetchLatestRun();
+			if ( ! $last ) {
+				return rest_ensure_response(
+					array(
+						'articles'       => array(),
+						'total_articles' => 0,
+						'page'           => $page,
+						'per_page'       => $perPage,
+						'run'            => 'last',
+					)
+				);
+			}
+			$where[] = 'm.created_at >= %s';
+			$args[]  = (string) $last['created_at'];
+		}
+
+		$whereSql = implode( ' AND ', $where );
+		$offset   = ( $page - 1 ) * $perPage;
+
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+		$count_sql = "SELECT COUNT(DISTINCT m.post_id) FROM {$matchesTable} m WHERE {$whereSql}";
+		$list_sql  = "SELECT DISTINCT m.post_id FROM {$matchesTable} m WHERE {$whereSql} ORDER BY m.post_id DESC LIMIT %d OFFSET %d";
+
+		if ( ! empty( $args ) ) {
+			$total_articles = (int) $wpdb->get_var( $wpdb->prepare( $count_sql, $args ) );
+			$list_args      = array_merge( $args, array( $perPage, $offset ) );
+			$post_ids       = $wpdb->get_col( $wpdb->prepare( $list_sql, $list_args ) );
+		} else {
+			$total_articles = (int) $wpdb->get_var( $count_sql );
+			$post_ids       = $wpdb->get_col( $wpdb->prepare( $list_sql, $perPage, $offset ) );
+		}
+		// phpcs:enable
+
+		$post_ids = array_map( 'absint', is_array( $post_ids ) ? $post_ids : array() );
+		$post_ids = array_values( array_filter( $post_ids ) );
+
+		if ( empty( $post_ids ) ) {
+			return rest_ensure_response(
+				array(
+					'articles'       => array(),
+					'total_articles' => $total_articles,
+					'page'           => $page,
+					'per_page'       => $perPage,
+					'run'            => $run,
+				)
+			);
+		}
+
+		$placeholders = implode( ',', array_fill( 0, count( $post_ids ), '%d' ) );
+		$row_args     = $post_ids;
+
+		$slot_sql = '';
+		if ( 'featured' === $slot ) {
+			$slot_sql = " AND ( m.heading_hash = 'featured' OR m.heading_tag = 'featured' )";
+		} elseif ( 'heading' === $slot ) {
+			$slot_sql = " AND m.heading_hash <> 'featured' AND ( m.heading_tag IS NULL OR m.heading_tag <> 'featured' )";
+		}
+
+		$since_sql = '';
+		if ( 'last' === $run && ! empty( $args ) ) {
+			$since_sql  = ' AND m.created_at >= %s';
+			$row_args[] = $args[0];
+		}
+
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT m.*, p.post_title
+				 FROM {$matchesTable} m
+				 LEFT JOIN {$wpdb->posts} p ON p.ID = m.post_id
+				 WHERE m.status = 'pending'
+				   AND m.post_id IN ({$placeholders})
+				   {$slot_sql}{$since_sql}
+				 ORDER BY m.post_id DESC, m.confidence_score DESC",
+				$row_args
+			),
+			ARRAY_A
+		);
+		// phpcs:enable
+
+		$articles = self::groupMatchesByPost( self::attachImageUrls( is_array( $rows ) ? $rows : array() ) );
+
+		return rest_ensure_response(
+			array(
+				'articles'       => $articles,
+				'total_articles' => $total_articles,
+				'page'           => $page,
+				'per_page'       => $perPage,
+				'run'            => $run,
+			)
+		);
+	}
+
+	/**
+	 * Most recent article run (any mode).
+	 *
+	 * @since 3.3.0
+	 * @return array<string, mixed>|null
+	 */
+	private function fetchLatestRun(): ?array {
+		global $wpdb;
+
+		$row = $wpdb->get_row( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			"SELECT * FROM {$wpdb->prefix}smart_image_matcher_queue ORDER BY created_at DESC LIMIT 1",
+			ARRAY_A
+		);
+
+		return $row ?: null;
+	}
+
+	/**
+	 * Approve pending slots at or above the auto-insert threshold.
+	 *
+	 * @since 3.3.0
+	 * @param \WP_REST_Request $request Request.
+	 * @return \WP_REST_Response
+	 */
+	public function approveAbove( \WP_REST_Request $request ) {
+		$run       = sanitize_key( (string) $request->get_param( 'run' ) );
+		$threshold = (int) Settings::get( 'auto_insert_threshold' );
+
+		global $wpdb;
+
+		$sql  = "UPDATE {$wpdb->prefix}smart_image_matcher_matches SET status = 'approved' WHERE status = 'pending' AND confidence_score >= %d";
+		$args = array( $threshold );
+
+		if ( 'last' === $run ) {
+			$last = $this->fetchLatestRun();
+			if ( $last ) {
+				$sql   .= ' AND created_at >= %s';
+				$args[] = (string) $last['created_at'];
+			}
+		}
+
+		$result = $wpdb->query( $wpdb->prepare( $sql, $args ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+
+		return rest_ensure_response(
+			array(
+				'approved'  => is_int( $result ) ? $result : 0,
+				'threshold' => $threshold,
+			)
+		);
+	}
+
+	/**
+	 * Queue insertion for all currently approved match rows (any run).
+	 *
+	 * @since 3.3.0
+	 * @param \WP_REST_Request $request Request.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function insertApprovedPending( \WP_REST_Request $request ) {
+		unset( $request );
+
+		global $wpdb;
+
+		$postIds = $wpdb->get_col( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			"SELECT DISTINCT post_id FROM {$wpdb->prefix}smart_image_matcher_matches WHERE status = 'approved'"
+		);
+
+		if ( empty( $postIds ) ) {
+			return new \WP_Error( 'smart_image_matcher_no_approved', __( 'No approved matches found.', 'smart-image-matcher' ), array( 'status' => 400 ) );
+		}
+
+		$jobId = 'smart_image_matcher_' . substr( md5( uniqid( '', true ) ), 0, 12 );
+		$this->saveJob( $jobId, 'inserting', count( $postIds ), array( 'mode' => 'insert-approved' ) );
+
+		$queue  = new Queue();
+		$queued = 0;
+
+		foreach ( $postIds as $postId ) {
+			$actionId = $queue->enqueueBulkInsertPost( $jobId, (int) $postId );
+			if ( $actionId ) {
+				$queued++;
+			}
+		}
+
+		Logger::info( 'BulkController: review insert-approved queued', array( 'posts' => $queued ) );
+
+		return rest_ensure_response(
+			array(
+				'queued' => $queued,
+			)
+		);
 	}
 
 	/**
@@ -490,7 +879,17 @@ class BulkController extends Controller {
 				'status'     => $status,
 				'priority'   => 0,
 				'attempts'   => 0,
-				'totals'     => wp_json_encode( array( 'total' => $total, 'done' => 0, 'config' => $config ) ),
+				'totals'     => wp_json_encode(
+					array(
+						'total'     => $total,
+						'done'      => 0,
+						'inserted'  => 0,
+						'review'    => 0,
+						'generated' => 0,
+						'skipped'   => 0,
+						'config'    => $config,
+					)
+				),
 				'created_at' => current_time( 'mysql' ),
 			),
 			array( '%s', '%s', '%d', '%d', '%s', '%s' )
@@ -525,7 +924,7 @@ class BulkController extends Controller {
 	 * @param array<string, mixed> $job Job row.
 	 * @return array<string, mixed>
 	 */
-	private function hydrateJobRow( array $job ): array {
+	public function hydrateJobRow( array $job ): array {
 		$totals = json_decode( (string) ( $job['totals'] ?? '' ), true );
 		if ( ! is_array( $totals ) ) {
 			$totals = array();
@@ -533,12 +932,124 @@ class BulkController extends Controller {
 
 		$config = isset( $totals['config'] ) && is_array( $totals['config'] ) ? $totals['config'] : array();
 
-		$job['total']     = isset( $totals['total'] ) ? (int) $totals['total'] : 0;
-		$job['done']      = isset( $totals['done'] ) ? (int) $totals['done'] : 0;
-		$job['post_type'] = isset( $config['post_type'] ) ? (string) $config['post_type'] : '';
-		$job['config']    = $config;
+		$job['total']      = isset( $totals['total'] ) ? (int) $totals['total'] : 0;
+		$job['done']       = isset( $totals['done'] ) ? (int) $totals['done'] : 0;
+		$job['inserted']   = isset( $totals['inserted'] ) ? (int) $totals['inserted'] : 0;
+		$job['review']     = isset( $totals['review'] ) ? (int) $totals['review'] : 0;
+		$job['generated']  = isset( $totals['generated'] ) ? (int) $totals['generated'] : 0;
+		$job['skipped']    = isset( $totals['skipped'] ) ? (int) $totals['skipped'] : 0;
+		$job['post_type']  = isset( $config['post_type'] ) ? (string) $config['post_type'] : '';
+		$job['config']     = $config;
+		$job['label']      = self::formatRunLabel( $job );
+		$job['when_label'] = self::formatRunWhen( (string) ( $job['created_at'] ?? '' ) );
+		$job['what_label'] = self::formatRunWhat( $job );
+		$job['outcome']    = self::formatRunOutcome( $job );
 
 		return $job;
+	}
+
+	/**
+	 * Human "Today 09:14" (or dated) label for a run. Never includes a job hash.
+	 *
+	 * @since 3.3.0
+	 * @param string $mysql MySQL datetime.
+	 * @return string
+	 */
+	public static function formatRunWhen( string $mysql ): string {
+		if ( '' === $mysql ) {
+			return '';
+		}
+
+		$ts = strtotime( $mysql );
+		if ( false === $ts ) {
+			return $mysql;
+		}
+
+		$today = function_exists( 'current_time' ) ? substr( (string) current_time( 'mysql' ), 0, 10 ) : gmdate( 'Y-m-d' );
+		$day   = substr( $mysql, 0, 10 );
+		$clock = function_exists( 'date_i18n' ) ? date_i18n( 'H:i', $ts ) : gmdate( 'H:i', $ts );
+
+		if ( $day === $today ) {
+			/* translators: %s: time, e.g. 09:14 */
+			return sprintf( __( 'Today %s', 'smart-image-matcher' ), $clock );
+		}
+
+		$dated = function_exists( 'date_i18n' ) ? date_i18n( 'j M H:i', $ts ) : gmdate( 'j M H:i', $ts );
+		return (string) $dated;
+	}
+
+	/**
+	 * Operator-facing run label: time · article count · outcomes.
+	 *
+	 * @since 3.3.0
+	 * @param array<string, mixed> $job Hydrated or raw job row.
+	 * @return string
+	 */
+	public static function formatRunLabel( array $job ): string {
+		$when     = isset( $job['when_label'] ) ? (string) $job['when_label'] : self::formatRunWhen( (string) ( $job['created_at'] ?? '' ) );
+		$total    = isset( $job['total'] ) ? (int) $job['total'] : 0;
+		$inserted = isset( $job['inserted'] ) ? (int) $job['inserted'] : 0;
+		$review   = isset( $job['review'] ) ? (int) $job['review'] : 0;
+
+		/* translators: 1: when, 2: article count, 3: inserted count, 4: review count */
+		return sprintf(
+			__( '%1$s · %2$d articles · Inserted %3$d · Review %4$d', 'smart-image-matcher' ),
+			$when,
+			$total,
+			$inserted,
+			$review
+		);
+	}
+
+	/**
+	 * What this run did (process / scheduled / generate featured).
+	 *
+	 * @since 3.3.0
+	 * @param array<string, mixed> $job Hydrated job row.
+	 * @return string
+	 */
+	public static function formatRunWhat( array $job ): string {
+		$config = isset( $job['config'] ) && is_array( $job['config'] ) ? $job['config'] : array();
+		$mode   = isset( $config['mode'] ) ? (string) $config['mode'] : '';
+		$total  = isset( $job['total'] ) ? (int) $job['total'] : 0;
+		$type   = '';
+
+		if ( isset( $job['totals'] ) && is_string( $job['totals'] ) ) {
+			$decoded = json_decode( $job['totals'], true );
+			if ( is_array( $decoded ) && isset( $decoded['type'] ) ) {
+				$type = (string) $decoded['type'];
+			}
+		}
+
+		if ( 'generate-featured' === $mode ) {
+			/* translators: %d: article count */
+			return sprintf( __( 'Generate featured %d articles', 'smart-image-matcher' ), $total );
+		}
+
+		if ( 'fiaa_scheduled' === $type || false !== strpos( (string) ( $job['job_id'] ?? '' ), '_fiaa_scheduled_' ) ) {
+			return __( 'Scheduled', 'smart-image-matcher' );
+		}
+
+		/* translators: %d: article count */
+		return sprintf( __( 'Process %d articles', 'smart-image-matcher' ), $total );
+	}
+
+	/**
+	 * Outcome column: Inserted · Review · Generated · Skipped.
+	 *
+	 * @since 3.3.0
+	 * @param array<string, mixed> $job Hydrated job row.
+	 * @return string
+	 */
+	public static function formatRunOutcome( array $job ): string {
+		/* translators: 1: inserted, 2: review, 3: generated, 4: skipped */
+		return sprintf(
+			__( 'Inserted %1$d · Review %2$d · Generated %3$d · Skipped %4$d', 'smart-image-matcher' ),
+			isset( $job['inserted'] ) ? (int) $job['inserted'] : 0,
+			isset( $job['review'] ) ? (int) $job['review'] : 0,
+			isset( $job['generated'] ) ? (int) $job['generated'] : 0,
+			isset( $job['skipped'] ) ? (int) $job['skipped'] : 0
+		);
 	}
 
 	/**

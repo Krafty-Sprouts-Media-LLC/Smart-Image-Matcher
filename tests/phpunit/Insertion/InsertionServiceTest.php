@@ -107,4 +107,60 @@ class InsertionServiceTest extends TestCase {
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
 	}
+
+	/** @test */
+	public function classic_heading_reports_following_img(): void {
+		$hash = HeadingLocator::computeHash( 2, 'american goldfinch', 0 );
+		$post = new \WP_Post();
+		$post->ID = 11;
+		$post->post_content = '<h2>American Goldfinch</h2><img src="goldfinch.jpg" alt="" />';
+		$GLOBALS['sim_test_get_post'] = static function () use ( $post ) {
+			return $post;
+		};
+
+		$this->assertTrue( $this->service->headingHasFollowingImage( 11, $hash ) );
+	}
+
+	/** @test */
+	public function classic_heading_without_image_is_false(): void {
+		$hash = HeadingLocator::computeHash( 2, 'american goldfinch', 0 );
+		$post = new \WP_Post();
+		$post->ID = 12;
+		$post->post_content = '<h2>American Goldfinch</h2><p>Diet and range.</p>';
+		$GLOBALS['sim_test_get_post'] = static function () use ( $post ) {
+			return $post;
+		};
+
+		$this->assertFalse( $this->service->headingHasFollowingImage( 12, $hash ) );
+	}
+
+	/** @test */
+	public function gutenberg_heading_reports_following_image_block(): void {
+		$hash = HeadingLocator::computeHash( 2, 'american goldfinch', 0 );
+		$post = new \WP_Post();
+		$post->ID = 13;
+		$post->post_content = '<!-- wp:heading --><h2>American Goldfinch</h2><!-- /wp:heading -->';
+		$GLOBALS['sim_test_get_post'] = static function () use ( $post ) {
+			return $post;
+		};
+		$GLOBALS['sim_test_parse_blocks'] = static function () {
+			return array(
+				array(
+					'blockName'   => 'core/heading',
+					'innerHTML'   => '<h2>American Goldfinch</h2>',
+					'attrs'       => array( 'level' => 2 ),
+					'innerBlocks' => array(),
+				),
+				array(
+					'blockName'   => 'core/image',
+					'innerHTML'   => '<figure><img src="x.jpg" /></figure>',
+					'attrs'       => array( 'id' => 42 ),
+					'innerBlocks' => array(),
+				),
+			);
+		};
+
+		$this->assertTrue( $this->service->headingHasFollowingImage( 13, $hash ) );
+		unset( $GLOBALS['sim_test_parse_blocks'] );
+	}
 }

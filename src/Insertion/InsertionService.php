@@ -145,6 +145,37 @@ class InsertionService {
 		return true;
 	}
 
+	/**
+	 * Whether the heading already has an immediately following image.
+	 *
+	 * Gutenberg: next sibling is core/image or core/gallery.
+	 * Classic: next markup is an img, gallery shortcode, or image block.
+	 *
+	 * @since 3.3.0
+	 * @param int    $post_id      Post ID.
+	 * @param string $heading_hash Stable heading hash.
+	 * @return bool
+	 */
+	public function headingHasFollowingImage( int $post_id, string $heading_hash ): bool {
+		$post = get_post( $post_id );
+		if ( ! $post instanceof \WP_Post ) {
+			return false;
+		}
+
+		$content = (string) $post->post_content;
+		if ( '' === $content || '' === $heading_hash ) {
+			return false;
+		}
+
+		if ( has_blocks( $content ) ) {
+			$blocks = parse_blocks( $content );
+			$seen   = array();
+			return $this->blocksHeadingHasFollowingImage( $blocks, $heading_hash, $seen );
+		}
+
+		return $this->htmlHeadingHasFollowingImage( $content, $heading_hash );
+	}
+
 	// -------------------------------------------------------------------------
 	// Gutenberg path
 	// -------------------------------------------------------------------------
@@ -299,5 +330,113 @@ class InsertionService {
 		}
 
 		return $content;
+	}
+
+	/**
+	 * Recursively detect an image/gallery sibling after a hashed heading.
+	 *
+	 * @param array<int, array<string, mixed>> $blocks       Block list.
+	 * @param string                           $heading_hash Target hash.
+	 * @param array<string, int>               $seen         Occurrence map (by ref).
+	 * @return bool
+	 */
+	private function blocksHeadingHasFollowingImage( array $blocks, string $heading_hash, array &$seen ): bool {
+		$count = count( $blocks );
+
+		for ( $i = 0; $i < $count; $i++ ) {
+			$block = $blocks[ $i ];
+
+			if ( ! empty( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) ) {
+				if ( $this->blocksHeadingHasFollowingImage( $block['innerBlocks'], $heading_hash, $seen ) ) {
+					return true;
+				}
+			}
+
+			if ( ( $block['blockName'] ?? '' ) !== 'core/heading' ) {
+				continue;
+			}
+
+			$level      = (int) ( $block['attrs']['level'] ?? 2 );
+			$text       = strtolower(
+				trim(
+					wp_strip_all_tags(
+						html_entity_decode( (string) ( $block['innerHTML'] ?? '' ), ENT_QUOTES, 'UTF-8' )
+					)
+				)
+			);
+			$key        = "{$level}:{$text}";
+			$occurrence = $seen[ $key ] ?? 0;
+			$seen[ $key ] = $occurrence + 1;
+			$hash         = HeadingLocator::computeHash( $level, $text, $occurrence );
+
+			if ( $hash !== $heading_hash ) {
+				continue;
+			}
+
+			$next = $blocks[ $i + 1 ] ?? null;
+			if ( ! is_array( $next ) ) {
+				return false;
+			}
+
+			$name = (string) ( $next['blockName'] ?? '' );
+			return in_array( $name, array( 'core/image', 'core/gallery' ), true );
+		}
+
+		return false;
+	}
+
+	/**
+	 * Classic-editor: next markup after the hashed heading is an image.
+	 *
+	 * @param string $content      Post HTML.
+	 * @param string $heading_hash Target hash.
+	 * @return bool
+	 */
+	private function htmlHeadingHasFollowingImage( string $content, string $heading_hash ): bool {
+		preg_match_all(
+			'/<(h[2-6])[^>]*>(.*?)<\/\1>/is',
+			$content,
+			$matches,
+			PREG_SET_ORDER | PREG_OFFSET_CAPTURE
+		);
+
+		$seen = array();
+
+		foreach ( $matches as $match ) {
+			$tag        = strtolower( $match[1][0] );
+			$level      = (int) substr( $tag, 1 );
+			$inner_html = $match[2][0];
+			$text       = strtolower( trim( wp_strip_all_tags( html_entity_decode( $inner_html, ENT_QUOTES, 'UTF-8' ) ) ) );
+			$full_match = $match[0][0];
+			$start_pos  = (int) $match[0][1];
+			$end_pos    = $start_pos + strlen( $full_match );
+
+			$key          = "{$level}:{$text}";
+			$occurrence   = $seen[ $key ] ?? 0;
+			$seen[ $key ] = $occurrence + 1;
+			$hash         = HeadingLocator::computeHash( $level, $text, $occurrence );
+
+			if ( $hash !== $heading_hash ) {
+				continue;
+			}
+
+			$after = ltrim( substr( $content, $end_pos ) );
+			if ( '' === $after ) {
+				return false;
+			}
+
+			if ( preg_match( '/^(<!--\s*wp:(?:image|gallery)\b|<img\b|\[gallery\b|\[caption\b)/i', $after ) ) {
+				return true;
+			}
+
+			if ( preg_match( '/^<([a-z][a-z0-9]*)\b/i', $after, $tag_match ) ) {
+				$next_tag = strtolower( $tag_match[1] );
+				return in_array( $next_tag, array( 'img', 'figure' ), true );
+			}
+
+			return false;
+		}
+
+		return false;
 	}
 }

@@ -89,8 +89,9 @@ class FiaaCronTest extends TestCase {
 
 		( new FiaaCron() )->runScheduledAssignment();
 
-		$this->assertCount( 1, $GLOBALS['sim_test_as_enqueued'], 'Exactly one batched job must be enqueued per scheduled tick.' );
-		$this->assertSame( \SmartImageMatcher\Queue\Queue::HOOK_FIAA_RUN, $GLOBALS['sim_test_as_enqueued'][0]['hook'] );
+		$this->assertCount( 3, $GLOBALS['sim_test_as_enqueued'], 'One article-process action per candidate post.' );
+		$this->assertSame( \SmartImageMatcher\Queue\Queue::HOOK_PROCESS_ARTICLE, $GLOBALS['sim_test_as_enqueued'][0]['hook'] );
+		$this->assertSame( 101, $GLOBALS['sim_test_as_enqueued'][0]['args']['post_id'] );
 
 		$this->assertCount( 1, $GLOBALS['sim_test_wpdb_inserted'] );
 		$inserted = $GLOBALS['sim_test_wpdb_inserted'][0];

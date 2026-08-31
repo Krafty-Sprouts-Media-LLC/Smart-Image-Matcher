@@ -74,6 +74,61 @@ class MatchRepository {
 	}
 
 	/**
+	 * Replace the pending row for one post + heading hash.
+	 *
+	 * Does not touch approved/rejected rows or other headings.
+	 *
+	 * @since 3.3.0
+	 * @param int    $post_id      Post ID.
+	 * @param string $heading_hash Heading hash, or "featured".
+	 * @param string $heading_text Heading or post title.
+	 * @param string $heading_tag  Heading tag, or "featured".
+	 * @param int    $image_id     Candidate attachment ID.
+	 * @param int    $score        Confidence 0–100.
+	 * @param string $method       Match method key.
+	 * @return void
+	 */
+	public function upsertPending(
+		int $post_id,
+		string $heading_hash,
+		string $heading_text,
+		string $heading_tag,
+		int $image_id,
+		int $score,
+		string $method
+	): void {
+		global $wpdb;
+
+		$table = $wpdb->prefix . 'smart_image_matcher_matches';
+
+		$wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->prepare(
+				"DELETE FROM {$table} WHERE post_id = %d AND heading_hash = %s AND status = %s",
+				$post_id,
+				$heading_hash,
+				'pending'
+			)
+		);
+
+		$wpdb->insert( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+			$table,
+			array(
+				'post_id'          => $post_id,
+				'heading_hash'     => $heading_hash,
+				'heading_text'     => $heading_text,
+				'heading_tag'      => $heading_tag,
+				'image_id'         => $image_id,
+				'confidence_score' => $score,
+				'match_method'     => sanitize_key( $method ),
+				'ai_reasoning'     => null,
+				'status'           => 'pending',
+				'created_at'       => current_time( 'mysql' ),
+			),
+			array( '%d', '%s', '%s', '%s', '%d', '%d', '%s', '%s', '%s', '%s' )
+		);
+	}
+
+	/**
 	 * Mark a match row as approved (image was inserted).
 	 *
 	 * @since 3.0.0

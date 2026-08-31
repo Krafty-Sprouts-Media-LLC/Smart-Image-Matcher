@@ -45,6 +45,7 @@ class Settings {
 		// Matching.
 		'match_mode'                 => 'keyword',
 		'confidence_threshold'       => 70,
+		'auto_insert_threshold'      => 90,
 		'hierarchy_mode'             => 'smart',
 		'heading_overlap_threshold'  => 70,
 		'max_matches_per_heading'    => 3,
@@ -173,12 +174,9 @@ class Settings {
 		);
 
 		// The first add_submenu_page with the parent slug becomes the default
-		// landing page AND the first visible item. We register Settings first
-		// so it is the default, then immediately remove the auto-generated
-		// duplicate entry WordPress adds, then re-add it at the bottom.
-		// This gives us: Featured Images → Bulk Processor → Settings order.
+		// landing page AND the first visible item. We register Dashboard first
+		// so it is the default. Order after reorder: Dashboard → Bulk Processor → Settings.
 
-		// Step 1: register Settings as the default (required by WP).
 		add_submenu_page(
 			'smart-image-matcher',
 			__( 'Smart Image Matcher – Settings', 'smart-image-matcher' ),
@@ -186,26 +184,6 @@ class Settings {
 			'manage_options',
 			'smart-image-matcher',
 			array( $this, 'renderDashboardPage' )
-		);
-
-		// Step 2: Featured Images (Match Runner + AI Generate — single home).
-		add_submenu_page(
-			'smart-image-matcher',
-			__( 'Smart Image Matcher – Featured Images', 'smart-image-matcher' ),
-			__( 'Featured Images', 'smart-image-matcher' ),
-			'manage_options',
-			'smart-image-matcher-featured-images',
-			array( $this, 'renderFeaturedImagesPage' )
-		);
-
-		// Hidden legacy slug — redirects to Featured Images (bookmarks / old bulk links).
-		add_submenu_page(
-			null,
-			__( 'Generate Featured Images', 'smart-image-matcher' ),
-			'',
-			'manage_options',
-			'smart-image-matcher-generate-images',
-			array( $this, 'redirectLegacyGenerateImagesPage' )
 		);
 
 		add_submenu_page(
@@ -220,10 +198,9 @@ class Settings {
 		// NOTE: Bulk Processor submenu is registered by Premium\BulkProcessor::registerMenu()
 		// when Premium::has('bulk_processor') is true. Do not add it here.
 
-		// Step 3: Move Settings to the bottom of the submenu list.
 		// WordPress auto-adds a duplicate of the parent as the first submenu item.
-		// We remove it and re-add it at the end so the visual order is:
-		//   Featured Images → Bulk Processor → Settings
+		// We remove it and re-add Settings at the end so the visual order is:
+		//   Dashboard → Bulk Processor → Settings
 		add_action( 'admin_menu', array( $this, 'reorderSettingsToBottom' ), 999 );
 	}
 
@@ -285,13 +262,14 @@ class Settings {
 			'smart_image_matcher_matching',
 			__( 'Matching', 'smart-image-matcher' ),
 			static function () {
-				echo '<p>' . esc_html__( 'Controls the matches shown in the post editor modal. Higher thresholds show fewer, safer suggestions.', 'smart-image-matcher' ) . '</p>';
+				echo '<p>' . esc_html__( 'Controls editor-modal suggestions and article automation. The confidence threshold is the review floor; auto-insert is the score that inserts without review.', 'smart-image-matcher' ) . '</p>';
 			},
 			'smart_image_matcher_settings'
 		);
 
 		$this->addField( 'smart_image_matcher_matching', 'match_mode', __( 'Default Match Mode', 'smart-image-matcher' ), 'renderMatchMode' );
 		$this->addField( 'smart_image_matcher_matching', 'confidence_threshold', __( 'Confidence Threshold (%)', 'smart-image-matcher' ), 'renderConfidenceThreshold' );
+		$this->addField( 'smart_image_matcher_matching', 'auto_insert_threshold', __( 'Auto-insert Threshold (%)', 'smart-image-matcher' ), 'renderAutoInsertThreshold' );
 		$this->addField( 'smart_image_matcher_matching', 'hierarchy_mode', __( 'Hierarchy Mode', 'smart-image-matcher' ), 'renderHierarchyMode' );
 		$this->addField( 'smart_image_matcher_matching', 'heading_overlap_threshold', __( 'Heading Overlap Threshold (%)', 'smart-image-matcher' ), 'renderHeadingOverlapThreshold' );
 		$this->addField( 'smart_image_matcher_matching', 'max_matches_per_heading', __( 'Max Matches per Heading', 'smart-image-matcher' ), 'renderMaxMatches' );
@@ -340,7 +318,7 @@ class Settings {
 		// ---- Featured Images scheduled cron section ----
 		add_settings_section(
 			'smart_image_matcher_fiaa_cron',
-			__( 'Scheduled Auto-Assignment', 'smart-image-matcher' ),
+			__( 'Scheduled article processing', 'smart-image-matcher' ),
 			array( $this, 'renderFiaaCronSectionDescription' ),
 			'smart_image_matcher_settings'
 		);
@@ -379,7 +357,7 @@ class Settings {
 		$this->addField( 'smart_image_matcher_ai', 'ai_image_subject_gate', __( 'Subject gate', 'smart-image-matcher' ), 'renderAiSubjectGateToggle' );
 		$this->addField( 'smart_image_matcher_ai', 'ai_image_style', __( 'Preferred image style', 'smart-image-matcher' ), 'renderAiImageStyleSelect' );
 		$this->addField( 'smart_image_matcher_ai', 'ai_image_verify_vision', __( 'Vision verification', 'smart-image-matcher' ), 'renderAiVerifyVisionToggle' );
-		$this->addField( 'smart_image_matcher_ai', 'ai_image_auto_featured_on_publish', __( 'Auto-generate featured image on publish', 'smart-image-matcher' ), 'renderAiAutoFeaturedOnPublishToggle' );
+		$this->addField( 'smart_image_matcher_ai', 'ai_image_auto_featured_on_publish', __( 'Process article on first publish', 'smart-image-matcher' ), 'renderAiAutoFeaturedOnPublishToggle' );
 		$this->addField( 'smart_image_matcher_ai', 'ai_image_alt_mode', __( 'Generated image alt text', 'smart-image-matcher' ), 'renderAiAltModeSelect' );
 		$this->addField( 'smart_image_matcher_ai', 'ai_image_save_prompt_as_description', __( 'Save prompt as media Description', 'smart-image-matcher' ), 'renderAiSavePromptDescriptionToggle' );
 	}
@@ -548,7 +526,28 @@ class Settings {
 			esc_attr( $key ),
 			esc_attr( (string) $value )
 		);
-		echo ' <span>%</span><p class="description">' . esc_html__( 'Minimum score (0-100) to show as a match.', 'smart-image-matcher' ) . '</p>';
+		echo ' <span>%</span><p class="description">' . esc_html__( 'Minimum score for the editor modal and for Review during automation.', 'smart-image-matcher' ) . '</p>';
+	}
+
+	/**
+	 * Render auto-insert threshold number input.
+	 *
+	 * @since 3.2.31
+	 * @param array<string,string> $args Field args.
+	 * @return void
+	 */
+	public function renderAutoInsertThreshold( array $args ): void {
+		$key   = $args['key'];
+		$value = (int) self::get( $key );
+		$name  = self::OPTION . '[' . esc_attr( $key ) . ']';
+
+		printf(
+			'<input type="number" name="%s" id="smart_image_matcher_%s" value="%s" min="0" max="100" step="1" />',
+			esc_attr( $name ),
+			esc_attr( $key ),
+			esc_attr( (string) $value )
+		);
+		echo ' <span>%</span><p class="description">' . esc_html__( 'At or above this score, article processing inserts without review.', 'smart-image-matcher' ) . '</p>';
 	}
 
 	/**
@@ -770,7 +769,7 @@ class Settings {
 	 * @return void
 	 */
 	public function renderFiaaCronSectionDescription(): void {
-		echo '<p>' . esc_html__( 'Automatically checks for posts that need featured images. A daily run happens about 24 hours after the previous run, depending on WordPress cron and site traffic.', 'smart-image-matcher' ) . '</p>';
+		echo '<p>' . esc_html__( 'Automatically process selected post types on a schedule: insert strong library matches, send the middle band to Review, and generate only when on-demand generation is on and the library would skip. There is no run-now control here — use Bulk Processor.', 'smart-image-matcher' ) . '</p>';
 	}
 
 	/**
@@ -782,7 +781,7 @@ class Settings {
 	 */
 	public function renderFiaaCronEnabled( array $args ): void {
 		$this->renderCheckbox( $args );
-		echo '<p class="description">' . esc_html__( 'Turn this on to let the site run featured-image matching automatically in the background.', 'smart-image-matcher' ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'Turn this on to process articles in the background on the interval below.', 'smart-image-matcher' ) . '</p>';
 	}
 
 	/**
@@ -1061,7 +1060,7 @@ class Settings {
 	 */
 	public function renderAiAutoFeaturedOnPublishToggle( array $args ): void {
 		$this->renderCheckbox( array( 'key' => 'ai_image_auto_featured_on_publish' ) );
-		echo '<p class="description">' . esc_html__( 'When a post is first published without a featured image, queue one AI featured image after slug matching fails. Does not generate in-content heading images.', 'smart-image-matcher' ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'When a post is first published, queue article processing. Library matches follow auto-insert and review thresholds. Skip-band generation runs only if on-demand generation is on.', 'smart-image-matcher' ) . '</p>';
 	}
 
 	/**

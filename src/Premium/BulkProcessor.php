@@ -17,6 +17,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+use SmartImageMatcher\AI\ProviderBridge;
+use SmartImageMatcher\Settings\Settings;
+
 /**
  * Class BulkProcessor
  *
@@ -51,10 +54,16 @@ class BulkProcessor {
 	 * @return void
 	 */
 	public function registerMenu(): void {
+		$count = $this->countPendingArticles();
+		$label = __( 'Bulk Processor', 'smart-image-matcher' );
+		if ( $count > 0 ) {
+			$label .= ' <span class="awaiting-mod">' . esc_html( (string) $count ) . '</span>';
+		}
+
 		$this->pageHook = (string) add_submenu_page(
 			'smart-image-matcher',
 			__( 'Smart Image Matcher – Bulk Processor', 'smart-image-matcher' ),
-			__( 'Bulk Processor', 'smart-image-matcher' ),
+			$label,
 			'manage_options',
 			'smart-image-matcher-bulk',
 			array( $this, 'renderPage' )
@@ -88,32 +97,51 @@ class BulkProcessor {
 		);
 
 		wp_enqueue_script(
+			'smart-image-matcher-svg-icons',
+			SMART_IMAGE_MATCHER_PLUGIN_URL . 'admin/js/src/svg-icons.js',
+			array(),
+			SMART_IMAGE_MATCHER_VERSION,
+			true
+		);
+
+		wp_enqueue_script(
 			'smart-image-matcher-bulk-js',
 			SMART_IMAGE_MATCHER_PLUGIN_URL . 'admin/js/src/bulk.js',
-			array( 'wp-api-fetch' ),
+			array( 'wp-api-fetch', 'smart-image-matcher-svg-icons' ),
 			file_exists( $jsPath ) ? (string) filemtime( $jsPath ) : SMART_IMAGE_MATCHER_VERSION,
 			true
 		);
+
+		$generationOn = (bool) Settings::get( 'ai_image_generation_enabled' )
+			&& ProviderBridge::isImageGenerationAvailable();
 
 		wp_localize_script(
 			'smart-image-matcher-bulk-js',
 			'smartImageMatcherBulk',
 			array(
-				'restBase'  => rest_url( 'smart-image-matcher/v1' ),
-				'nonce'     => wp_create_nonce( 'wp_rest' ),
-				'postTypes' => $this->getPublicPostTypes(),
-				'samplePostRefs' => $this->getSamplePostRefs(),
-				'i18n'      => array(
-					'selectPosts'    => __( 'Select Posts', 'smart-image-matcher' ),
-					'configure'      => __( 'Configure', 'smart-image-matcher' ),
-					'findMatches'    => __( 'Find Matches', 'smart-image-matcher' ),
-					'reviewInsert'   => __( 'Review & Insert', 'smart-image-matcher' ),
+				'restBase'              => rest_url( 'smart-image-matcher/v1' ),
+				'nonce'                 => wp_create_nonce( 'wp_rest' ),
+				'postTypes'             => $this->getPublicPostTypes(),
+				'samplePostRefs'        => $this->getSamplePostRefs(),
+				'autoInsertThreshold'   => (int) Settings::get( 'auto_insert_threshold' ),
+				'reviewThreshold'       => (int) Settings::get( 'confidence_threshold' ),
+				'generationAvailable'   => $generationOn,
+				'defaultStyle'          => (string) Settings::get( 'ai_image_style' ),
+				'i18n'                  => array(
+					'run'            => __( 'Run', 'smart-image-matcher' ),
+					'review'         => __( 'Review', 'smart-image-matcher' ),
 					'approve'        => __( 'Approve', 'smart-image-matcher' ),
 					'reject'         => __( 'Reject', 'smart-image-matcher' ),
-					'insertApproved' => __( 'Insert Approved', 'smart-image-matcher' ),
-					'cancel'         => __( 'Cancel', 'smart-image-matcher' ),
-					'cancelReview'   => __( 'Cancel Review', 'smart-image-matcher' ),
-					'noMatches'      => __( 'No matches found.', 'smart-image-matcher' ),
+					'insertApproved' => __( 'Insert approved', 'smart-image-matcher' ),
+					'cancel'         => __( 'Cancel run', 'smart-image-matcher' ),
+					'noMatches'      => __( 'Nothing to review.', 'smart-image-matcher' ),
+					'allPending'     => __( 'All pending', 'smart-image-matcher' ),
+					'lastRun'        => __( 'Last run', 'smart-image-matcher' ),
+					'noMissingFeatured' => __( 'No posts in this selection are missing a featured image.', 'smart-image-matcher' ),
+					'changeSelection'   => __( 'Change selection', 'smart-image-matcher' ),
+					'confirmCancelRun'  => __( 'Cancel the current run so you can change the selection?', 'smart-image-matcher' ),
+					'confirmRecovery'   => __( 'Recover %d matched image(s) into WordPress? Unmatched images will not be imported.', 'smart-image-matcher' ),
+					'confirmAuditClear' => __( 'Remove unsafe featured images from the scanned posts? Exact and prefix matches are left alone.', 'smart-image-matcher' ),
 				),
 			)
 		);
@@ -135,6 +163,22 @@ class BulkProcessor {
 	// -------------------------------------------------------------------------
 	// Private helpers
 	// -------------------------------------------------------------------------
+
+	/**
+	 * Distinct posts with at least one pending review slot.
+	 *
+	 * @since 3.3.0
+	 * @return int
+	 */
+	private function countPendingArticles(): int {
+		global $wpdb;
+
+		$count = $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			"SELECT COUNT(DISTINCT post_id) FROM {$wpdb->prefix}smart_image_matcher_matches WHERE status = 'pending'"
+		);
+
+		return (int) $count;
+	}
 
 	/**
 	 * Get public post types for the post-type selector.

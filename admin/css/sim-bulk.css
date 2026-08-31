@@ -101,10 +101,272 @@
 	border-radius: 3px;
 }
 
+.sim-progress-bar {
+	height: 8px;
+	background: #dcdcde;
+	border-radius: 4px;
+	overflow: hidden;
+	margin: 12px 0 16px;
+}
+
+.sim-progress-fill {
+	height: 100%;
+	background: #2271b1;
+}
+
+.sim-tabs {
+	display: flex;
+	gap: 0;
+	margin: 0 0 16px;
+	border-bottom: 2px solid #dcdcde;
+}
+
+.sim-tab {
+	padding: 10px 18px;
+	text-decoration: none;
+	color: #787c82;
+	border-bottom: 2px solid transparent;
+	margin-bottom: -2px;
+	font-weight: 600;
+}
+
+.sim-tab:hover,
+.sim-tab:focus {
+	color: #2271b1;
+}
+
+.sim-tab.is-on {
+	color: #2271b1;
+	border-bottom-color: #2271b1;
+}
+
+.sim-tab-pill {
+	display: inline-block;
+	margin-left: 8px;
+	padding: 1px 7px;
+	border-radius: 10px;
+	background: #f0f6fc;
+	color: #2271b1;
+	font-size: 11px;
+	font-weight: 600;
+}
+
+.sim-mode-cards {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 12px;
+	margin-bottom: 16px;
+}
+
+.sim-mode-card {
+	display: block;
+	border: 1px solid #dcdcde;
+	border-radius: 6px;
+	padding: 14px 16px;
+	background: #fff;
+	cursor: pointer;
+}
+
+.sim-mode-card:hover {
+	border-color: #2271b1;
+}
+
+.sim-mode-card.is-on {
+	border-color: #2271b1;
+	box-shadow: 0 0 0 1px #2271b1;
+}
+
+.sim-mode-card.is-disabled {
+	opacity: 0.65;
+	cursor: not-allowed;
+}
+
+.sim-mode-card input {
+	margin-right: 8px;
+}
+
+.sim-mode-card strong {
+	display: block;
+	margin-bottom: 4px;
+}
+
+.sim-mode-card span {
+	display: block;
+	color: #646970;
+	font-size: 13px;
+}
+
+.sim-article {
+	border: 1px solid #dcdcde;
+	border-radius: 6px;
+	margin-bottom: 12px;
+	background: #fff;
+}
+
+.sim-article-head {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 12px 14px;
+	border-bottom: 1px solid #f0f0f1;
+}
+
+.sim-article-head h3 {
+	margin: 0;
+	font-size: 14px;
+}
+
+.sim-slot-row {
+	display: grid;
+	grid-template-columns: 72px minmax(0, 1fr) 64px auto;
+	gap: 12px;
+	align-items: center;
+	padding: 10px 14px;
+	border-top: 1px solid #f0f0f1;
+}
+
+.sim-slot-row.is-rejected {
+	opacity: 0.45;
+}
+
+.sim-slot-thumb img {
+	width: 72px;
+	height: 54px;
+	object-fit: cover;
+	border-radius: 3px;
+	display: block;
+}
+
+.sim-no-thumb {
+	color: #787c82;
+}
+
+.sim-empty {
+	text-align: center;
+	padding: 40px 16px;
+}
+
+.sim-review-toolbar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-bottom: 14px;
+	padding-bottom: 12px;
+	border-bottom: 1px solid #f0f0f0;
+}
+
+.sim-review-filters,
+.sim-review-actions {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.sim-modal {
+	position: fixed;
+	inset: 0;
+	z-index: 100000;
+}
+
+.sim-modal-backdrop {
+	position: absolute;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.45);
+}
+
+.sim-modal-dialog {
+	position: relative;
+	max-width: 520px;
+	margin: 12vh auto;
+	background: #fff;
+	border-radius: 6px;
+	padding: 20px 24px;
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.sim-gen-estimate {
+	background: #fcf9e8;
+	border-left: 4px solid #dba617;
+	padding: 10px 12px;
+	margin: 12px 0 16px;
+}
+
+.sim-confidence-high {
+	color: #008a20;
+	font-weight: 700;
+}
+
+.sim-confidence-medium {
+	color: #996800;
+	font-weight: 700;
+}
+
+.sim-confidence-low {
+	color: #787c82;
+}
+
+.sim-run-summary {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin: 0 0 12px;
+	padding: 10px 12px;
+	background: #f6f7f7;
+	border-radius: 4px;
+}
+
+.sim-run-summary .button-link {
+	text-decoration: none;
+}
+
+.sim-bulk-tools {
+	margin-top: 16px;
+	padding: 14px 16px;
+}
+
+.sim-bulk-tools summary {
+	cursor: pointer;
+	font-weight: 600;
+}
+
+.sim-bulk-tools .description {
+	margin: 8px 0 12px;
+}
+
+.sim-recovery-controls,
+.sim-form-actions {
+	display: flex;
+	align-items: flex-end;
+	flex-wrap: wrap;
+	gap: 12px;
+	margin: 12px 0;
+}
+
+.sim-info-rows {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+	gap: 8px 16px;
+	margin: 12px 0;
+}
+
+.sim-info-row {
+	display: flex;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.sim-audit-summary {
+	margin-top: 12px;
+}
+
 @media (max-width: 782px) {
-	.sim-bulk-form-grid,
-	.sim-checkbox-grid,
-	.sim-date-grid {
+	.sim-mode-cards,
+	.sim-slot-row {
 		grid-template-columns: 1fr;
 	}
 }

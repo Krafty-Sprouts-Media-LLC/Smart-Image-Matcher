@@ -1,7 +1,9 @@
 # Design: One article processor (match / review / generate / skip)
 
 **Date:** 2026-08-31  
-**Status:** Draft for review  
+**Status:** Engine locked; admin chrome lives in the UI spec  
+**Release:** 3.3.0 (not 3.2.x). Last 3.2 patch is 3.2.31.  
+**UI spec:** `docs/superpowers/specs/2026-08-31-article-processor-ui-design.md` (screens, states, copy). Wins on admin chrome.  
 **Related:** Bulk Processor review gate (`IMPLEMENTATION_PLAN.md` §4), featured-only auto-publish (`docs/superpowers/specs/2026-08-05-sim-image-gen-remaining-surfaces-design.md` §7)
 
 ---
@@ -142,7 +144,7 @@ This is the only hands-on operations page. Two tabs (or equivalent persistent na
 
 Bulk Processor exists **because automation is hands-off**. Cron and publish do not require opening this page. Operators open it to run a selection now, or to clear the review band.
 
-Steps 1–3 of today’s wizard remain the Run flow. Step 4 is the Review tab, always reachable, not a wizard dead-end.
+Run is **one screen** (filters + mode, then progress on the same tab). It is not the old 1–4 wizard. Review is a sibling tab, always reachable. Screen-level detail is in the UI spec.
 
 ### Dashboard
 
@@ -269,4 +271,4 @@ Manual: bulk a post with mixed 100% / 80% / unmatched headings, generation off �
 6. Generation adapter on skip-band for Process articles.  
 7. Cron + publish call the processor.
 
-Each step is shippable. After (2), a manual run already auto-inserts strong matches. After (3–4), operators have one run page and one policy page.
+Ship as **3.3.0** once engine + UI spec are both implemented. Do not cut patch versions 3.2.32–37 for this work.

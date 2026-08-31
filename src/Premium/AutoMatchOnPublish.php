@@ -1,8 +1,9 @@
 <?php
 /**
- * Premium: Auto-generate featured image when a post is first published.
+ * Premium: Process the article when a post is first published.
  *
- * Tries FIAA slug matching first, then queues AI generation when enabled.
+ * Enqueues ArticleProcessor (one Action Scheduler job). Library insert/review
+ * always runs; skip-band generation happens only if the adapter is available.
  *
  * @package SmartImageMatcher\Premium
  * @since   3.0.0
@@ -16,10 +17,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-use SmartImageMatcher\AI\PromptBuilder;
-use SmartImageMatcher\AI\ProviderBridge;
-use SmartImageMatcher\FeaturedImages\FeaturedImageService;
-use SmartImageMatcher\FeaturedImages\SlugMapBuilder;
 use SmartImageMatcher\Logging\Logger;
 use SmartImageMatcher\Queue\Queue;
 use SmartImageMatcher\Settings\Settings;
@@ -42,19 +39,15 @@ class AutoMatchOnPublish {
 			return;
 		}
 
-		if ( ! Settings::get( 'ai_image_generation_enabled' ) ) {
-			return;
-		}
-
 		add_action( 'transition_post_status', array( $this, 'onTransitionPostStatus' ), 20, 3 );
 	}
 
 	/**
-	 * Queue featured-image generation when a post is first published.
+	 * Queue article processing when a post is first published.
 	 *
 	 * @since 3.2.0
-	 * @param string  $new_status New post status.
-	 * @param string  $old_status Old post status.
+	 * @param string   $new_status New post status.
+	 * @param string   $old_status Old post status.
 	 * @param \WP_Post $post       Post object.
 	 * @return void
 	 */
@@ -63,86 +56,30 @@ class AutoMatchOnPublish {
 			return;
 		}
 
-		if ( ! post_type_supports( $post->post_type, 'thumbnail' ) ) {
-			return;
-		}
-
 		if ( get_current_user_id() > 0 && ! current_user_can( 'edit_post', $post->ID ) ) {
 			return;
 		}
 
-		if ( has_post_thumbnail( $post->ID ) ) {
-			return;
-		}
-
-		if ( ! ProviderBridge::isImageGenerationAvailable() ) {
-			return;
-		}
-
-		$fiaa = new FeaturedImageService( new SlugMapBuilder() );
-		$slug_result = $fiaa->assignBestForPost( $post->ID, false );
-		if ( ! empty( $slug_result['assigned'] ) ) {
-			Logger::info(
-				'AutoMatchOnPublish: FIAA slug match assigned featured image',
+		if ( ! Queue::isAvailable() ) {
+			Logger::warn(
+				'AutoMatchOnPublish: Action Scheduler unavailable',
 				array( 'post_id' => $post->ID )
 			);
 			return;
 		}
 
-		$style = (string) Settings::get( 'ai_image_style' );
-		if ( 'illustration' !== $style ) {
-			$style = 'photo';
-		}
-
-		$focus   = PromptBuilder::getFocusKeyword( $post->ID );
-		$excerpt = PromptBuilder::buildPostContext( $post );
-
-		if ( AiImageGenerator::isInFlight( $post->ID, 'featured' ) ) {
-			Logger::info(
-				'AutoMatchOnPublish: featured AI gen already in flight',
-				array( 'post_id' => $post->ID )
-			);
-			return;
-		}
-
-		AiImageGenerator::setStatus(
-			$post->ID,
-			'featured',
-			array(
-				'status' => 'queued',
-			)
-		);
-
-		$job_id = ( new Queue() )->enqueueAiImageGen(
-			array(
-				'heading_hash'  => 'featured',
-				'heading_text'  => $post->post_title,
-				'section_text'  => $excerpt,
-				'post_id'       => $post->ID,
-				'focus_keyword' => $focus,
-				'style'         => $style,
-				'force'         => false,
-			)
-		);
+		$job_id = ( new Queue() )->enqueueProcessArticle( (int) $post->ID );
 
 		if ( null === $job_id ) {
-			AiImageGenerator::setStatus(
-				$post->ID,
-				'featured',
-				array(
-					'status' => 'failed',
-					'error'  => __( 'Could not enqueue image generation.', 'smart-image-matcher' ),
-				)
-			);
 			Logger::warn(
-				'AutoMatchOnPublish: failed to enqueue featured image generation',
+				'AutoMatchOnPublish: failed to enqueue article processing',
 				array( 'post_id' => $post->ID )
 			);
 			return;
 		}
 
 		Logger::info(
-			'AutoMatchOnPublish: queued featured image generation',
+			'AutoMatchOnPublish: queued article processing',
 			array(
 				'post_id' => $post->ID,
 				'job_id'  => $job_id,
