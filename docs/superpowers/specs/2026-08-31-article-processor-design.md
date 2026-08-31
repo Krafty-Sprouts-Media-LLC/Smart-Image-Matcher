@@ -45,7 +45,7 @@ Operators must start a bulk job, then approve, then insert — even at 100% keyw
 | Review UI | Tab on Bulk Processor; group by post; nested headings; only the review band |
 | Modal | Unchanged (`saveMatchGroups` still stores editor candidates) |
 | Upload FIAA | Settings only (policy). No Match Runner page. |
-| Admin menus | Dashboard, Bulk Processor, Settings. Old Featured Images / Review Queue URLs redirect. |
+| Admin menus | Dashboard, Bulk Processor, Settings. Featured Images and Review Queue submenus are removed. No redirects. |
 
 ---
 
@@ -108,7 +108,7 @@ Bulk Processor    ← Run | Review
 Settings          ← all policy, including former FIAA/cron
 ```
 
-Remove as visible menus: **Featured Images**, **Review Queue**. Keep their slugs as hidden redirects so bookmarks do not 404.
+Remove as visible menus: **Featured Images**, **Review Queue**. Unregister those `add_submenu_page` calls. Do not add hidden pages, 302s, or slug aliases. This is wp-admin, not a public site.
 
 ### Settings (automation + policy)
 
@@ -150,11 +150,11 @@ Coverage %, pending review count, last scheduled/manual run. Primary CTA: Bulk P
 
 ### Featured Images page
 
-Unregister the submenu. Redirect `page=smart-image-matcher-featured-images` (and the legacy generate-images slug) to Bulk Processor Run, with `mode=generate-featured` when the old generate URL is used. Match Runner is not preserved as a second automation.
+Unregister the submenu. Delete or stop loading `admin/views/featured-images.php` from the menu. Match Runner is Bulk Processor → Run. Generate-missing-featured is a Run mode on that same page.
 
 ### Review Queue page
 
-Unregister the submenu. Redirect `page=smart-image-matcher-review-queue` to Bulk Processor Review.
+Unregister the submenu. Delete or stop loading `admin/views/review-queue.php` from the menu. Review is the Bulk Processor Review tab.
 
 ---
 
@@ -253,7 +253,7 @@ Wire the adapter in `Plugin::registerPremiumServices()` only when generation is 
 2. `ArticleProcessorTest` with fakes: high-score heading inserts and does not enqueue generate; mid-score writes pending only; skip-band with adapter enqueues one job; skip-band without adapter enqueues nothing; heading that already has an image is skipped.
 3. Review grouping: two headings on one post → one article with two nested rows on the Bulk Review tab.
 4. `saveMatchGroups` modal path still writes all candidates pending (no regression).
-5. Old Featured Images and Review Queue admin URLs redirect.
+5. Featured Images and Review Queue submenus are gone; Dashboard CTAs point at Bulk Processor.
 
 Manual: bulk a post with mixed 100% / 80% / unmatched headings, generation off → inserts / review / skip. Repeat with generation on → unmatched enqueues generate, not skip. Cron leftover appears on Review without starting a new run.
 
@@ -263,8 +263,8 @@ Manual: bulk a post with mixed 100% / 80% / unmatched headings, generation off �
 
 1. `MatchDecision` + unit tests + `auto_insert_threshold` setting.  
 2. `ArticleProcessor` (library insert + review + skip) + tests; point manual bulk Run at it.  
-3. Bulk Processor Review tab (grouped by article, actions, thumbnails); remove Review Queue submenu; redirect old slug.  
-4. Move FIAA/cron/publish copy into Settings; Dashboard CTAs; unregister Featured Images submenu; redirect old slugs; Match Runner is Bulk Run.  
+3. Bulk Processor Review tab (grouped by article, actions, thumbnails); remove Review Queue submenu.  
+4. Move FIAA/cron/publish copy into Settings; Dashboard CTAs to Bulk Processor; unregister Featured Images submenu; Match Runner is Bulk Run.  
 5. Generate-missing-featured as a Bulk Run mode (hard confirm).  
 6. Generation adapter on skip-band for Process articles.  
 7. Cron + publish call the processor.
