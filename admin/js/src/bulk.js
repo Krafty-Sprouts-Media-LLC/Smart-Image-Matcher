@@ -26,6 +26,8 @@
 		undo: 'Undo',
 		approved: 'Approved',
 		rejected: 'Rejected',
+		neverUse: 'Never use',
+		confirmNeverUse: 'Block %s from all future matching (featured and in-article)? Open review slots that use this file will be rejected.',
 		insertApproved: 'Insert approved',
 		cancel: 'Cancel run',
 		noMatches: 'Nothing to review.',
@@ -736,19 +738,27 @@
 		loadReview();
 	}
 
+	function imageFileLabel( heading ) {
+		return String( heading && heading.image_file ? heading.image_file : '' ).trim();
+	}
+
 	function slotRowHtml( heading, extraClass ) {
 		const score = parseInt( heading.confidence_score || 0, 10 );
 		const cls = extraClass ? ' ' + extraClass : '';
+		const file = imageFileLabel( heading );
+		const thumbTitle = file || ( i18n.viewImage || 'View image' );
 		const thumb = heading.image_url
-			? `<button type="button" class="sim-slot-thumb sim-slot-open" data-match="${ heading.id }" title="${ escHtml( i18n.viewImage || 'View image' ) }"><img src="${ escHtml( heading.image_url ) }" alt="" width="72" height="54" /></button>`
+			? `<button type="button" class="sim-slot-thumb sim-slot-open" data-match="${ heading.id }" title="${ escHtml( thumbTitle ) }"><img src="${ escHtml( heading.image_url ) }" alt="" width="72" height="54" /></button>`
 			: '<span class="sim-no-thumb">—</span>';
+		const fileHtml = file
+			? `<span class="sim-slot-file" title="${ escHtml( file ) }">${ escHtml( file ) }</span>`
+			: '';
 		return `<div class="sim-slot-row${ cls }" data-match-id="${ heading.id }">
 			${ thumb }
-			<div class="sim-slot-text">${ escHtml( slotLabel( heading ) ) }</div>
+			<div class="sim-slot-text"><span class="sim-slot-heading">${ escHtml( slotLabel( heading ) ) }</span>${ fileHtml }</div>
 			<div class="${ scoreClass( score ) }">${ score }%</div>
 			<div class="sim-slot-actions">
-				<button type="button" class="button button-small sim-approve-btn" data-match="${ heading.id }">${ escHtml( i18n.approve ) }</button>
-				<button type="button" class="button button-small sim-reject-btn" data-match="${ heading.id }">${ escHtml( i18n.reject ) }</button>
+				${ slotActionsHtml( heading.id, 'pending' ) }
 			</div>
 		</div>`;
 	}
@@ -756,14 +766,17 @@
 	function slotActionsHtml( matchId, status ) {
 		if ( status === 'approved' ) {
 			return `<span class="sim-slot-state sim-slot-state-approved">${ escHtml( i18n.approved || 'Approved' ) }</span>
-				<button type="button" class="button button-small sim-undo-btn" data-match="${ matchId }">${ escHtml( i18n.undo || 'Undo' ) }</button>`;
+				<button type="button" class="button button-small sim-undo-btn" data-match="${ matchId }">${ escHtml( i18n.undo || 'Undo' ) }</button>
+				<button type="button" class="button-link sim-never-btn" data-match="${ matchId }">${ escHtml( i18n.neverUse || 'Never use' ) }</button>`;
 		}
 		if ( status === 'rejected' ) {
 			return `<span class="sim-slot-state sim-slot-state-rejected">${ escHtml( i18n.rejected || 'Rejected' ) }</span>
-				<button type="button" class="button button-small sim-undo-btn" data-match="${ matchId }">${ escHtml( i18n.undo || 'Undo' ) }</button>`;
+				<button type="button" class="button button-small sim-undo-btn" data-match="${ matchId }">${ escHtml( i18n.undo || 'Undo' ) }</button>
+				<button type="button" class="button-link sim-never-btn" data-match="${ matchId }">${ escHtml( i18n.neverUse || 'Never use' ) }</button>`;
 		}
 		return `<button type="button" class="button button-small sim-approve-btn" data-match="${ matchId }">${ escHtml( i18n.approve ) }</button>
-			<button type="button" class="button button-small sim-reject-btn" data-match="${ matchId }">${ escHtml( i18n.reject ) }</button>`;
+			<button type="button" class="button button-small sim-reject-btn" data-match="${ matchId }">${ escHtml( i18n.reject ) }</button>
+			<button type="button" class="button-link sim-never-btn" data-match="${ matchId }">${ escHtml( i18n.neverUse || 'Never use' ) }</button>`;
 	}
 
 	function applySlotState( row, status ) {
@@ -789,6 +802,9 @@
 		} );
 		qAll( '.sim-undo-btn', root ).forEach( ( btn ) => {
 			btn.addEventListener( 'click', () => updateMatch( parseInt( btn.dataset.match, 10 ), 'pending' ) );
+		} );
+		qAll( '.sim-never-btn', root ).forEach( ( btn ) => {
+			btn.addEventListener( 'click', () => excludeImage( parseInt( btn.dataset.match, 10 ) ) );
 		} );
 	}
 
@@ -883,7 +899,7 @@
 		if ( ! modal || modal.hidden || ! heading || parseInt( heading.id, 10 ) !== matchId ) {
 			return;
 		}
-		[ '#sim-review-modal-approve', '#sim-review-modal-reject', '#sim-review-modal-undo' ].forEach( ( sel ) => {
+		[ '#sim-review-modal-approve', '#sim-review-modal-reject', '#sim-review-modal-undo', '#sim-review-modal-never' ].forEach( ( sel ) => {
 			const btn = q( sel );
 			if ( btn ) btn.disabled = busy;
 		} );
@@ -909,6 +925,31 @@
 			window.alert( err.message || 'Could not update match.' );
 		} finally {
 			updatingMatches.delete( matchId );
+		}
+	}
+
+	async function excludeImage( matchId ) {
+		if ( ! apiFetch || ! matchId ) return;
+		const found = findReviewSlot( matchId );
+		const heading = found ? ( found.article.headings || [] )[ found.index ] : null;
+		const file = imageFileLabel( heading );
+		const label = file || ( i18n.neverUse || 'this image' );
+		const template = i18n.confirmNeverUse || 'Block %s from all future matching (featured and in-article)? Open review slots that use this file will be rejected.';
+		if ( ! window.confirm( sprintf( template, label ) ) ) {
+			return;
+		}
+		setReviewDecisionBusy( matchId, true );
+		try {
+			await apiFetch( {
+				path: '/smart-image-matcher/v1/review/exclude-image',
+				method: 'POST',
+				data: { match_id: matchId },
+			} );
+			closeReviewModal();
+			loadReview();
+		} catch ( err ) {
+			setReviewDecisionBusy( matchId, false );
+			window.alert( err.message || 'Could not exclude image.' );
 		}
 	}
 
@@ -990,7 +1031,8 @@
 		if ( title ) title.textContent = slotLabel( heading );
 		if ( meta ) {
 			const postTitle = article ? ( article.post_title || ( '#' + article.post_id ) ) : '';
-			meta.textContent = postTitle + ' · ' + ( reviewModalIndex + 1 ) + ' of ' + total + ' · ' + parseInt( heading.confidence_score || 0, 10 ) + '%';
+			const file = imageFileLabel( heading );
+			meta.textContent = [ postTitle, file, ( reviewModalIndex + 1 ) + ' of ' + total, parseInt( heading.confidence_score || 0, 10 ) + '%' ].filter( Boolean ).join( ' · ' );
 		}
 		if ( img ) {
 			img.hidden = ! src;
@@ -1367,6 +1409,11 @@
 			const heading = currentReviewHeading();
 			if ( ! heading ) return;
 			await updateMatch( parseInt( heading.id, 10 ), 'pending' );
+		} );
+		q( '#sim-review-modal-never' )?.addEventListener( 'click', async () => {
+			const heading = currentReviewHeading();
+			if ( ! heading ) return;
+			await excludeImage( parseInt( heading.id, 10 ) );
 		} );
 		document.addEventListener( 'keydown', ( event ) => {
 			const modal = q( '#sim-review-modal' );

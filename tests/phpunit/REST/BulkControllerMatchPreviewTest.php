@@ -29,6 +29,8 @@ class BulkControllerMatchPreviewTest extends TestCase {
 		parent::setUp();
 		$GLOBALS['sim_test_attachment_image_url'] = null;
 		$GLOBALS['sim_test_attachment_url']       = null;
+		$GLOBALS['sim_test_attached_file']        = null;
+		$GLOBALS['sim_test_get_post']             = null;
 	}
 
 	/**
@@ -105,6 +107,33 @@ class BulkControllerMatchPreviewTest extends TestCase {
 
 		$this->assertSame( '', $rows[0]['image_url'] );
 		$this->assertSame( '', $rows[0]['image_full'] );
+		$this->assertSame( '', $rows[0]['image_file'] );
+	}
+
+	/**
+	 * Review rows expose the attached filename (or URL basename) for the UI.
+	 *
+	 * @return void
+	 */
+	public function test_attach_image_urls_sets_image_file_label(): void {
+		$GLOBALS['sim_test_attachment_image_url'] = static function ( $id, $size ) {
+			unset( $size );
+			return 'https://example.com/wp-content/uploads/preview-' . (int) $id . '.jpg';
+		};
+		$GLOBALS['sim_test_attached_file']        = static function ( $id ) {
+			return '/var/www/uploads/norwegian-forest-cat-' . (int) $id . '.jpg';
+		};
+
+		$rows = BulkController::attachImageUrls(
+			array(
+				array(
+					'id'       => 5,
+					'image_id' => 12,
+				),
+			)
+		);
+
+		$this->assertSame( 'norwegian-forest-cat-12.jpg', $rows[0]['image_file'] );
 	}
 
 	/**

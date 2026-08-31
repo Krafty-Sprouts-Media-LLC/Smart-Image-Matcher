@@ -24,6 +24,7 @@ class MatcherTest extends TestCase {
 
 	protected function setUp(): void {
 		$this->matcher = new Matcher();
+		unset( $GLOBALS['sim_test_options']['smart_image_matcher_settings'] );
 	}
 
 	/**
@@ -95,5 +96,18 @@ class MatcherTest extends TestCase {
 	public function empty_keywords_returns_zero(): void {
 		$score = $this->matcher->calculateScore( array(), $this->image( 'photo.jpg' ) );
 		$this->assertEquals( 0, $score );
+	}
+
+	/** @test */
+	public function excluded_filename_scores_zero(): void {
+		$GLOBALS['sim_test_options']['smart_image_matcher_settings'] = array(
+			'fiaa_excluded_image_slugs' => 'types-of-sparrows',
+		);
+
+		$score = $this->matcher->calculateScore(
+			array( 'types', 'of', 'sparrows' ),
+			$this->image( 'Types-of-Sparrows.jpg' )
+		);
+		$this->assertSame( 0, $score );
 	}
 }

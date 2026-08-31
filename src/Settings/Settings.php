@@ -749,7 +749,7 @@ class Settings {
 			esc_attr( $key ),
 			esc_textarea( $value )
 		);
-		echo '<p class="description">' . esc_html__( 'One filename or slug per line (commas also accepted). Example: fly-fishing or fly-fishing.jpg. These images are never used for featured-image auto-assign. Existing assignments that use them are flagged by Fix Incorrect Featured Images.', 'smart-image-matcher' ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'One filename, slug, or image URL per line (commas also accepted). Example: Types-of-Sparrows.jpg or a full uploads URL. Matching is case-insensitive. Blocked images are not used for featured-image auto-assign or in-article heading matches. Existing featured assignments that use them are flagged by Fix Incorrect Featured Images.', 'smart-image-matcher' ) . '</p>';
 	}
 
 	/**

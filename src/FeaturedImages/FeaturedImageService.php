@@ -20,6 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+use SmartImageMatcher\Settings\Sanitizer;
 use SmartImageMatcher\Settings\Settings;
 use SmartImageMatcher\Domain\PostStatuses;
 
@@ -339,7 +340,11 @@ class FeaturedImageService {
 			return false;
 		}
 
-		return in_array( $normalized, $this->getExcludedImageSlugs(), true );
+		if ( null !== $this->excludedImageSlugsCache ) {
+			return in_array( $normalized, $this->excludedImageSlugsCache, true );
+		}
+
+		return ( new Sanitizer() )->isExcludedImageSlug( $imageSlug );
 	}
 
 	/**
@@ -801,10 +806,7 @@ class FeaturedImageService {
 	 * @return string
 	 */
 	private function normalizeSlug( string $slug ): string {
-		$slug = strtolower( $slug );
-		$slug = (string) preg_replace( '/\.[a-z0-9]{2,5}$/', '', $slug );
-		$slug = (string) preg_replace( '/[^a-z0-9]+/', '-', $slug );
-		return trim( $slug, '-' );
+		return ( new Sanitizer() )->normalizeImageSlug( $slug );
 	}
 
 	/**

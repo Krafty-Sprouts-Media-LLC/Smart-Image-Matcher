@@ -7,6 +7,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.3.2] - 31/08/2026
+
+### Added
+
+- Review rows show the image filename (or attachment slug) after the heading. The same name appears in the image modal.
+- Excluded Image Filenames accept a full media URL (the filename is used). The same blocklist now applies to in-article heading matches, not only featured-image auto-assign. Matching is case-insensitive.
+- Review: Never use on a slot adds that file to Excluded Image Filenames and rejects other open review slots that use it.
+
 ## [3.3.1] - 31/08/2026
 
 ### Added

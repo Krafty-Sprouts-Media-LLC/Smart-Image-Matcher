@@ -187,6 +187,7 @@ $smart_image_matcher_post_type = isset( $_GET['sim_post_type'] ) ? sanitize_key(
 				<button type="button" class="button" id="sim-review-modal-next"><?php esc_html_e( 'Next', 'smart-image-matcher' ); ?></button>
 				<span id="sim-review-modal-status" class="sim-slot-state" hidden></span>
 				<button type="button" class="button" id="sim-review-modal-undo" hidden><?php esc_html_e( 'Undo', 'smart-image-matcher' ); ?></button>
+				<button type="button" class="button" id="sim-review-modal-never"><?php esc_html_e( 'Never use', 'smart-image-matcher' ); ?></button>
 				<button type="button" class="button" id="sim-review-modal-reject"><?php esc_html_e( 'Reject', 'smart-image-matcher' ); ?></button>
 				<button type="button" class="button button-primary" id="sim-review-modal-approve"><?php esc_html_e( 'Approve', 'smart-image-matcher' ); ?></button>
 			</div>

@@ -4,7 +4,7 @@ Tags: images, media library, alt text, featured image, automation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 3.3.1
+Stable tag: 3.3.2
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -95,6 +95,10 @@ No AI data is sent automatically — only when you explicitly trigger AI matchin
 The plugin stores match results and job metadata in your own database only. Update checks may contact GitHub (see External services). No post content leaves your server unless you explicitly use AI features with a configured provider.
 
 == Changelog ==
+
+= 3.3.2 =
+* Review rows show the matched image filename next to the heading.
+* Excluded Image Filenames accept a full uploads URL and also block in-article heading matches (case-insensitive). Review has Never use so you can block a file without opening Settings.
 
 = 3.3.1 =
 * Review lists at most 10 headings per article (Show more to expand). Click a thumbnail to open a larger image modal. Approve all on an article, or Approve all pending in the toolbar. Approve/Reject show a status on the row; Reject (and Approve) can be undone before Insert.

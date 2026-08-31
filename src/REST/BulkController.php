@@ -25,6 +25,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 use SmartImageMatcher\FeaturedImages\FeaturedImageService;
 use SmartImageMatcher\Logging\Logger;
 use SmartImageMatcher\Queue\Queue;
+use SmartImageMatcher\Settings\Sanitizer;
 use SmartImageMatcher\Settings\Settings;
 
 /**
@@ -165,6 +166,15 @@ class BulkController extends Controller {
 			'permission_callback' => array( $this, 'checkAdminPermission' ),
 			'args'                => array(
 				'run' => array( 'type' => 'string', 'enum' => array( 'all', 'last' ), 'default' => 'all', 'sanitize_callback' => 'sanitize_key' ),
+			),
+		) );
+
+		register_rest_route( self::NAMESPACE, '/review/exclude-image', array(
+			'methods'             => \WP_REST_Server::CREATABLE,
+			'callback'            => array( $this, 'excludeReviewImage' ),
+			'permission_callback' => array( $this, 'checkAdminPermission' ),
+			'args'                => array(
+				'match_id' => array( 'type' => 'integer', 'required' => true, 'sanitize_callback' => 'absint' ),
 			),
 		) );
 	}
@@ -542,9 +552,59 @@ class BulkController extends Controller {
 
 			$rows[ $index ]['image_url']  = $url;
 			$rows[ $index ]['image_full'] = $full;
+			$rows[ $index ]['image_file'] = self::attachmentFileLabel( $image_id, $url );
 		}
 
 		return $rows;
+	}
+
+	/**
+	 * Filename or attachment slug for a match image.
+	 *
+	 * Prefers the attached file basename, then the attachment slug, then the URL path.
+	 *
+	 * @since 3.3.2
+	 * @param int    $image_id Attachment ID.
+	 * @param string $url      Preview URL already resolved for this row.
+	 * @return string
+	 */
+	private static function attachmentFileLabel( int $image_id, string $url ): string {
+		if ( $image_id > 0 && function_exists( 'get_attached_file' ) ) {
+			$file = get_attached_file( $image_id );
+			if ( is_string( $file ) && '' !== $file ) {
+				$base = function_exists( 'wp_basename' ) ? wp_basename( $file ) : basename( $file );
+				if ( is_string( $base ) && '' !== $base ) {
+					return $base;
+				}
+			}
+		}
+
+		if ( $image_id > 0 && function_exists( 'get_post' ) ) {
+			$attachment = get_post( $image_id );
+			if ( is_object( $attachment ) && ! empty( $attachment->post_name ) ) {
+				return (string) $attachment->post_name;
+			}
+		}
+
+		if ( '' === $url ) {
+			return '';
+		}
+
+		$path = '';
+		if ( function_exists( 'wp_parse_url' ) ) {
+			$parsed = wp_parse_url( $url, PHP_URL_PATH );
+			$path   = is_string( $parsed ) ? $parsed : '';
+		}
+		if ( '' === $path ) {
+			$path = (string) ( parse_url( $url, PHP_URL_PATH ) ?: $url );
+		}
+
+		$base = function_exists( 'wp_basename' ) ? wp_basename( $path ) : basename( $path );
+		if ( ! is_string( $base ) || '' === $base ) {
+			return '';
+		}
+
+		return rawurldecode( $base );
 	}
 
 	/**
@@ -778,6 +838,81 @@ class BulkController extends Controller {
 		return rest_ensure_response(
 			array(
 				'approved' => $this->approvePendingMatches( $run, 0, null ),
+			)
+		);
+	}
+
+	/**
+	 * Add a Review image to the excluded-filename list and reject open slots that use it.
+	 *
+	 * @since 3.3.2
+	 * @param \WP_REST_Request $request Request.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function excludeReviewImage( \WP_REST_Request $request ) {
+		$match_id = (int) $request->get_param( 'match_id' );
+
+		global $wpdb;
+
+		$table = $wpdb->prefix . 'smart_image_matcher_matches';
+		$row   = $wpdb->get_row( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->prepare(
+				"SELECT id, image_id FROM {$table} WHERE id = %d",
+				$match_id
+			),
+			ARRAY_A
+		);
+
+		if ( ! is_array( $row ) ) {
+			return new \WP_Error(
+				'smart_image_matcher_match_not_found',
+				__( 'Match not found.', 'smart-image-matcher' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		$image_id = (int) ( $row['image_id'] ?? 0 );
+		if ( $image_id <= 0 ) {
+			return new \WP_Error(
+				'smart_image_matcher_no_image',
+				__( 'This slot has no image to exclude.', 'smart-image-matcher' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$url  = function_exists( 'wp_get_attachment_url' ) ? (string) wp_get_attachment_url( $image_id ) : '';
+		$file = self::attachmentFileLabel( $image_id, $url );
+		if ( '' === $file ) {
+			$attachment = get_post( $image_id );
+			$file       = ( $attachment && ! empty( $attachment->post_name ) ) ? (string) $attachment->post_name : '';
+		}
+
+		if ( '' === $file ) {
+			return new \WP_Error(
+				'smart_image_matcher_no_filename',
+				__( 'Could not read this image filename.', 'smart-image-matcher' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$sanitizer = new Sanitizer();
+		$all       = Settings::all();
+		$all['fiaa_excluded_image_slugs'] = $sanitizer->addExcludedImageSlug( $file );
+		Settings::save( $all );
+
+		$rejected = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->prepare(
+				"UPDATE {$table} SET status = 'rejected' WHERE image_id = %d AND status IN ('pending','approved')",
+				$image_id
+			)
+		);
+
+		return rest_ensure_response(
+			array(
+				'image_id' => $image_id,
+				'file'     => $file,
+				'slug'     => $sanitizer->normalizeImageSlug( $file ),
+				'rejected' => is_int( $rejected ) ? $rejected : 0,
 			)
 		);
 	}

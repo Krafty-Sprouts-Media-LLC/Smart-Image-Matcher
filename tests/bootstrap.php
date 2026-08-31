@@ -143,7 +143,19 @@ if ( file_exists( $tests_dir . '/includes/functions.php' ) ) {
 		}
 		function get_the_title() { return ''; }
 		function wp_get_attachment_caption() { return ''; }
-		function get_attached_file() { return ''; }
+		function get_attached_file( $attachment_id = 0, $unfiltered = false ) {
+			unset( $unfiltered );
+			if ( isset( $GLOBALS['sim_test_attached_file'] ) && is_callable( $GLOBALS['sim_test_attached_file'] ) ) {
+				return $GLOBALS['sim_test_attached_file']( $attachment_id );
+			}
+			return '';
+		}
+		function wp_basename( $path, $suffix = '' ) {
+			return basename( (string) $path, (string) $suffix );
+		}
+		function wp_parse_url( $url, $component = -1 ) {
+			return parse_url( $url, $component );
+		}
 		function wp_update_post() { return 1; }
 		function get_post( $post = null, $output = 'OBJECT', $filter = 'raw' ) {
 			unset( $output, $filter );

@@ -122,8 +122,9 @@ class Sanitizer {
 	/**
 	 * Sanitize excluded image filenames/slugs into a newline-separated list.
 	 *
-	 * Accepts newlines, commas, or spaces. Strips extensions and normalizes
-	 * to attachment-style slugs (e.g. fly-fishing.jpg → fly-fishing).
+	 * Accepts newlines or commas. Full media URLs keep the filename.
+	 * Strips extensions and normalizes to attachment-style slugs
+	 * (e.g. Types-of-Sparrows.jpg → types-of-sparrows).
 	 *
 	 * @since 3.0.9
 	 * @param mixed $value Raw value.
@@ -154,6 +155,18 @@ class Sanitizer {
 	}
 
 	/**
+	 * Append one filename, slug, or URL to the excluded list.
+	 *
+	 * @since 3.3.2
+	 * @param string $raw New filename, slug, or URL.
+	 * @return string Normalized newline-separated list.
+	 */
+	public function addExcludedImageSlug( string $raw ): string {
+		$current = (string) Settings::get( 'fiaa_excluded_image_slugs' );
+		return $this->excludedImageSlugs( $current . "\n" . $raw );
+	}
+
+	/**
 	 * Normalize a filename or slug the same way FIAA compares attachment slugs.
 	 *
 	 * @since 3.0.9
@@ -161,10 +174,73 @@ class Sanitizer {
 	 * @return string
 	 */
 	public function normalizeImageSlug( string $slug ): string {
-		$slug = strtolower( trim( $slug ) );
+		$slug = trim( $slug );
+		if ( '' === $slug ) {
+			return '';
+		}
+
+		if ( preg_match( '#^https?://#i', $slug ) ) {
+			$path = function_exists( 'wp_parse_url' ) ? wp_parse_url( $slug, PHP_URL_PATH ) : parse_url( $slug, PHP_URL_PATH );
+			$slug = is_string( $path ) && '' !== $path ? $path : $slug;
+		}
+
+		if ( false !== strpos( $slug, '/' ) || false !== strpos( $slug, '\\' ) ) {
+			$slug = str_replace( '\\', '/', $slug );
+			$slug = function_exists( 'wp_basename' ) ? wp_basename( $slug ) : basename( $slug );
+		}
+
+		$slug = strtolower( $slug );
 		$slug = (string) preg_replace( '/\.[a-z0-9]{2,5}$/', '', $slug );
+		$slug = (string) preg_replace( '/-(?:scaled|\d+x\d+)$/', '', $slug );
 		$slug = (string) preg_replace( '/[^a-z0-9]+/', '-', $slug );
 		return trim( $slug, '-' );
+	}
+
+	/**
+	 * Whether a filename, slug, or URL is on the excluded-image list.
+	 *
+	 * @since 3.3.2
+	 * @param string $imageSlug Filename, attachment slug, or URL.
+	 * @return bool
+	 */
+	public function isExcludedImageSlug( string $imageSlug ): bool {
+		$normalized = $this->normalizeImageSlug( $imageSlug );
+		if ( '' === $normalized ) {
+			return false;
+		}
+
+		foreach ( $this->excludedImageSlugList() as $slug ) {
+			if ( $slug === $normalized ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Normalized excluded slugs from settings.
+	 *
+	 * @since 3.3.2
+	 * @return string[]
+	 */
+	public function excludedImageSlugList(): array {
+		$raw   = (string) Settings::get( 'fiaa_excluded_image_slugs' );
+		$parts = preg_split( '/\R+/', $raw );
+		if ( ! is_array( $parts ) ) {
+			return array();
+		}
+
+		$slugs = array();
+		foreach ( $parts as $part ) {
+			$slug = $this->normalizeImageSlug( (string) $part );
+			if ( '' === $slug ) {
+				continue;
+			}
+			$slugs[ $slug ] = $slug;
+		}
+
+		return array_values( $slugs );
 	}
 
 	/**
