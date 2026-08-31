@@ -20,17 +20,17 @@ Operators must start a bulk job, then approve, then insert — even at 100% keyw
 1. One processor per article: featured (if missing) then headings that still need an image.
 2. For each need, exactly one outcome: **match existing**, **review**, **generate** (if enabled), or **skip**.
 3. Generate only when the library would skip. A strong library hit never spends generation credits.
-4. Review Queue lists **articles**, with pending headings nested. Approve / reject / insert live there.
-5. Bulk, cron, and publish are triggers. They do not own separate match/insert pipelines.
+4. The SIM admin is three items: **Dashboard**, **Bulk Processor** (Run + Review), **Settings**. Featured Images and Review Queue are not top-level menus.
+5. Automation (cron, publish, upload-on-assign) is Settings. Bulk Processor is the only manual run.
 6. Modal stays interactive. Upload-time FIAA stays image-centric (new attachment → maybe featured on a matching post).
 
 ## Non-goals (this change)
 
-- Merging Featured Images and Bulk Processor into one admin screen.
 - Auto-generating on publish when on-demand generation is off.
 - Changing modal Generate / Generate All.
 - SIM talking to fal HTTP directly (still `ProviderBridge` / `wp_ai_client_prompt()`).
 - Auto-inserting historical `pending` rows on deploy.
+- Keeping a Featured Images “Match Runner” or a separate Review Queue submenu.
 
 ---
 
@@ -42,10 +42,10 @@ Operators must start a bulk job, then approve, then insert — even at 100% keyw
 | Engine | `Domain\ArticleProcessor::process( $post_id )` |
 | Library path | Score → insert / review / skip |
 | Generation | Only if the library outcome would be skip **and** generation is enabled **and** a generator adapter is registered and ready |
-| Review UI | Group by post; nested headings; only the review band |
+| Review UI | Tab on Bulk Processor; group by post; nested headings; only the review band |
 | Modal | Unchanged (`saveMatchGroups` still stores editor candidates) |
-| Upload FIAA | Unchanged |
-| Admin menus | Keep both entry points; both call the processor where they currently run matching |
+| Upload FIAA | Settings only (policy). No Match Runner page. |
+| Admin menus | Dashboard, Bulk Processor, Settings. Old Featured Images / Review Queue URLs redirect. |
 
 ---
 
@@ -98,17 +98,78 @@ Do not use `MatchRepository::saveMatchGroups()` here. That method is for the mod
 
 ---
 
+## Admin information architecture
+
+SIM submenu after this change:
+
+```
+Dashboard
+Bulk Processor    ← Run | Review
+Settings          ← all policy, including former FIAA/cron
+```
+
+Remove as visible menus: **Featured Images**, **Review Queue**. Keep their slugs as hidden redirects so bookmarks do not 404.
+
+### Settings (automation + policy)
+
+Everything that is a standing rule lives here, not on an ops page:
+
+- Matching: review floor (`confidence_threshold`), auto-insert % (new), hierarchy, spacing.
+- Upload FIAA: auto-assign on upload, upload post types, excluded filenames.
+- Scheduled article processing: enabled, interval, post types/statuses (today’s `fiaa_cron_*` keys; copy says article processor, not featured-only).
+- On first publish: existing `ai_image_auto_featured_on_publish` key; copy says process the article.
+- Generation: existing on-demand + vision toggles.
+
+No “run now” button on Settings.
+
+### Bulk Processor (manual run + review)
+
+This is the only hands-on operations page. Two tabs (or equivalent persistent nav on the same page):
+
+**Run**
+
+- Select posts (reuse today’s Bulk step 1 filters).
+- Mode: **Process articles** (default — `ArticleProcessor`) or **Generate missing featured images** (existing featured-gen path, hard confirm, cost estimate — this is the former Featured Images generate UI, not a setting).
+- Enqueue one AS job per post. Progress on this tab.
+- When Process articles finishes, show inserted / review / generated / skipped. If `review > 0`, switch to or deep-link the Review tab filtered to that job.
+
+**Review**
+
+- All pending exceptions, including cron/publish leftovers (not only the last manual job). Optional job filter.
+- Grouped by article; nested heading or featured slot; thumbnail; score; approve / reject; insert approved.
+- Filter: in-content headings | featured slots (unsafe/held featured audit lives here as the featured filter, not a separate page).
+- Menu badge on Bulk Processor when pending count > 0.
+
+Bulk Processor exists **because automation is hands-off**. Cron and publish do not require opening this page. Operators open it to run a selection now, or to clear the review band.
+
+Steps 1–3 of today’s wizard remain the Run flow. Step 4 is the Review tab, always reachable, not a wizard dead-end.
+
+### Dashboard
+
+Coverage %, pending review count, last scheduled/manual run. Primary CTA: Bulk Processor (Run). Pending count links to Bulk Processor Review. Remove the “Match Runner” button that currently points at Featured Images.
+
+### Featured Images page
+
+Unregister the submenu. Redirect `page=smart-image-matcher-featured-images` (and the legacy generate-images slug) to Bulk Processor Run, with `mode=generate-featured` when the old generate URL is used. Match Runner is not preserved as a second automation.
+
+### Review Queue page
+
+Unregister the submenu. Redirect `page=smart-image-matcher-review-queue` to Bulk Processor Review.
+
+---
+
 ## Triggers (adapters)
 
-| Trigger | Today | After |
+| Trigger | Where the operator touches it | After |
 |---|---|---|
-| Bulk Processor | `JobRunner::runBulkMatchJob` saves all matches pending | Calls `ArticleProcessor`. Step 4 / Review Queue only shows leftover review rows. “Insert approved” remains for human-approved rows. |
-| FIAA cron | Featured-only assignment | Same schedule and post filters; each selected post is `ArticleProcessor` (featured + headings). |
-| Publish | `AutoMatchOnPublish`: FIAA then featured generate | Same setting key `ai_image_auto_featured_on_publish` (default off). Meaning becomes: on first publish, run `ArticleProcessor`. Help text: process the article (library match; generate skip-band only if generation is on). |
-| Upload | Attachment → featured on matching post | Unchanged |
-| Modal | Interactive match + insert | Unchanged |
+| Manual run | Bulk Processor → Run | `ArticleProcessor` per selected post |
+| Generate missing featured | Bulk Processor → Run, mode generate-featured | Existing featured-gen enqueue (hard confirm) |
+| Cron | Settings only | Each selected post is `ArticleProcessor` |
+| Publish | Settings only | First publish → `ArticleProcessor` (`ai_image_auto_featured_on_publish`) |
+| Upload | Settings only | Attachment → featured on matching post (unchanged) |
+| Modal | Post editor | Unchanged |
 
-All three triggers enqueue `Queue::HOOK_PROCESS_ARTICLE` → `JobRunner::runArticleProcessJob( $post_id, $job_id )`. Bulk passes the parent `$job_id` for progress/cancel. Cron and publish pass an empty `$job_id`. `runBulkMatchJob` becomes a thin wrapper around this or is deleted once callers are switched.
+Manual, cron, and publish enqueue `Queue::HOOK_PROCESS_ARTICLE` → `JobRunner::runArticleProcessJob( $post_id, $job_id )`. Bulk passes the parent `$job_id` for progress/cancel. Cron and publish pass an empty `$job_id`. `runBulkMatchJob` becomes a thin wrapper around this or is deleted once callers are switched.
 
 ---
 
@@ -120,16 +181,15 @@ Reuse `AiImageGenerator` + `JobRunner` persist path.
 - Vision fail (`ai_image_verify_vision`) → pending review row, do not auto-insert.
 - Enqueue failure, provider error, in-flight duplicate, rejection blocklist → skip, log. No pending row.
 
-Hard confirm for generation remains on modal Generate All and Featured Generate. Cron / publish / bulk that already run with generation enabled **are** the consent for skip-band generate. Do not add a second confirm dialog on those paths.
+Hard confirm for generation remains on modal Generate All and on Bulk Processor **Generate missing featured**. Cron / publish / Process-articles that already run with generation enabled **are** the consent for skip-band generate. Do not add a second confirm dialog on those paths.
 
 ---
 
-## Review Queue
+## Review data (Bulk Processor Review tab)
 
 - Query pending rows grouped by `post_id`. Paginate **articles** (e.g. 20 posts/page), not raw heading rows.
-- Each article: post title + nested heading / thumbnail / score / approve / reject.
+- Each article: post title + nested heading or featured slot / thumbnail / score / approve / reject.
 - Thumbnails use `image_url` from `wp_get_attachment_image_url()` (not `/wp-json/wp/v2/media/{id}`).
-- This page is the operator surface. It is not read-only. Bulk Processor step 4 uses the same grouping (same REST shape or a shared JS renderer).
 
 REST shape:
 
@@ -167,9 +227,10 @@ Existing `GET /jobs/{id}/matches` may keep a job filter; ungrouped `matches[]` i
 ## Settings copy (required)
 
 - New number field: **Auto-insert threshold (%)** — “Matches at or above this score are inserted without review.”
-- Existing confidence field description changes from “controls matches shown in the modal” to: modal floor **and** review floor for automation.
-- `ai_image_auto_featured_on_publish` label/help: process the article on first publish (not featured-generate-only).
-- Cron help: scheduled run processes each post through the same article rules (featured + headings).
+- Existing confidence field: modal floor **and** review floor for automation.
+- Scheduled section title/help: article processing (featured + headings), not “featured auto-assigner.”
+- `ai_image_auto_featured_on_publish` label/help: process the article on first publish.
+- Upload section stays upload-only. Do not describe it as a bulk runner.
 
 ---
 
@@ -179,8 +240,8 @@ Existing `GET /jobs/{id}/matches` may keep a job filter; ungrouped `matches[]` i
 |---|---|
 | `MatchDecision`, `ArticleProcessor`, keyword insert | Free (same as modal insert) |
 | Generator adapter | Premium / existing `ai_image_generation` |
-| Bulk Processor UI, cron, publish automation | Existing premium slugs (`bulk_processor`, `fiaa_scheduled_cron`, `auto_match_on_publish`) |
-| Review Queue UI | Existing `review_queue` |
+| Bulk Processor UI (Run + Review) | Existing `bulk_processor` (Review tab is not a separate menu; `review_queue` gate may alias the same UI) |
+| Cron, publish automation | Existing `fiaa_scheduled_cron`, `auto_match_on_publish` |
 
 Wire the adapter in `Plugin::registerPremiumServices()` only when generation is available. The free class must run without that class on disk.
 
@@ -190,19 +251,22 @@ Wire the adapter in `Plugin::registerPremiumServices()` only when generation is 
 
 1. `MatchDecisionTest`: 100 → insert; 80 with review 70 / auto 90 → review; 40 generation off → skip; 40 generation on → generate; 90 with auto 90 → insert (boundary).
 2. `ArticleProcessorTest` with fakes: high-score heading inserts and does not enqueue generate; mid-score writes pending only; skip-band with adapter enqueues one job; skip-band without adapter enqueues nothing; heading that already has an image is skipped.
-3. Review grouping: two headings on one post → one article with two nested rows.
+3. Review grouping: two headings on one post → one article with two nested rows on the Bulk Review tab.
 4. `saveMatchGroups` modal path still writes all candidates pending (no regression).
+5. Old Featured Images and Review Queue admin URLs redirect.
 
-Manual: bulk a post with mixed 100% / 80% / unmatched headings, generation off → inserts / review / skip. Repeat with generation on → unmatched enqueues generate, not skip.
+Manual: bulk a post with mixed 100% / 80% / unmatched headings, generation off → inserts / review / skip. Repeat with generation on → unmatched enqueues generate, not skip. Cron leftover appears on Review without starting a new run.
 
 ---
 
 ## Build sequence
 
 1. `MatchDecision` + unit tests + `auto_insert_threshold` setting.  
-2. `ArticleProcessor` (library insert + review + skip) + tests; point `runBulkMatchJob` at it.  
-3. Review Queue grouped by article + actions + thumbnails.  
-4. Generation adapter on skip-band.  
-5. Cron + publish call the processor; update setting copy.
+2. `ArticleProcessor` (library insert + review + skip) + tests; point manual bulk Run at it.  
+3. Bulk Processor Review tab (grouped by article, actions, thumbnails); remove Review Queue submenu; redirect old slug.  
+4. Move FIAA/cron/publish copy into Settings; Dashboard CTAs; unregister Featured Images submenu; redirect old slugs; Match Runner is Bulk Run.  
+5. Generate-missing-featured as a Bulk Run mode (hard confirm).  
+6. Generation adapter on skip-band for Process articles.  
+7. Cron + publish call the processor.
 
-Each step is shippable. After (2), bulk already auto-inserts strong matches. After (3), the review page matches how operators think (articles, not a flat heading dump).
+Each step is shippable. After (2), a manual run already auto-inserts strong matches. After (3–4), operators have one run page and one policy page.
