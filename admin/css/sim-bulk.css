@@ -216,6 +216,72 @@
 	font-size: 14px;
 }
 
+.sim-article-head-actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.sim-slot-collapsed {
+	display: none;
+}
+
+.sim-article.is-expanded .sim-slot-collapsed {
+	display: grid;
+}
+
+.sim-slot-more-wrap {
+	margin: 0;
+	padding: 8px 14px 12px;
+}
+
+button.sim-slot-thumb {
+	padding: 0;
+	border: 0;
+	background: transparent;
+	cursor: pointer;
+	line-height: 0;
+}
+
+button.sim-slot-thumb:focus {
+	outline: 2px solid #2271b1;
+	outline-offset: 2px;
+}
+
+.sim-review-dialog {
+	max-width: 760px;
+	margin: 6vh auto;
+}
+
+.sim-review-modal-head {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.sim-review-modal-head h2 {
+	margin: 0;
+	font-size: 16px;
+}
+
+.sim-review-modal-figure {
+	background: #f6f7f7;
+	border-radius: 4px;
+	min-height: 180px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	margin: 12px 0;
+}
+
+.sim-review-modal-figure img {
+	max-width: 100%;
+	max-height: 62vh;
+	object-fit: contain;
+	display: block;
+}
+
 .sim-slot-row {
 	display: grid;
 	grid-template-columns: 72px minmax(0, 1fr) 64px auto;
@@ -226,7 +292,43 @@
 }
 
 .sim-slot-row.is-rejected {
-	opacity: 0.45;
+	background: #fcf0f1;
+	box-shadow: inset 4px 0 0 #d63638;
+}
+
+.sim-slot-row.is-approved {
+	background: #edfaef;
+	box-shadow: inset 4px 0 0 #00a32a;
+}
+
+.sim-slot-row.is-saving {
+	opacity: 0.65;
+}
+
+.sim-slot-actions {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 6px;
+	justify-content: flex-end;
+}
+
+.sim-slot-state {
+	font-weight: 600;
+	font-size: 12px;
+}
+
+.sim-slot-state-approved {
+	color: #00a32a;
+}
+
+.sim-slot-state-rejected {
+	color: #d63638;
+}
+
+#sim-review-modal-status {
+	margin-inline: 8px;
+	align-self: center;
 }
 
 .sim-slot-thumb img {

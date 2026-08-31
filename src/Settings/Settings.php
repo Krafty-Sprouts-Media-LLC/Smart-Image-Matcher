@@ -160,7 +160,7 @@ class Settings {
 	 * @return void
 	 */
 	public function registerMenus(): void {
-		$icon = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAyMCAyMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNMiAzQzIgMi40NDc3MiAyLjQ0NzcyIDIgMyAySDE3QzE3LjU1MjMgMiAxOCAyLjQ0NzcyIDE4IDNWMTNDMTggMTMuNTUyMyAxNy41NTIzIDE0IDE3IDE0SDNDMi40NDc3MiAxNCAyIDEzLjU1MjMgMiAxM1YzWiIgc3Ryb2tlPSIjNjY2NjY2IiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PGNpcmNsZSBjeD0iNyIgY3k9IjciIHI9IjEuNSIgZmlsbD0iIzY2NjY2NiIvPjxwYXRoIGQ9Ik0yIDExTDUuNSA4TDkgMTAuNUwxMy41IDZMMTggMTAiIHN0cm9rZT0iIzY2NjY2NiIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjwvc3ZnPg==';
+		$icon = $this->getMenuIconDataUri();
 
 		// Top-level menu — slug matches Settings so clicking SIM opens Settings.
 		add_menu_page(
@@ -202,6 +202,28 @@ class Settings {
 		// We remove it and re-add Settings at the end so the visual order is:
 		//   Dashboard → Bulk Processor → Settings
 		add_action( 'admin_menu', array( $this, 'reorderSettingsToBottom' ), 999 );
+	}
+
+	/**
+	 * Base64 data URI for the top-level admin menu icon.
+	 *
+	 * WordPress recolours fill="#a0a5aa" to match the admin colour scheme.
+	 *
+	 * @since 3.3.1
+	 * @return string Data URI, or dashicons fallback.
+	 */
+	private function getMenuIconDataUri(): string {
+		$path = SMART_IMAGE_MATCHER_PLUGIN_DIR . 'assets/menu-icon.svg';
+		if ( ! is_readable( $path ) ) {
+			return 'dashicons-format-image';
+		}
+
+		$svg = file_get_contents( $path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local plugin SVG.
+		if ( false === $svg || '' === $svg ) {
+			return 'dashicons-format-image';
+		}
+
+		return 'data:image/svg+xml;base64,' . base64_encode( $svg );
 	}
 
 	/**

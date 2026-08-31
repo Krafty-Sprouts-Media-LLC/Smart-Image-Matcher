@@ -142,6 +142,14 @@ class BulkProcessor {
 					'confirmCancelRun'  => __( 'Cancel the current run so you can change the selection?', 'smart-image-matcher' ),
 					'confirmRecovery'   => __( 'Recover %d matched image(s) into WordPress? Unmatched images will not be imported.', 'smart-image-matcher' ),
 					'confirmAuditClear' => __( 'Remove unsafe featured images from the scanned posts? Exact and prefix matches are left alone.', 'smart-image-matcher' ),
+					'approveAll'        => __( 'Approve all', 'smart-image-matcher' ),
+					'approveAllPending' => __( 'Approve all pending', 'smart-image-matcher' ),
+					'confirmApproveAll' => __( 'Approve every pending slot in this Review filter? You still need to click Insert approved afterwards.', 'smart-image-matcher' ),
+					'showMoreHeadings'  => __( 'Show %d more headings', 'smart-image-matcher' ),
+					'viewImage'         => __( 'View image', 'smart-image-matcher' ),
+					'undo'              => __( 'Undo', 'smart-image-matcher' ),
+					'approved'          => __( 'Approved', 'smart-image-matcher' ),
+					'rejected'          => __( 'Rejected', 'smart-image-matcher' ),
 				),
 			)
 		);

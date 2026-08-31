@@ -104,5 +104,35 @@ class BulkControllerMatchPreviewTest extends TestCase {
 		);
 
 		$this->assertSame( '', $rows[0]['image_url'] );
+		$this->assertSame( '', $rows[0]['image_full'] );
+	}
+
+	/**
+	 * Modal preview uses a large attachment size when available.
+	 *
+	 * @return void
+	 */
+	public function test_attach_image_urls_sets_large_preview_for_modal(): void {
+		$GLOBALS['sim_test_attachment_image_url'] = static function ( $id, $size ) {
+			return 'https://example.com/wp-content/uploads/' . $size . '-' . (int) $id . '.jpg';
+		};
+
+		$rows = BulkController::attachImageUrls(
+			array(
+				array(
+					'id'       => 4,
+					'image_id' => 7,
+				),
+			)
+		);
+
+		$this->assertSame(
+			'https://example.com/wp-content/uploads/medium-7.jpg',
+			$rows[0]['image_url']
+		);
+		$this->assertSame(
+			'https://example.com/wp-content/uploads/large-7.jpg',
+			$rows[0]['image_full']
+		);
 	}
 }

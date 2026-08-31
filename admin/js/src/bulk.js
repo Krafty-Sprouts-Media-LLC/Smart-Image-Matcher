@@ -23,6 +23,9 @@
 		review: 'Review',
 		approve: 'Approve',
 		reject: 'Reject',
+		undo: 'Undo',
+		approved: 'Approved',
+		rejected: 'Rejected',
 		insertApproved: 'Insert approved',
 		cancel: 'Cancel run',
 		noMatches: 'Nothing to review.',
@@ -43,6 +46,11 @@
 	let reviewPage = 1;
 	let currentJob = null;
 	let pollTimer = null;
+	let reviewCache = [];
+	let reviewModalPostId = 0;
+	let reviewModalIndex = 0;
+	const updatingMatches = new Set();
+	const slotPreviewLimit = 10;
 	const storageKey = 'smartImageMatcherBulkCurrentJobId';
 	const cancelledStorageKey = 'smartImageMatcherBulkCancelledJobIds';
 	const segmentsKey = 'smartImageMatcherBulkSelectionSegments';
@@ -701,6 +709,7 @@
 					<button type="button" class="button sim-run-btn${ reviewRun === 'last' ? ' button-primary' : '' }" data-run="last">${ escHtml( i18n.lastRun ) }</button>
 				</div>
 				<div class="sim-review-actions">
+					<button type="button" class="button" id="sim-approve-all-pending">${ escHtml( i18n.approveAllPending || 'Approve all pending' ) }</button>
 					<button type="button" class="button" id="sim-approve-above">Approve all ≥ ${ autoInsert }%</button>
 					<button type="button" class="button button-primary" id="sim-insert-approved">${ escHtml( i18n.insertApproved ) }</button>
 				</div>
@@ -722,8 +731,82 @@
 			} );
 		} );
 		q( '#sim-approve-above', root )?.addEventListener( 'click', approveAbove );
+		q( '#sim-approve-all-pending', root )?.addEventListener( 'click', approveAllPending );
 		q( '#sim-insert-approved', root )?.addEventListener( 'click', insertApproved );
 		loadReview();
+	}
+
+	function slotRowHtml( heading, extraClass ) {
+		const score = parseInt( heading.confidence_score || 0, 10 );
+		const cls = extraClass ? ' ' + extraClass : '';
+		const thumb = heading.image_url
+			? `<button type="button" class="sim-slot-thumb sim-slot-open" data-match="${ heading.id }" title="${ escHtml( i18n.viewImage || 'View image' ) }"><img src="${ escHtml( heading.image_url ) }" alt="" width="72" height="54" /></button>`
+			: '<span class="sim-no-thumb">—</span>';
+		return `<div class="sim-slot-row${ cls }" data-match-id="${ heading.id }">
+			${ thumb }
+			<div class="sim-slot-text">${ escHtml( slotLabel( heading ) ) }</div>
+			<div class="${ scoreClass( score ) }">${ score }%</div>
+			<div class="sim-slot-actions">
+				<button type="button" class="button button-small sim-approve-btn" data-match="${ heading.id }">${ escHtml( i18n.approve ) }</button>
+				<button type="button" class="button button-small sim-reject-btn" data-match="${ heading.id }">${ escHtml( i18n.reject ) }</button>
+			</div>
+		</div>`;
+	}
+
+	function slotActionsHtml( matchId, status ) {
+		if ( status === 'approved' ) {
+			return `<span class="sim-slot-state sim-slot-state-approved">${ escHtml( i18n.approved || 'Approved' ) }</span>
+				<button type="button" class="button button-small sim-undo-btn" data-match="${ matchId }">${ escHtml( i18n.undo || 'Undo' ) }</button>`;
+		}
+		if ( status === 'rejected' ) {
+			return `<span class="sim-slot-state sim-slot-state-rejected">${ escHtml( i18n.rejected || 'Rejected' ) }</span>
+				<button type="button" class="button button-small sim-undo-btn" data-match="${ matchId }">${ escHtml( i18n.undo || 'Undo' ) }</button>`;
+		}
+		return `<button type="button" class="button button-small sim-approve-btn" data-match="${ matchId }">${ escHtml( i18n.approve ) }</button>
+			<button type="button" class="button button-small sim-reject-btn" data-match="${ matchId }">${ escHtml( i18n.reject ) }</button>`;
+	}
+
+	function applySlotState( row, status ) {
+		if ( ! row ) return;
+		row.classList.toggle( 'is-approved', status === 'approved' );
+		row.classList.toggle( 'is-rejected', status === 'rejected' );
+		row.classList.remove( 'is-saving' );
+		qAll( 'button', row ).forEach( ( btn ) => { btn.disabled = false; } );
+		const actions = row.querySelector( '.sim-slot-actions' );
+		const matchId = parseInt( row.dataset.matchId, 10 );
+		if ( actions && matchId ) {
+			actions.innerHTML = slotActionsHtml( matchId, status );
+			bindSlotActions( actions );
+		}
+	}
+
+	function bindSlotActions( root ) {
+		qAll( '.sim-approve-btn', root ).forEach( ( btn ) => {
+			btn.addEventListener( 'click', () => updateMatch( parseInt( btn.dataset.match, 10 ), 'approved' ) );
+		} );
+		qAll( '.sim-reject-btn', root ).forEach( ( btn ) => {
+			btn.addEventListener( 'click', () => updateMatch( parseInt( btn.dataset.match, 10 ), 'rejected' ) );
+		} );
+		qAll( '.sim-undo-btn', root ).forEach( ( btn ) => {
+			btn.addEventListener( 'click', () => updateMatch( parseInt( btn.dataset.match, 10 ), 'pending' ) );
+		} );
+	}
+
+	function bindReviewList( wrap ) {
+		bindSlotActions( wrap );
+		qAll( '.sim-slot-open', wrap ).forEach( ( btn ) => {
+			btn.addEventListener( 'click', () => openReviewModal( parseInt( btn.dataset.match, 10 ) ) );
+		} );
+		qAll( '.sim-approve-article', wrap ).forEach( ( btn ) => {
+			btn.addEventListener( 'click', () => approveArticle( parseInt( btn.dataset.post, 10 ) ) );
+		} );
+		qAll( '.sim-show-more', wrap ).forEach( ( btn ) => {
+			btn.addEventListener( 'click', () => {
+				const card = btn.closest( '.sim-article' );
+				if ( card ) card.classList.add( 'is-expanded' );
+				btn.hidden = true;
+			} );
+		} );
 	}
 
 	async function loadReview() {
@@ -735,6 +818,7 @@
 				method: 'GET',
 			} );
 			const articles = data.articles || [];
+			reviewCache = articles;
 			if ( ! articles.length ) {
 				if ( reviewRun === 'last' ) {
 					wrap.innerHTML = `<div class="sim-empty"><p>This run has no review items.</p><p class="description"><button type="button" class="button" id="sim-switch-all-pending">Show all pending</button></p></div>`;
@@ -752,35 +836,25 @@
 			let html = '';
 			articles.forEach( ( article ) => {
 				const headings = article.headings || [];
-				html += `<article class="sim-article">
+				const extra = Math.max( 0, headings.length - slotPreviewLimit );
+				html += `<article class="sim-article" data-post-id="${ article.post_id }">
 					<div class="sim-article-head">
 						<h3><a href="${ escHtml( article.edit_url || '#' ) }" target="_blank" rel="noopener">${ escHtml( article.post_title || ( '#' + article.post_id ) ) }</a> <code>${ article.post_id }</code></h3>
-						<span>${ headings.length } to review</span>
-					</div>`;
-				headings.forEach( ( heading ) => {
-					const score = parseInt( heading.confidence_score || 0, 10 );
-					const thumb = heading.image_url
-						? `<img src="${ escHtml( heading.image_url ) }" alt="" width="72" height="54" />`
-						: '<span class="sim-no-thumb">—</span>';
-					html += `<div class="sim-slot-row" data-match-id="${ heading.id }">
-						<div class="sim-slot-thumb">${ thumb }</div>
-						<div class="sim-slot-text">${ escHtml( slotLabel( heading ) ) }</div>
-						<div class="${ scoreClass( score ) }">${ score }%</div>
-						<div class="sim-slot-actions">
-							<button type="button" class="button button-small sim-approve-btn" data-match="${ heading.id }">${ escHtml( i18n.approve ) }</button>
-							<button type="button" class="button button-small sim-reject-btn" data-match="${ heading.id }">${ escHtml( i18n.reject ) }</button>
+						<div class="sim-article-head-actions">
+							<span>${ headings.length } to review</span>
+							<button type="button" class="button button-small sim-approve-article" data-post="${ article.post_id }">${ escHtml( i18n.approveAll || 'Approve all' ) }</button>
 						</div>
 					</div>`;
+				headings.forEach( ( heading, index ) => {
+					html += slotRowHtml( heading, index >= slotPreviewLimit ? 'sim-slot-collapsed' : '' );
 				} );
+				if ( extra > 0 ) {
+					html += `<p class="sim-slot-more-wrap"><button type="button" class="button-link sim-show-more">${ escHtml( sprintf( i18n.showMoreHeadings || 'Show %d more headings', extra ) ) }</button></p>`;
+				}
 				html += '</article>';
 			} );
 			wrap.innerHTML = html;
-			qAll( '.sim-approve-btn', wrap ).forEach( ( btn ) => {
-				btn.addEventListener( 'click', () => updateMatch( parseInt( btn.dataset.match, 10 ), 'approved' ) );
-			} );
-			qAll( '.sim-reject-btn', wrap ).forEach( ( btn ) => {
-				btn.addEventListener( 'click', () => updateMatch( parseInt( btn.dataset.match, 10 ), 'rejected' ) );
-			} );
+			bindReviewList( wrap );
 			const total = parseInt( data.total_articles || 0, 10 );
 			const pages = Math.ceil( total / 20 );
 			const pager = q( '#sim-review-pagination' );
@@ -798,24 +872,179 @@
 		}
 	}
 
+	function setReviewDecisionBusy( matchId, busy ) {
+		const row = q( `.sim-slot-row[data-match-id="${ matchId }"]` );
+		if ( row ) {
+			row.classList.toggle( 'is-saving', busy );
+			qAll( 'button', row ).forEach( ( btn ) => { btn.disabled = busy; } );
+		}
+		const heading = currentReviewHeading();
+		const modal = q( '#sim-review-modal' );
+		if ( ! modal || modal.hidden || ! heading || parseInt( heading.id, 10 ) !== matchId ) {
+			return;
+		}
+		[ '#sim-review-modal-approve', '#sim-review-modal-reject', '#sim-review-modal-undo' ].forEach( ( sel ) => {
+			const btn = q( sel );
+			if ( btn ) btn.disabled = busy;
+		} );
+	}
+
 	async function updateMatch( matchId, status ) {
-		if ( ! apiFetch ) return;
+		if ( ! apiFetch || updatingMatches.has( matchId ) ) return;
+		updatingMatches.add( matchId );
+		setReviewDecisionBusy( matchId, true );
 		try {
 			await apiFetch( {
 				path: '/smart-image-matcher/v1/matches/' + matchId,
 				method: 'POST',
 				data: { status },
 			} );
-			const row = q( `.sim-slot-row[data-match-id="${ matchId }"]` );
-			if ( row && status === 'rejected' ) {
-				row.classList.add( 'is-rejected' );
-			}
-			if ( row && status === 'approved' ) {
-				row.classList.add( 'is-approved' );
+			applySlotState( q( `.sim-slot-row[data-match-id="${ matchId }"]` ), status );
+			const modal = q( '#sim-review-modal' );
+			if ( modal && ! modal.hidden && currentReviewHeading() && parseInt( currentReviewHeading().id, 10 ) === matchId ) {
+				renderReviewModal();
 			}
 		} catch ( err ) {
+			setReviewDecisionBusy( matchId, false );
 			window.alert( err.message || 'Could not update match.' );
+		} finally {
+			updatingMatches.delete( matchId );
 		}
+	}
+
+	async function approveArticle( postId ) {
+		if ( ! apiFetch || ! postId ) return;
+		try {
+			await apiFetch( {
+				path: '/smart-image-matcher/v1/review/approve-article',
+				method: 'POST',
+				data: { post_id: postId, run: reviewRun },
+			} );
+			closeReviewModal();
+			loadReview();
+		} catch ( err ) {
+			window.alert( err.message || 'Could not approve article.' );
+		}
+	}
+
+	async function approveAllPending() {
+		if ( ! apiFetch ) return;
+		if ( ! window.confirm( i18n.confirmApproveAll || 'Approve every pending slot in this Review filter?' ) ) {
+			return;
+		}
+		try {
+			await apiFetch( {
+				path: '/smart-image-matcher/v1/review/approve-all',
+				method: 'POST',
+				data: { run: reviewRun },
+			} );
+			loadReview();
+		} catch ( err ) {
+			window.alert( err.message || 'Could not approve matches.' );
+		}
+	}
+
+	function findReviewSlot( matchId ) {
+		for ( let a = 0; a < reviewCache.length; a++ ) {
+			const headings = reviewCache[ a ].headings || [];
+			for ( let i = 0; i < headings.length; i++ ) {
+				if ( parseInt( headings[ i ].id, 10 ) === matchId ) {
+					return { article: reviewCache[ a ], index: i };
+				}
+			}
+		}
+		return null;
+	}
+
+	function currentReviewHeading() {
+		const article = reviewCache.find( ( item ) => parseInt( item.post_id, 10 ) === reviewModalPostId );
+		const headings = article && Array.isArray( article.headings ) ? article.headings : [];
+		return headings[ reviewModalIndex ] || null;
+	}
+
+	function headingUiStatus( heading ) {
+		if ( ! heading ) return 'pending';
+		const row = q( `.sim-slot-row[data-match-id="${ heading.id }"]` );
+		if ( row && row.classList.contains( 'is-approved' ) ) {
+			return 'approved';
+		}
+		if ( row && row.classList.contains( 'is-rejected' ) ) {
+			return 'rejected';
+		}
+		return 'pending';
+	}
+
+	function renderReviewModal() {
+		const heading = currentReviewHeading();
+		const modal = q( '#sim-review-modal' );
+		if ( ! modal || ! heading ) {
+			closeReviewModal();
+			return;
+		}
+		const article = reviewCache.find( ( item ) => parseInt( item.post_id, 10 ) === reviewModalPostId );
+		const total = article && article.headings ? article.headings.length : 1;
+		const title = q( '#sim-review-modal-title' );
+		const meta = q( '#sim-review-modal-meta' );
+		const img = q( '#sim-review-modal-img' );
+		const src = heading.image_full || heading.image_url || '';
+		if ( title ) title.textContent = slotLabel( heading );
+		if ( meta ) {
+			const postTitle = article ? ( article.post_title || ( '#' + article.post_id ) ) : '';
+			meta.textContent = postTitle + ' · ' + ( reviewModalIndex + 1 ) + ' of ' + total + ' · ' + parseInt( heading.confidence_score || 0, 10 ) + '%';
+		}
+		if ( img ) {
+			img.hidden = ! src;
+			img.src = src;
+			img.alt = slotLabel( heading );
+		}
+		const status = headingUiStatus( heading );
+		const decided = status !== 'pending';
+		const statusEl = q( '#sim-review-modal-status' );
+		if ( statusEl ) {
+			statusEl.hidden = ! decided;
+			statusEl.textContent = status === 'approved' ? ( i18n.approved || 'Approved' ) : ( i18n.rejected || 'Rejected' );
+			statusEl.className = 'sim-slot-state ' + ( status === 'approved' ? 'sim-slot-state-approved' : 'sim-slot-state-rejected' );
+		}
+		const approve = q( '#sim-review-modal-approve' );
+		const reject = q( '#sim-review-modal-reject' );
+		const undo = q( '#sim-review-modal-undo' );
+		if ( approve ) {
+			approve.hidden = decided;
+			approve.disabled = false;
+		}
+		if ( reject ) {
+			reject.hidden = decided;
+			reject.disabled = false;
+		}
+		if ( undo ) {
+			undo.hidden = ! decided;
+			undo.disabled = false;
+		}
+		const prev = q( '#sim-review-modal-prev' );
+		const next = q( '#sim-review-modal-next' );
+		if ( prev ) prev.disabled = reviewModalIndex <= 0;
+		if ( next ) next.disabled = reviewModalIndex >= total - 1;
+		modal.hidden = false;
+	}
+
+	function openReviewModal( matchId ) {
+		const found = findReviewSlot( matchId );
+		if ( ! found ) return;
+		reviewModalPostId = parseInt( found.article.post_id, 10 );
+		reviewModalIndex = found.index;
+		renderReviewModal();
+	}
+
+	function closeReviewModal() {
+		const modal = q( '#sim-review-modal' );
+		if ( modal ) modal.hidden = true;
+	}
+
+	function stepReviewModal( delta ) {
+		const article = reviewCache.find( ( item ) => parseInt( item.post_id, 10 ) === reviewModalPostId );
+		const total = article && article.headings ? article.headings.length : 0;
+		reviewModalIndex = Math.max( 0, Math.min( total - 1, reviewModalIndex + delta ) );
+		renderReviewModal();
 	}
 
 	async function approveAbove() {
@@ -1118,6 +1347,39 @@
 		q( '#sim-gen-confirm' )?.addEventListener( 'click', async () => {
 			closeGenerateModal();
 			await startJob( 'generate-featured' );
+		} );
+		qAll( '[data-sim-review-close]' ).forEach( ( el ) => {
+			el.addEventListener( 'click', closeReviewModal );
+		} );
+		q( '#sim-review-modal-prev' )?.addEventListener( 'click', () => stepReviewModal( -1 ) );
+		q( '#sim-review-modal-next' )?.addEventListener( 'click', () => stepReviewModal( 1 ) );
+		q( '#sim-review-modal-approve' )?.addEventListener( 'click', async () => {
+			const heading = currentReviewHeading();
+			if ( ! heading ) return;
+			await updateMatch( parseInt( heading.id, 10 ), 'approved' );
+		} );
+		q( '#sim-review-modal-reject' )?.addEventListener( 'click', async () => {
+			const heading = currentReviewHeading();
+			if ( ! heading ) return;
+			await updateMatch( parseInt( heading.id, 10 ), 'rejected' );
+		} );
+		q( '#sim-review-modal-undo' )?.addEventListener( 'click', async () => {
+			const heading = currentReviewHeading();
+			if ( ! heading ) return;
+			await updateMatch( parseInt( heading.id, 10 ), 'pending' );
+		} );
+		document.addEventListener( 'keydown', ( event ) => {
+			const modal = q( '#sim-review-modal' );
+			if ( ! modal || modal.hidden ) return;
+			if ( event.key === 'Escape' ) {
+				closeReviewModal();
+			}
+			if ( event.key === 'ArrowLeft' ) {
+				stepReviewModal( -1 );
+			}
+			if ( event.key === 'ArrowRight' ) {
+				stepReviewModal( 1 );
+			}
 		} );
 	}
 

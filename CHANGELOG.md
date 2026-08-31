@@ -7,6 +7,21 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.3.1] - 31/08/2026
+
+### Added
+
+- Review: click a thumbnail to open a larger image modal (Previous / Next / Approve / Reject). Approve all pending slots on one article, or Approve all pending in the current Review filter.
+- Plugin icon: photo frame + check (admin menu SVG, plus `assets/icon.svg` for GitHub / plugin updates).
+
+### Changed
+
+- Review cards show the first 10 headings, with a Show more control for the rest.
+
+### Fixed
+
+- Review Approve / Reject now show Approved or Rejected on the row (green / red), with Undo. Neither action writes post content; Insert approved still does that. The image modal stays on the same heading after a decision instead of jumping away.
+
 ## [3.3.0] - 31/08/2026
 
 ### Added

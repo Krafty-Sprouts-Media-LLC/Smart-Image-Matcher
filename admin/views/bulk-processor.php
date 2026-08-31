@@ -171,6 +171,28 @@ $smart_image_matcher_post_type = isset( $_GET['sim_post_type'] ) ? sanitize_key(
 		</div>
 	</div>
 
+	<div id="sim-review-modal" class="sim-modal" hidden>
+		<div class="sim-modal-backdrop" data-sim-review-close></div>
+		<div class="sim-modal-dialog sim-review-dialog" role="dialog" aria-modal="true" aria-labelledby="sim-review-modal-title">
+			<div class="sim-review-modal-head">
+				<h2 id="sim-review-modal-title"></h2>
+				<button type="button" class="button-link" data-sim-review-close><?php esc_html_e( 'Close', 'smart-image-matcher' ); ?></button>
+			</div>
+			<p class="description" id="sim-review-modal-meta"></p>
+			<div class="sim-review-modal-figure">
+				<img id="sim-review-modal-img" alt="" />
+			</div>
+			<div class="sim-step-actions">
+				<button type="button" class="button" id="sim-review-modal-prev"><?php esc_html_e( 'Previous', 'smart-image-matcher' ); ?></button>
+				<button type="button" class="button" id="sim-review-modal-next"><?php esc_html_e( 'Next', 'smart-image-matcher' ); ?></button>
+				<span id="sim-review-modal-status" class="sim-slot-state" hidden></span>
+				<button type="button" class="button" id="sim-review-modal-undo" hidden><?php esc_html_e( 'Undo', 'smart-image-matcher' ); ?></button>
+				<button type="button" class="button" id="sim-review-modal-reject"><?php esc_html_e( 'Reject', 'smart-image-matcher' ); ?></button>
+				<button type="button" class="button button-primary" id="sim-review-modal-approve"><?php esc_html_e( 'Approve', 'smart-image-matcher' ); ?></button>
+			</div>
+		</div>
+	</div>
+
 	<noscript>
 		<p class="notice notice-warning">
 			<?php esc_html_e( 'The Bulk Processor requires JavaScript to be enabled.', 'smart-image-matcher' ); ?>

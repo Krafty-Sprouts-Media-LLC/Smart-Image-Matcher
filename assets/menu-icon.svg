@@ -1,0 +1,12 @@
+<!--
+  Admin menu icon for Smart Image Matcher (20×20, fill #a0a5aa).
+  WordPress tints this to match the colour scheme.
+  @package SmartImageMatcher
+  @since   3.3.1
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20" role="img" aria-hidden="true">
+	<path fill="#a0a5aa" fill-rule="evenodd" d="M2.25 3.1c0-.86.7-1.55 1.55-1.55h11.4c.86 0 1.55.69 1.55 1.55v8.9c0 .86-.69 1.55-1.55 1.55H3.8c-.85 0-1.55-.69-1.55-1.55v-8.9zm1.7.4v8.1h11.1V3.5H3.95z"/>
+	<circle fill="#a0a5aa" cx="6.15" cy="6.05" r="1.25"/>
+	<path fill="#a0a5aa" d="M3.95 11.6 7.2 8.15l2.05 1.95 3.15-3.85 2.65 5.35H3.95z"/>
+	<path fill="#a0a5aa" d="M11.35 15.55 13.7 17.9l5.05-5.8-1.4-1.2-3.6 4.15-1.15-1.15z"/>
+</svg>

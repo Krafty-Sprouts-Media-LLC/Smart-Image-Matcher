@@ -1,0 +1,15 @@
+<!--
+  Plugin icon for Smart Image Matcher (GitHub / Plugin Update Checker / wp.org).
+  Photo frame + check. Same mark as the admin menu, on a rounded tile.
+  @package SmartImageMatcher
+  @since   3.3.1
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="Smart Image Matcher">
+	<rect width="256" height="256" rx="56" fill="#2271b1"/>
+	<g fill="#fff" transform="translate(28 28) scale(10)">
+		<path fill-rule="evenodd" d="M2.25 3.1c0-.86.7-1.55 1.55-1.55h11.4c.86 0 1.55.69 1.55 1.55v8.9c0 .86-.69 1.55-1.55 1.55H3.8c-.85 0-1.55-.69-1.55-1.55v-8.9zm1.7.4v8.1h11.1V3.5H3.95z"/>
+		<circle cx="6.15" cy="6.05" r="1.25"/>
+		<path d="M3.95 11.6 7.2 8.15l2.05 1.95 3.15-3.85 2.65 5.35H3.95z"/>
+		<path d="M11.35 15.55 13.7 17.9l5.05-5.8-1.4-1.2-3.6 4.15-1.15-1.15z"/>
+	</g>
+</svg>

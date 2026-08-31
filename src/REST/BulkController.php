@@ -109,7 +109,7 @@ class BulkController extends Controller {
 			'callback'            => array( $this, 'updateMatch' ),
 			'permission_callback' => array( $this, 'checkAdminPermission' ),
 			'args'                => array(
-				'status'   => array( 'type' => 'string', 'enum' => array( 'approved', 'rejected' ), 'required' => true, 'sanitize_callback' => 'sanitize_key' ),
+				'status'   => array( 'type' => 'string', 'enum' => array( 'approved', 'rejected', 'pending' ), 'required' => true, 'sanitize_callback' => 'sanitize_key' ),
 				'image_id' => array( 'type' => 'integer', 'sanitize_callback' => 'absint' ),
 			),
 		) );
@@ -143,6 +143,25 @@ class BulkController extends Controller {
 		register_rest_route( self::NAMESPACE, '/review/approve-above', array(
 			'methods'             => \WP_REST_Server::CREATABLE,
 			'callback'            => array( $this, 'approveAbove' ),
+			'permission_callback' => array( $this, 'checkAdminPermission' ),
+			'args'                => array(
+				'run' => array( 'type' => 'string', 'enum' => array( 'all', 'last' ), 'default' => 'all', 'sanitize_callback' => 'sanitize_key' ),
+			),
+		) );
+
+		register_rest_route( self::NAMESPACE, '/review/approve-article', array(
+			'methods'             => \WP_REST_Server::CREATABLE,
+			'callback'            => array( $this, 'approveArticle' ),
+			'permission_callback' => array( $this, 'checkAdminPermission' ),
+			'args'                => array(
+				'post_id' => array( 'type' => 'integer', 'required' => true, 'sanitize_callback' => 'absint' ),
+				'run'     => array( 'type' => 'string', 'enum' => array( 'all', 'last' ), 'default' => 'all', 'sanitize_callback' => 'sanitize_key' ),
+			),
+		) );
+
+		register_rest_route( self::NAMESPACE, '/review/approve-all', array(
+			'methods'             => \WP_REST_Server::CREATABLE,
+			'callback'            => array( $this, 'approveAllPending' ),
 			'permission_callback' => array( $this, 'checkAdminPermission' ),
 			'args'                => array(
 				'run' => array( 'type' => 'string', 'enum' => array( 'all', 'last' ), 'default' => 'all', 'sanitize_callback' => 'sanitize_key' ),
@@ -501,18 +520,28 @@ class BulkController extends Controller {
 		foreach ( $rows as $index => $row ) {
 			$image_id = isset( $row['image_id'] ) ? (int) $row['image_id'] : 0;
 			$url      = '';
+			$full     = '';
 
 			if ( $image_id > 0 ) {
 				$thumb = wp_get_attachment_image_url( $image_id, 'medium' );
 				if ( is_string( $thumb ) && '' !== $thumb ) {
 					$url = $thumb;
 				} else {
-					$full = wp_get_attachment_url( $image_id );
-					$url  = is_string( $full ) ? $full : '';
+					$raw = wp_get_attachment_url( $image_id );
+					$url = is_string( $raw ) ? $raw : '';
+				}
+
+				$large = wp_get_attachment_image_url( $image_id, 'large' );
+				if ( is_string( $large ) && '' !== $large ) {
+					$full = $large;
+				} else {
+					$raw  = wp_get_attachment_url( $image_id );
+					$full = is_string( $raw ) && '' !== $raw ? $raw : $url;
 				}
 			}
 
-			$rows[ $index ]['image_url'] = $url;
+			$rows[ $index ]['image_url']  = $url;
+			$rows[ $index ]['image_full'] = $full;
 		}
 
 		return $rows;
@@ -701,27 +730,100 @@ class BulkController extends Controller {
 		$run       = sanitize_key( (string) $request->get_param( 'run' ) );
 		$threshold = (int) Settings::get( 'auto_insert_threshold' );
 
+		return rest_ensure_response(
+			array(
+				'approved'  => $this->approvePendingMatches( $run, 0, $threshold ),
+				'threshold' => $threshold,
+			)
+		);
+	}
+
+	/**
+	 * Approve every pending slot on one article.
+	 *
+	 * @since 3.3.1
+	 * @param \WP_REST_Request $request Request.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function approveArticle( \WP_REST_Request $request ) {
+		$post_id = (int) $request->get_param( 'post_id' );
+		$run     = sanitize_key( (string) $request->get_param( 'run' ) );
+
+		if ( $post_id <= 0 || ! current_user_can( 'edit_post', $post_id ) ) {
+			return new \WP_Error(
+				'rest_forbidden',
+				__( 'Permission denied.', 'smart-image-matcher' ),
+				array( 'status' => 403 )
+			);
+		}
+
+		return rest_ensure_response(
+			array(
+				'approved' => $this->approvePendingMatches( $run, $post_id, null ),
+				'post_id'  => $post_id,
+			)
+		);
+	}
+
+	/**
+	 * Approve every pending slot in the current Review filter (All pending or Last run).
+	 *
+	 * @since 3.3.1
+	 * @param \WP_REST_Request $request Request.
+	 * @return \WP_REST_Response
+	 */
+	public function approveAllPending( \WP_REST_Request $request ) {
+		$run = sanitize_key( (string) $request->get_param( 'run' ) );
+
+		return rest_ensure_response(
+			array(
+				'approved' => $this->approvePendingMatches( $run, 0, null ),
+			)
+		);
+	}
+
+	/**
+	 * Mark pending match rows as approved.
+	 *
+	 * @since 3.3.1
+	 * @param string   $run       all|last.
+	 * @param int      $post_id   Limit to one post, or 0 for all.
+	 * @param int|null $min_score Minimum confidence, or null for any score.
+	 * @return int Rows updated.
+	 */
+	private function approvePendingMatches( string $run, int $post_id, $min_score ): int {
 		global $wpdb;
 
-		$sql  = "UPDATE {$wpdb->prefix}smart_image_matcher_matches SET status = 'approved' WHERE status = 'pending' AND confidence_score >= %d";
-		$args = array( $threshold );
+		$where = array( "status = 'pending'" );
+		$args  = array();
+
+		if ( $post_id > 0 ) {
+			$where[] = 'post_id = %d';
+			$args[]  = $post_id;
+		}
+
+		if ( null !== $min_score ) {
+			$where[] = 'confidence_score >= %d';
+			$args[]  = (int) $min_score;
+		}
 
 		if ( 'last' === $run ) {
 			$last = $this->fetchLatestRun();
 			if ( $last ) {
-				$sql   .= ' AND created_at >= %s';
-				$args[] = (string) $last['created_at'];
+				$where[] = 'created_at >= %s';
+				$args[]  = (string) $last['created_at'];
 			}
 		}
 
-		$result = $wpdb->query( $wpdb->prepare( $sql, $args ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$sql = 'UPDATE ' . $wpdb->prefix . 'smart_image_matcher_matches SET status = \'approved\' WHERE ' . implode( ' AND ', $where );
 
-		return rest_ensure_response(
-			array(
-				'approved'  => is_int( $result ) ? $result : 0,
-				'threshold' => $threshold,
-			)
-		);
+		if ( empty( $args ) ) {
+			$result = $wpdb->query( $sql ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared
+		} else {
+			$result = $wpdb->query( $wpdb->prepare( $sql, $args ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		}
+
+		return is_int( $result ) ? $result : 0;
 	}
 
 	/**
