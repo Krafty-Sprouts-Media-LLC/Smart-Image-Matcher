@@ -41,6 +41,16 @@ if ( file_exists( $tests_dir . '/includes/functions.php' ) ) {
 	// surface that our unit-tested classes call at construction time.
 	if ( ! function_exists( 'add_action' ) ) {
 		function add_action() {}
+		function add_filter() {}
+		function add_query_arg( ...$args ) {
+			if ( isset( $args[0] ) && is_array( $args[0] ) ) {
+				$params = $args[0];
+				$url    = isset( $args[1] ) ? (string) $args[1] : 'http://example.com/wp-admin/edit.php';
+				$sep    = false === strpos( $url, '?' ) ? '?' : '&';
+				return $url . $sep . http_build_query( $params );
+			}
+			return isset( $args[2] ) ? (string) $args[2] : '';
+		}
 		function apply_filters( $tag, $value ) { return $value; }
 		// Stateful in-memory option store so tests can round-trip
 		// get_option()/update_option()/delete_option() calls.
@@ -56,10 +66,16 @@ if ( file_exists( $tests_dir . '/includes/functions.php' ) ) {
 			return true;
 		}
 		function wp_json_encode( $data ) { return json_encode( $data ); }
-		function current_user_can() { return true; }
+		function current_user_can( ...$caps ) {
+			if ( isset( $GLOBALS['sim_test_current_user_can'] ) && is_callable( $GLOBALS['sim_test_current_user_can'] ) ) {
+				return (bool) call_user_func_array( $GLOBALS['sim_test_current_user_can'], $caps );
+			}
+			return true;
+		}
 		function wp_attachment_is_image() { return true; }
 		function __( $text ) { return $text; }
 		function esc_html__( $text ) { return $text; }
+		function esc_attr__( $text ) { return $text; }
 		function sanitize_text_field( $str ) { return $str; }
 		function sanitize_textarea_field( $str ) { return $str; }
 		function sanitize_mime_type( $mime ) { return preg_replace( '/[^a-z0-9.+-\/]/i', '', (string) $mime ); }
@@ -172,6 +188,9 @@ if ( file_exists( $tests_dir . '/includes/functions.php' ) ) {
 			return ! empty( $GLOBALS['sim_test_post_meta'][ $id ]['_thumbnail_id'] );
 		}
 		function post_type_supports( $type = '', $feature = '' ) {
+			if ( isset( $GLOBALS['sim_test_post_type_supports'] ) && is_callable( $GLOBALS['sim_test_post_type_supports'] ) ) {
+				return (bool) $GLOBALS['sim_test_post_type_supports']( $type, $feature );
+			}
 			unset( $type, $feature );
 			return true;
 		}

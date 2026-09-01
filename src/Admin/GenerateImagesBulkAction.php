@@ -1,9 +1,10 @@
 <?php
 /**
- * Posts list bulk actions: process articles or generate featured images.
+ * Posts list bulk actions and per-row Generate for featured images.
  *
  * Admins are sent to Bulk Processor with the selection prefilled. Editors
- * without manage_options still get the list-screen generate modal.
+ * without manage_options still get the list-screen generate modal. A Generate
+ * row action opens that modal for a single post.
  *
  * @package SmartImageMatcher\Admin
  * @since   3.2.0
@@ -16,6 +17,8 @@ namespace SmartImageMatcher\Admin;
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
+
+// phpcs:disable WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid -- PSR-4 camelCase methods (see agents.md).
 
 /**
  * Class GenerateImagesBulkAction
@@ -55,6 +58,9 @@ class GenerateImagesBulkAction {
 			add_filter( "handle_bulk_actions-edit-{$post_type}", array( $this, 'handleBulkAction' ), 10, 3 );
 		}
 
+		add_filter( 'post_row_actions', array( $this, 'addRowAction' ), 10, 2 );
+		add_filter( 'page_row_actions', array( $this, 'addRowAction' ), 10, 2 );
+
 		// Keep pagination / filter links from re-carrying the one-shot modal args.
 		add_filter( 'removable_query_args', array( $this, 'removableQueryArgs' ) );
 	}
@@ -86,6 +92,66 @@ class GenerateImagesBulkAction {
 		$actions[ self::ACTION_PROCESS ] = __( 'Process articles…', 'smart-image-matcher' );
 		$actions[ self::ACTION ]         = __( 'Generate featured images…', 'smart-image-matcher' );
 		return $actions;
+	}
+
+	/**
+	 * Add a per-row Generate link next to Edit / Quick Edit.
+	 *
+	 * Opens the list-screen featured-image modal for that one post (JS intercepts
+	 * the click; the href is a fallback that auto-opens after reload).
+	 *
+	 * @since 3.3.4
+	 * @param array<string, string> $actions Existing row actions.
+	 * @param \WP_Post              $post    Current row post.
+	 * @return array<string, string>
+	 */
+	public function addRowAction( array $actions, $post ): array {
+		if ( ! $post instanceof \WP_Post ) {
+			return $actions;
+		}
+
+		if ( 'attachment' === $post->post_type ) {
+			return $actions;
+		}
+
+		if ( ! current_user_can( 'edit_post', $post->ID ) ) {
+			return $actions;
+		}
+
+		if ( ! post_type_supports( $post->post_type, 'thumbnail' ) ) {
+			return $actions;
+		}
+
+		$url = add_query_arg(
+			array(
+				'sim_featured_ai'  => '1',
+				'sim_featured_ids' => (string) (int) $post->ID,
+			)
+		);
+
+		$link = sprintf(
+			'<a href="%1$s" class="sim-generate-featured" data-post-id="%2$d" title="%3$s">%4$s</a>',
+			esc_url( $url ),
+			(int) $post->ID,
+			esc_attr__( 'Generate featured image', 'smart-image-matcher' ),
+			esc_html__( 'Generate', 'smart-image-matcher' )
+		);
+
+		$placed  = false;
+		$updated = array();
+		foreach ( $actions as $key => $html ) {
+			if ( ! $placed && ( 'trash' === $key || 'delete' === $key ) ) {
+				$updated['sim_generate'] = $link;
+				$placed                  = true;
+			}
+			$updated[ $key ] = $html;
+		}
+
+		if ( ! $placed ) {
+			$updated['sim_generate'] = $link;
+		}
+
+		return $updated;
 	}
 
 	/**

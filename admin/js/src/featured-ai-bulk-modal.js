@@ -14,7 +14,7 @@
 	const config = window.smartImageMatcherFeaturedAiBulk || {};
 	const apiFetch = window.wp && window.wp.apiFetch;
 	const nonce = config.nonce || '';
-	const postIds = Array.isArray( config.postIds ) ? config.postIds.map( Number ).filter( Boolean ) : [];
+	let scanPostIds = Array.isArray( config.postIds ) ? config.postIds.map( Number ).filter( Boolean ) : [];
 	const postType = config.postType || 'post';
 	const autoOpen = !! config.autoOpen;
 	const generationReady = !! config.generationReady;
@@ -87,7 +87,7 @@
 	let pollTimer = null;
 	let dismissed = false;
 	let dockExpanded = true;
-	const handledStorageKey = 'sim_featured_ai_handled_' + postIds.slice().sort( ( a, b ) => a - b ).join( ',' );
+	const handledStorageKey = 'sim_featured_ai_handled_' + scanPostIds.slice().sort( ( a, b ) => a - b ).join( ',' );
 
 	function wasBatchHandled() {
 		try {
@@ -485,7 +485,7 @@
 		}
 
 		cleanUrl();
-		if ( generationReady && postIds.length ) {
+		if ( generationReady && scanPostIds.length ) {
 			runScan();
 		} else if ( ! generationReady ) {
 			showNotice( 'warning', i18n.notReady );
@@ -575,7 +575,7 @@
 	}
 
 	async function runScan() {
-		if ( ! apiFetch || ! postIds.length ) {
+		if ( ! apiFetch || ! scanPostIds.length ) {
 			showNotice( 'error', i18n.noApi );
 			return;
 		}
@@ -593,10 +593,10 @@
 				method: 'POST',
 				data: {
 					post_type: postType,
-					post_ids: postIds,
+					post_ids: scanPostIds,
 					post_statuses: [ 'publish', 'draft', 'pending', 'private', 'future' ],
 					style,
-					max_posts: postIds.length,
+					max_posts: scanPostIds.length,
 				},
 			} );
 			scanResult = result;
@@ -870,13 +870,48 @@
 		}
 	}
 
+	function bindRowActions() {
+		document.addEventListener( 'click', ( event ) => {
+			const target = event.target;
+			if ( ! target || ! target.closest ) {
+				return;
+			}
+			const link = target.closest( 'a.sim-generate-featured' );
+			if ( ! link ) {
+				return;
+			}
+			if (
+				0 !== event.button ||
+				event.metaKey ||
+				event.ctrlKey ||
+				event.shiftKey ||
+				event.altKey
+			) {
+				return;
+			}
+			const id = parseInt( link.getAttribute( 'data-post-id' ), 10 );
+			if ( ! id ) {
+				return;
+			}
+			event.preventDefault();
+			scanPostIds = [ id ];
+			if ( activeJobs.length ) {
+				openModal( false );
+				return;
+			}
+			openModal( true );
+		} );
+	}
+
 	async function boot() {
 		if ( ! apiFetch ) {
-			if ( autoOpen && postIds.length ) {
+			if ( autoOpen && scanPostIds.length ) {
 				window.alert( i18n.noApi );
 			}
 			return;
 		}
+
+		bindRowActions();
 
 		// Resume in-flight batch on any posts-list load (pagination / refresh).
 		const resumedLocal = resumeStoredBatch();
@@ -884,7 +919,7 @@
 			await resumeServerBatch();
 		}
 
-		if ( ! autoOpen || ! postIds.length ) {
+		if ( ! autoOpen || ! scanPostIds.length ) {
 			return;
 		}
 

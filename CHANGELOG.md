@@ -7,6 +7,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.3.4] - 01/09/2026
+
+### Added
+
+- Posts list row actions include **Generate** (next to Edit / Quick Edit) so a single post can get a featured image without selecting it and using the bulk actions dropdown.
+
 ## [3.3.3] - 31/08/2026
 
 ### Fixed
