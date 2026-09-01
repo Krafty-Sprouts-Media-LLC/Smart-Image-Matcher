@@ -2,8 +2,7 @@
  * gutenberg.js — Gutenberg sidebar + client-side Abilities.
  *
  * Registers:
- *   - A PluginDocumentSettingPanel with a "Find Images" button.
- *   - A PluginSidebar for extended view.
+ *   - A PluginSidebar (header pin) that opens the matcher modal.
  *   - Client-side Ability: "smart-image-matcher/find-images-for-current-post"
  *   - Client-side Ability: "smart-image-matcher/insert-best-match-for-selected-heading"
  *
@@ -21,9 +20,9 @@
 		return; // Not on a block editor screen.
 	}
 
-	const { registerPlugin }                             = wp.plugins;
-	const { PluginDocumentSettingPanel, PluginSidebar }  = wp.editor;
-	const { PanelBody, Button }                          = wp.components;
+	const { registerPlugin }            = wp.plugins;
+	const { PluginSidebar }             = wp.editor;
+	const { PanelBody, Button }         = wp.components;
 	const { Fragment, createElement }                    = wp.element;
 	const { select }                                     = wp.data;
 	const { __  }                                        = wp.i18n;
@@ -79,33 +78,7 @@
 	}
 
 	// -------------------------------------------------------------------------
-	// Document Settings Panel (visible in the sidebar by default)
-	// -------------------------------------------------------------------------
-
-	const SimDocumentPanel = () =>
-		createElement( PluginDocumentSettingPanel, {
-			name:      'sim-document-panel',
-			title:     __( 'Smart Image Matcher', 'smart-image-matcher' ),
-			icon:      createElement( SimIcon ),
-			className: 'sim-document-panel',
-		},
-			createElement( PanelBody, { initialOpen: true }, [
-				createElement( 'p', {
-					key: 'desc',
-					style: { marginBottom: '12px', fontSize: '12px', color: '#757575' },
-				}, __( 'Automatically match headings to media-library images.', 'smart-image-matcher' ) ),
-
-				createElement( Button, {
-					key:       'btn',
-					isPrimary: true,
-					style:     { width: '100%', justifyContent: 'center' },
-					onClick:   openSimModal,
-				}, __( 'Find Matching Images', 'smart-image-matcher' ) ),
-			] )
-		);
-
-	// -------------------------------------------------------------------------
-	// Full sidebar (accessible from the … menu)
+	// Header pin / complementary sidebar (opens the matcher modal)
 	// -------------------------------------------------------------------------
 
 	const SimSidebarMenuItem = () =>
@@ -144,7 +117,6 @@
 
 	const SimPlugin = () =>
 		createElement( Fragment, null, [
-			createElement( SimDocumentPanel, { key: 'sim-document-panel' } ),
 			createElement( SimSidebar, { key: 'sim-sidebar' } ),
 			SimSidebarMenuItem ? createElement( SimSidebarMenuItem, { key: 'sim-sidebar-menu' } ) : null,
 		] );

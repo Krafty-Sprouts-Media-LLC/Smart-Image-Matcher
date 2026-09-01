@@ -1,14 +1,9 @@
 /**
- * sim-gutenberg.css — Gutenberg sidebar and document panel styles.
+ * sim-gutenberg.css — Gutenberg header pin / plugin sidebar styles.
  *
  * @package SmartImageMatcher
  * @since   3.0.0
  */
-
-/* Document panel button */
-.sim-document-panel .components-button.is-primary {
-	justify-content: center;
-}
 
 /* Plugin icon — WP editor chrome uses a 24px slot */
 .sim-gutenberg-plugin-icon {
@@ -17,15 +12,6 @@
 	width: 24px;
 	height: 24px;
 	margin: 0;
-}
-
-.sim-document-panel .components-panel__icon {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	width: 24px;
-	height: 24px;
-	min-width: 24px;
 }
 
 .interface-complementary-area-header .sim-gutenberg-plugin-icon,

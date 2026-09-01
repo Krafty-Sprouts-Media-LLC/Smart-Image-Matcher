@@ -7,6 +7,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.3.5] - 01/09/2026
+
+### Removed
+
+- Gutenberg Post sidebar no longer has a Smart Image Matcher panel. Use the header pin (same control) to open the matcher.
+
 ## [3.3.4] - 01/09/2026
 
 ### Added

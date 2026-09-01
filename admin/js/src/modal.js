@@ -921,7 +921,7 @@
 			return;
 		}
 
-		// Block editor: keep hidden. Entry point is gutenberg.js sidebar/panel.
+		// Block editor: keep hidden. Entry point is the Gutenberg header pin.
 		if ( document.body.classList.contains( 'block-editor-page' ) ) {
 			container.hidden = true;
 			return;
