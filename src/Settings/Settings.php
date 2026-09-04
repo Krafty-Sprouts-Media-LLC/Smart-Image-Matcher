@@ -82,6 +82,8 @@ class Settings {
 		'ai_featured_image_enabled'  => false,
 		'ai_image_generation_enabled' => false,
 		'ai_image_model'             => \SmartImageMatcher\AI\ImageModelCatalog::DEFAULT_MODEL_ID,
+		'ai_text_model'              => 'mistralai/mistral-nemo',
+		'ai_text_model_backup'       => 'meta-llama/llama-3.1-8b-instruct',
 		'ai_image_subject_gate'      => true,
 		'ai_image_style'             => 'photo',
 		'ai_image_verify_vision'     => false,
@@ -382,6 +384,8 @@ class Settings {
 		$this->addField( 'smart_image_matcher_ai', 'ai_vision_match_enabled', __( 'Vision-based matching', 'smart-image-matcher' ), 'renderAiVisionToggle' );
 		$this->addField( 'smart_image_matcher_ai', 'ai_featured_image_enabled', __( 'Generate featured images (FIAA fallback)', 'smart-image-matcher' ), 'renderAiFeaturedImageToggle' );
 		$this->addField( 'smart_image_matcher_ai', 'ai_image_generation_enabled', __( 'On-demand image generation', 'smart-image-matcher' ), 'renderAiImageGenToggle' );
+		$this->addField( 'smart_image_matcher_ai', 'ai_text_model', __( 'Preferred text model', 'smart-image-matcher' ), 'renderAiTextModelField' );
+		$this->addField( 'smart_image_matcher_ai', 'ai_text_model_backup', __( 'Backup text model', 'smart-image-matcher' ), 'renderAiTextModelBackupField' );
 		$this->addField( 'smart_image_matcher_ai', 'ai_image_model', __( 'Preferred image model', 'smart-image-matcher' ), 'renderAiImageModelSelect' );
 		$this->addField( 'smart_image_matcher_ai', 'ai_image_subject_gate', __( 'Subject gate', 'smart-image-matcher' ), 'renderAiSubjectGateToggle' );
 		$this->addField( 'smart_image_matcher_ai', 'ai_image_style', __( 'Preferred image style', 'smart-image-matcher' ), 'renderAiImageStyleSelect' );
@@ -995,6 +999,44 @@ class Settings {
 	public function renderAiImageGenToggle( array $args ): void {
 		$this->renderCheckbox( array( 'key' => 'ai_image_generation_enabled' ) );
 		echo '<p class="description">' . esc_html__( 'When no suitable match is found for a heading, offer Generate in the modal. Uses image-generation credits via Settings → Connectors.', 'smart-image-matcher' ) . '</p>';
+	}
+
+	/**
+	 * Render preferred text model (OpenRouter / connector slug).
+	 *
+	 * @since 3.4.0
+	 * @param array<string, string> $args Field args.
+	 * @return void
+	 */
+	public function renderAiTextModelField( array $args ): void {
+		$key   = $args['key'];
+		$value = (string) self::get( $key );
+		printf(
+			'<input type="text" class="regular-text" name="%1$s[%2$s]" value="%3$s" />',
+			esc_attr( self::OPTION ),
+			esc_attr( $key ),
+			esc_attr( $value )
+		);
+		echo '<p class="description">' . esc_html__( 'Main OpenRouter model for article matching (example: mistralai/mistral-nemo). Tried first when a text provider is connected. Copy the slug from openrouter.ai.', 'smart-image-matcher' ) . '</p>';
+	}
+
+	/**
+	 * Render backup text model slug.
+	 *
+	 * @since 3.4.0
+	 * @param array<string, string> $args Field args.
+	 * @return void
+	 */
+	public function renderAiTextModelBackupField( array $args ): void {
+		$key   = $args['key'];
+		$value = (string) self::get( $key );
+		printf(
+			'<input type="text" class="regular-text" name="%1$s[%2$s]" value="%3$s" />',
+			esc_attr( self::OPTION ),
+			esc_attr( $key ),
+			esc_attr( $value )
+		);
+		echo '<p class="description">' . esc_html__( 'Used if the main text model is unavailable. Example: meta-llama/llama-3.1-8b-instruct.', 'smart-image-matcher' ) . '</p>';
 	}
 
 	/**

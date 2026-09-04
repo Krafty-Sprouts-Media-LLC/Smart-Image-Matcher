@@ -7,6 +7,23 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.4.1] - 04/09/2026
+
+### Changed
+
+- When a text provider is connected, the article featured-image slot uses the AI score. Title, slug, and focus keyword only build the candidate shortlist. AI failure or an empty ranking no longer slug-assigns a false friend (post “Foxes” will not take `eastern-fox-squirrel.jpg`). Extra article words such as diet or habitat still allow a clean subject file (`american-goldfinch-winter-diet` may use `american-goldfinch.jpg`). Upload-time FIAA stays slug-only so uploads are not blocked on an API call.
+
+## [3.4.0] - 04/09/2026
+
+### Changed
+
+- When a text provider is connected, article heading match and auto-insert use the AI score. Keywords only build the candidate shortlist. AI failure or an empty ranking no longer falls back to a keyword 100% insert (so “Foxes” will not auto-insert `eastern-fox-squirrel.jpg`).
+- The post-edit matcher and the “insert best match for selected heading” command use the same AI path: opening the matcher queues AI ranking (does not run on editor load). No keyword fallback while AI is active. A failed queue returns an error instead of a keyword 100% list.
+
+### Added
+
+- Settings → AI Features: **Preferred text model** (`mistralai/mistral-nemo`) and **Backup text model** (`meta-llama/llama-3.1-8b-instruct`). With [AI Provider for OpenRouter](https://wordpress.org/plugins/ai-provider-for-openrouter/) installed, text calls pin provider `openrouter` and pass those slugs via `using_model_preference()`.
+
 ## [3.3.5] - 01/09/2026
 
 ### Removed

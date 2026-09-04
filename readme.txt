@@ -4,7 +4,7 @@ Tags: images, media library, alt text, featured image, automation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 3.3.5
+Stable tag: 3.4.0
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -95,6 +95,14 @@ No AI data is sent automatically — only when you explicitly trigger AI matchin
 The plugin stores match results and job metadata in your own database only. Update checks may contact GitHub (see External services). No post content leaves your server unless you explicitly use AI features with a configured provider.
 
 == Changelog ==
+
+= 3.4.1 =
+* Featured images on Process articles / on-publish use the same AI ranking as headings when a text provider is connected. Title, slug, and focus keyword only build the shortlist. A rejected or failed AI response does not slug-assign a wrong file. Upload-time FIAA stays slug-only.
+
+= 3.4.0 =
+* When a text provider is connected, article matching and auto-insert use the AI score. Keyword matching only builds the candidate shortlist. A failed or empty AI response no longer auto-inserts a 100% filename hit (Foxes ≠ eastern-fox-squirrel).
+* The post-edit matcher and the selected-heading insert command now queue AI ranking when a text provider is connected (not on editor load).
+* Settings: preferred text model (mistralai/mistral-nemo) and backup (meta-llama/llama-3.1-8b-instruct). With AI Provider for OpenRouter, SIM pins provider `openrouter` and those slugs.
 
 = 3.3.5 =
 * Gutenberg: the Post sidebar Smart Image Matcher panel is gone. Open the matcher from the header pin instead.

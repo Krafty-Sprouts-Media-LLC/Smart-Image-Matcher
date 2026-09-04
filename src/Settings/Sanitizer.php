@@ -104,6 +104,8 @@ class Sanitizer {
 					? $id
 					: \SmartImageMatcher\AI\ImageModelCatalog::DEFAULT_MODEL_ID;
 			} )(),
+			'ai_text_model'              => self::sanitizeTextModelSlug( (string) ( $raw['ai_text_model'] ?? '' ), 'mistralai/mistral-nemo' ),
+			'ai_text_model_backup'       => self::sanitizeTextModelSlug( (string) ( $raw['ai_text_model_backup'] ?? '' ), 'meta-llama/llama-3.1-8b-instruct' ),
 			'ai_image_subject_gate'      => ! empty( $raw['ai_image_subject_gate'] ),
 			'ai_image_style'             => ( static function () use ( $raw ) {
 				$style = sanitize_key( (string) ( $raw['ai_image_style'] ?? 'photo' ) );
@@ -117,6 +119,20 @@ class Sanitizer {
 			} )(),
 			'ai_image_save_prompt_as_description' => ! empty( $raw['ai_image_save_prompt_as_description'] ),
 		);
+	}
+
+	/**
+	 * Allow OpenRouter-style model slugs (provider/model-name).
+	 *
+	 * @since 3.4.0
+	 * @param string $raw     Raw slug.
+	 * @param string $default Fallback when the slug is empty after sanitizing.
+	 * @return string
+	 */
+	private static function sanitizeTextModelSlug( string $raw, string $default ): string {
+		$raw = strtolower( trim( sanitize_text_field( $raw ) ) );
+		$raw = (string) preg_replace( '#[^a-z0-9/._-]#', '', $raw );
+		return '' !== $raw ? $raw : $default;
 	}
 
 	/**

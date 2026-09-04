@@ -77,6 +77,71 @@
 		}
 	}
 
+	function matcherData() {
+		return window.smartImageMatcherData || {};
+	}
+
+	function restNonce() {
+		const data = matcherData();
+		return data.nonces && data.nonces.wpRest ? data.nonces.wpRest : '';
+	}
+
+	function matchMode() {
+		const features = matcherData().features || {};
+		return features.aiMatching ? 'ai' : 'keyword';
+	}
+
+	async function restJson( url, options ) {
+		const resp = await fetch( url, options );
+		const data = await resp.json().catch( () => ( {} ) );
+		if ( ! resp.ok ) {
+			throw new Error( data.message || ( 'HTTP ' + resp.status ) );
+		}
+		return data;
+	}
+
+	async function pollMatchStatus( pollUrl ) {
+		const maxAttempts = 90;
+		for ( let attempt = 0; attempt < maxAttempts; attempt++ ) {
+			await new Promise( ( resolve ) => {
+				window.setTimeout( resolve, 2000 );
+			} );
+			try {
+				const data = await restJson( pollUrl, {
+					credentials: 'same-origin',
+					headers: { 'X-WP-Nonce': restNonce() },
+				} );
+				if ( data.done ) {
+					return data;
+				}
+			} catch ( err ) {
+				// Keep polling through transient network errors.
+			}
+		}
+		throw new Error( __( 'AI matching timed out. Try again.', 'smart-image-matcher' ) );
+	}
+
+	async function requestMatches( postId ) {
+		const data = await restJson(
+			`/wp-json/smart-image-matcher/v1/posts/${ postId }/match`,
+			{
+				method: 'POST',
+				credentials: 'same-origin',
+				headers: {
+					'Content-Type': 'application/json',
+					'X-WP-Nonce': restNonce(),
+				},
+				body: JSON.stringify( { post_id: postId, mode: matchMode() } ),
+			}
+		);
+
+		if ( data.status === 'queued' && data.poll_url ) {
+			return pollMatchStatus( data.poll_url );
+		}
+
+		return data;
+	}
+
 	// -------------------------------------------------------------------------
 	// Header pin / complementary sidebar (opens the matcher modal)
 	// -------------------------------------------------------------------------
@@ -164,23 +229,18 @@
 
 				if ( ! headingText ) return;
 
-				// Call the match REST endpoint, get the top match for this heading, insert.
 				try {
-					const data = await fetch(
-						`/wp-json/smart-image-matcher/v1/posts/${ postId }/match`,
-						{
-							method: 'POST',
-							credentials: 'same-origin',
-							headers: {
-								'Content-Type': 'application/json',
-								'X-WP-Nonce': window.smartImageMatcherData && window.smartImageMatcherData.nonces ? window.smartImageMatcherData.nonces.wpRest : '',
-							},
-							body: JSON.stringify( { post_id: postId, mode: 'keyword' } ),
-						}
-					).then( r => r.json() );
+					if ( matchMode() === 'ai' ) {
+						wp.data.dispatch( 'core/notices' ).createInfoNotice(
+							__( 'AI matching in progress…', 'smart-image-matcher' ),
+							{ id: 'sim-ai-matching', isDismissible: true }
+						);
+					}
+
+					const data = await requestMatches( postId );
+					wp.data.dispatch( 'core/notices' ).removeNotice( 'sim-ai-matching' );
 
 					const groups  = data.matches || [];
-					// Find the group that matches our heading text.
 					const group   = groups.find( g => g.heading && g.heading.text && g.heading.text.trim() === headingText.trim() );
 					const topMatch = group && group.matches && group.matches[0];
 
@@ -192,14 +252,14 @@
 						return;
 					}
 
-					await fetch(
+					await restJson(
 						`/wp-json/smart-image-matcher/v1/posts/${ postId }/insert`,
 						{
 							method: 'POST',
 							credentials: 'same-origin',
 							headers: {
 								'Content-Type': 'application/json',
-								'X-WP-Nonce': window.smartImageMatcherData && window.smartImageMatcherData.nonces ? window.smartImageMatcherData.nonces.wpRest : '',
+								'X-WP-Nonce': restNonce(),
 							},
 							body: JSON.stringify( {
 								post_id:       postId,
@@ -215,8 +275,11 @@
 					);
 
 				} catch ( err ) {
+					wp.data.dispatch( 'core/notices' ).removeNotice( 'sim-ai-matching' );
 					wp.data.dispatch( 'core/notices' ).createErrorNotice(
-						__( 'Smart Image Matcher: failed to insert image.', 'smart-image-matcher' ),
+						err && err.message
+							? err.message
+							: __( 'Smart Image Matcher: failed to insert image.', 'smart-image-matcher' ),
 						{ id: 'sim-insert-error', isDismissible: true }
 					);
 				}

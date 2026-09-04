@@ -1,6 +1,6 @@
 {
     "name": "smart-image-matcher",
-    "version": "3.3.5",
+    "version": "3.4.0",
     "description": "Smart Image Matcher WordPress plugin",
     "private": true,
     "scripts": {

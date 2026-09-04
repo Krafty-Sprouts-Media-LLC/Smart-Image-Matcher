@@ -278,10 +278,30 @@ class Plugin {
 			);
 		}
 
+		if ( class_exists( Premium\ArticleHeadingAiGate::class ) ) {
+			$c->bind(
+				'heading.match.gate',
+				static fn( Container $c ) => new Premium\ArticleHeadingAiGate(
+					$c->get( 'image.repository' )
+				)
+			);
+		}
+
+		if ( class_exists( Premium\ArticleFeaturedAiGate::class ) ) {
+			$c->bind(
+				'featured.match.gate',
+				static fn( Container $c ) => new Premium\ArticleFeaturedAiGate(
+					$c->get( 'image.repository' )
+				)
+			);
+		}
+
 		$c->bind(
 			'article.processor',
 			static function ( Container $c ) {
-				$generation = $c->has( 'generation.fallback' ) ? $c->get( 'generation.fallback' ) : null;
+				$generation     = $c->has( 'generation.fallback' ) ? $c->get( 'generation.fallback' ) : null;
+				$heading_match  = $c->has( 'heading.match.gate' ) ? $c->get( 'heading.match.gate' ) : null;
+				$featured_match = $c->has( 'featured.match.gate' ) ? $c->get( 'featured.match.gate' ) : null;
 				return new ArticleProcessor(
 					$c->get( 'matcher' ),
 					$c->get( 'image.repository' ),
@@ -289,7 +309,9 @@ class Plugin {
 					$c->get( 'insertion.service' ),
 					$c->get( 'match.repository' ),
 					$c->get( 'featured.image.service' ),
-					$generation
+					$generation,
+					$heading_match,
+					$featured_match
 				);
 			}
 		);
@@ -494,6 +516,8 @@ class Plugin {
 					'postId'       => get_the_ID() ?: 0,
 					'debug'        => (bool) Settings::get( 'debug_mode' ),
 					'features'     => array(
+						'aiMatching'        => \SmartImageMatcher\AI\ProviderBridge::isAvailable()
+							&& \SmartImageMatcher\Queue\Queue::isAvailable(),
 						'aiImageGeneration' => (bool) Settings::get( 'ai_image_generation_enabled' )
 							&& \SmartImageMatcher\AI\ProviderBridge::isImageGenerationAvailable(),
 					),

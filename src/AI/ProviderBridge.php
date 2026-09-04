@@ -145,6 +145,19 @@ class ProviderBridge {
 				->using_system_instruction( $systemPrompt )
 				->with_text( $userPrompt );
 
+			// Pin OpenRouter the same way image gen pins fal: slugs like
+			// mistralai/mistral-nemo only resolve on this connector.
+			if ( class_exists( '\WordPress\OpenRouterAiProvider\Provider\OpenRouterProvider' )
+				&& is_object( $builder )
+				&& method_exists( $builder, 'using_provider' ) ) {
+				$builder = $builder->using_provider( 'openrouter' );
+			}
+
+			$prefs = self::textModelPreferences();
+			if ( ! empty( $prefs ) && is_object( $builder ) && method_exists( $builder, 'using_model_preference' ) ) {
+				$builder = $builder->using_model_preference( ...$prefs );
+			}
+
 			if ( null !== $temperature ) {
 				$builder = $builder->using_temperature( $temperature );
 			}
@@ -166,6 +179,25 @@ class ProviderBridge {
 			Logger::error( 'ProviderBridge::generateText() exception', array( 'error' => $e->getMessage() ) );
 			return new \WP_Error( 'smart_image_matcher_ai_exception', $e->getMessage() );
 		}
+	}
+
+	/**
+	 * Preferred then backup text model IDs (OpenRouter slugs or connector IDs).
+	 *
+	 * @since 3.4.0
+	 * @return string[]
+	 */
+	private static function textModelPreferences(): array {
+		$main   = sanitize_text_field( (string) Settings::get( 'ai_text_model' ) );
+		$backup = sanitize_text_field( (string) Settings::get( 'ai_text_model_backup' ) );
+		$prefs  = array();
+		if ( '' !== $main ) {
+			$prefs[] = $main;
+		}
+		if ( '' !== $backup && $backup !== $main ) {
+			$prefs[] = $backup;
+		}
+		return $prefs;
 	}
 
 	// -------------------------------------------------------------------------

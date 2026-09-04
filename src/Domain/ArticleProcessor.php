@@ -81,6 +81,20 @@ class ArticleProcessor {
 	private ?GenerationFallback $generation;
 
 	/**
+	 * Optional AI heading matcher (takes over when a text provider is connected).
+	 *
+	 * @var HeadingMatchGate|null
+	 */
+	private ?HeadingMatchGate $heading_match;
+
+	/**
+	 * Optional AI featured matcher (takes over when a text provider is connected).
+	 *
+	 * @var FeaturedMatchGate|null
+	 */
+	private ?FeaturedMatchGate $featured_match;
+
+	/**
 	 * Constructor.
 	 *
 	 * @since 3.3.0
@@ -90,7 +104,9 @@ class ArticleProcessor {
 	 * @param InsertionService        $insertion  Insertion service.
 	 * @param MatchRepository         $matches    Match persistence.
 	 * @param FeaturedImageService    $featured   Featured-image service.
-	 * @param GenerationFallback|null $generation Optional generation adapter.
+	 * @param GenerationFallback|null $generation    Optional generation adapter.
+	 * @param HeadingMatchGate|null   $heading_match  Optional AI heading matcher.
+	 * @param FeaturedMatchGate|null  $featured_match Optional AI featured matcher.
 	 */
 	public function __construct(
 		Matcher $matcher,
@@ -99,15 +115,19 @@ class ArticleProcessor {
 		InsertionService $insertion,
 		MatchRepository $matches,
 		FeaturedImageService $featured,
-		?GenerationFallback $generation = null
+		?GenerationFallback $generation = null,
+		?HeadingMatchGate $heading_match = null,
+		?FeaturedMatchGate $featured_match = null
 	) {
-		$this->matcher    = $matcher;
-		$this->images     = $images;
-		$this->extractor  = $extractor;
-		$this->insertion  = $insertion;
-		$this->matches    = $matches;
-		$this->featured   = $featured;
-		$this->generation = $generation;
+		$this->matcher        = $matcher;
+		$this->images         = $images;
+		$this->extractor      = $extractor;
+		$this->insertion      = $insertion;
+		$this->matches        = $matches;
+		$this->featured       = $featured;
+		$this->generation     = $generation;
+		$this->heading_match  = $heading_match;
+		$this->featured_match = $featured_match;
 	}
 
 	/**
@@ -181,9 +201,16 @@ class ArticleProcessor {
 			return;
 		}
 
-		$best   = $this->featured->scoreBestForPost( (int) $post->ID );
-		$score  = (int) ( $best['score'] ?? 0 );
-		$image  = (int) ( $best['attachment_id'] ?? 0 );
+		$use_ai = null !== $this->featured_match && $this->featured_match->isAvailable();
+		if ( $use_ai ) {
+			$best  = $this->featured_match->bestMatch( $post );
+			$score = (int) ( $best['score'] ?? 0 );
+			$image = (int) ( $best['image_id'] ?? 0 );
+		} else {
+			$best  = $this->featured->scoreBestForPost( (int) $post->ID );
+			$score = (int) ( $best['score'] ?? 0 );
+			$image = (int) ( $best['attachment_id'] ?? 0 );
+		}
 		$action = MatchDecision::decide( $score, $auto, $review_min, $can_generate );
 
 		$this->applyOutcome(
@@ -196,7 +223,8 @@ class ArticleProcessor {
 			$score,
 			$this->featuredSectionText( $post ),
 			$counts,
-			true
+			true,
+			$use_ai ? 'ai' : 'slug'
 		);
 	}
 
@@ -220,6 +248,7 @@ class ArticleProcessor {
 		$headings  = $this->matcher->filterByHierarchy( $headings, $hierarchy );
 
 		$insertions = array();
+		$use_ai     = null !== $this->heading_match && $this->heading_match->isAvailable();
 
 		foreach ( $headings as $heading ) {
 			$hash = (string) ( $heading['heading_hash'] ?? '' );
@@ -262,7 +291,8 @@ class ArticleProcessor {
 				$score,
 				$this->headingSectionText( $post, $heading ),
 				$counts,
-				false
+				false,
+				$use_ai ? 'ai' : 'keyword'
 			);
 		}
 
@@ -295,7 +325,7 @@ class ArticleProcessor {
 					$item['heading_tag'],
 					$item['image_id'],
 					$item['score'],
-					'keyword'
+					$use_ai ? 'ai' : 'keyword'
 				);
 				++$counts['review'];
 			}
@@ -325,6 +355,7 @@ class ArticleProcessor {
 	 * @param string             $section_text Section excerpt for generation.
 	 * @param array<string, int> $counts       Running counts (by ref).
 	 * @param bool               $is_featured  Whether this is the featured slot.
+	 * @param string             $match_method Optional match method for pending rows.
 	 * @return void
 	 */
 	private function applyOutcome(
@@ -337,8 +368,13 @@ class ArticleProcessor {
 		int $score,
 		string $section_text,
 		array &$counts,
-		bool $is_featured
+		bool $is_featured,
+		string $match_method = ''
 	): void {
+		if ( '' === $match_method ) {
+			$match_method = $is_featured ? 'slug' : 'keyword';
+		}
+
 		if ( MatchDecision::INSERT === $action && $is_featured && $image_id > 0 ) {
 			set_post_thumbnail( (int) $post->ID, $image_id );
 			$this->matches->markInserted( (int) $post->ID, $image_id, $heading_hash );
@@ -354,7 +390,7 @@ class ArticleProcessor {
 				$heading_tag,
 				$image_id,
 				$score,
-				$is_featured ? 'slug' : 'keyword'
+				$match_method
 			);
 			++$counts['review'];
 			return;
@@ -379,6 +415,10 @@ class ArticleProcessor {
 	 * @return array{score:int,image_id:int}
 	 */
 	private function bestHeadingMatch( array $heading ): array {
+		if ( null !== $this->heading_match && $this->heading_match->isAvailable() ) {
+			return $this->heading_match->bestMatch( $heading );
+		}
+
 		$terms      = $this->matcher->extractKeywords( (string) ( $heading['text'] ?? '' ) );
 		$candidates = $this->images->findCandidates( $terms );
 		$best_score = 0;

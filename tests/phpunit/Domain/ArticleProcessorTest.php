@@ -12,7 +12,9 @@ namespace SmartImageMatcher\Tests\Domain;
 
 use PHPUnit\Framework\TestCase;
 use SmartImageMatcher\Domain\ArticleProcessor;
+use SmartImageMatcher\Domain\FeaturedMatchGate;
 use SmartImageMatcher\Domain\GenerationFallback;
+use SmartImageMatcher\Domain\HeadingMatchGate;
 use SmartImageMatcher\Domain\HeadingExtractor;
 use SmartImageMatcher\Domain\ImageRepository;
 use SmartImageMatcher\Domain\Matcher;
@@ -155,6 +157,44 @@ class ArticleProcessorTest extends TestCase {
 	}
 
 	/**
+	 * An available AI gate that scores 0 must not insert a 100% keyword hit.
+	 *
+	 * @return void
+	 */
+	public function test_ai_gate_blocks_keyword_auto_insert_when_model_rejects(): void {
+		$generation = $this->recordingFallback( true );
+		$matches    = $this->createMock( MatchRepository::class );
+		$matches->expects( $this->never() )->method( 'markInserted' );
+		$gate       = $this->recordingHeadingGate( true, 0, 0 );
+		$processor  = $this->processor( 100, 42, false, $generation, $matches, $gate );
+
+		$result = $processor->process( 10 );
+
+		$this->assertSame( 0, $result['inserted'] );
+		$this->assertSame( 1, $result['generated'] );
+	}
+
+	/**
+	 * Adapter that reports unavailable must not be called.
+	 *
+	 * @return void
+	 */
+	public function test_ai_featured_gate_blocks_slug_auto_assign_when_model_rejects(): void {
+		$generation = $this->recordingFallback( true );
+		$matches    = $this->createMock( MatchRepository::class );
+		$matches->expects( $this->never() )->method( 'markInserted' );
+		$gate       = $this->recordingFeaturedGate( true, 0, 0 );
+		$processor  = $this->processor( 0, 0, true, $generation, $matches, null, $gate, true );
+
+		$result = $processor->process( 10 );
+
+		$this->assertSame( 0, $result['inserted'] );
+		$this->assertSame( 1, $result['generated'] );
+		$this->assertCount( 1, $generation->enqueued );
+		$this->assertSame( 'featured', $generation->enqueued[0]['heading_hash'] );
+	}
+
+	/**
 	 * Adapter that reports unavailable must not be called.
 	 *
 	 * @return void
@@ -177,9 +217,12 @@ class ArticleProcessorTest extends TestCase {
 	 * @param bool                    $already_has_image  Heading already has an image.
 	 * @param GenerationFallback|null $generation         Optional adapter.
 	 * @param MatchRepository|null    $matches            Optional match repo mock.
+	 * @param HeadingMatchGate|null   $heading_match      Optional AI heading gate.
+	 * @param FeaturedMatchGate|null  $featured_match     Optional AI featured gate.
+	 * @param bool                    $needs_featured     Whether the featured slot is open.
 	 * @return ArticleProcessor
 	 */
-	private function processor( int $score, int $image_id, bool $already_has_image, ?GenerationFallback $generation, ?MatchRepository $matches = null ): ArticleProcessor {
+	private function processor( int $score, int $image_id, bool $already_has_image, ?GenerationFallback $generation, ?MatchRepository $matches = null, ?HeadingMatchGate $heading_match = null, ?FeaturedMatchGate $featured_match = null, bool $needs_featured = false ): ArticleProcessor {
 		$extractor = $this->createMock( HeadingExtractor::class );
 		$extractor->method( 'extract' )->willReturn( array( $this->heading ) );
 
@@ -209,10 +252,80 @@ class ArticleProcessorTest extends TestCase {
 		}
 
 		$featured = $this->createMock( FeaturedImageService::class );
-		$featured->method( 'needsFeaturedImage' )->willReturn( false );
-		$featured->method( 'scoreBestForPost' )->willReturn( array( 'score' => 0, 'attachment_id' => 0 ) );
+		$featured->method( 'needsFeaturedImage' )->willReturn( $needs_featured );
+		$featured->expects( $needs_featured && null !== $featured_match && $featured_match->isAvailable() ? $this->never() : $this->any() )
+			->method( 'scoreBestForPost' )
+			->willReturn( array( 'score' => 100, 'attachment_id' => 99 ) );
 
-		return new ArticleProcessor( $matcher, $images, $extractor, $insertion, $matches, $featured, $generation );
+		return new ArticleProcessor( $matcher, $images, $extractor, $insertion, $matches, $featured, $generation, $heading_match, $featured_match );
+	}
+
+	/**
+	 * Recording featured match gate.
+	 *
+	 * @param bool $available Whether the gate replaces slug scores.
+	 * @param int  $score     Forced score.
+	 * @param int  $image_id  Forced image id.
+	 * @return FeaturedMatchGate
+	 */
+	private function recordingFeaturedGate( bool $available, int $score, int $image_id ): FeaturedMatchGate {
+		return new class( $available, $score, $image_id ) implements FeaturedMatchGate {
+			private bool $available;
+			private int $score;
+			private int $image_id;
+
+			public function __construct( bool $available, int $score, int $image_id ) {
+				$this->available = $available;
+				$this->score     = $score;
+				$this->image_id  = $image_id;
+			}
+
+			public function isAvailable(): bool {
+				return $this->available;
+			}
+
+			public function bestMatch( \WP_Post $post ): array {
+				unset( $post );
+				return array(
+					'score'    => $this->score,
+					'image_id' => $this->image_id,
+				);
+			}
+		};
+	}
+
+	/**
+	 * Recording heading match gate.
+	 *
+	 * @param bool $available Whether the gate replaces keyword scores.
+	 * @param int  $score     Forced score.
+	 * @param int  $image_id  Forced image id.
+	 * @return HeadingMatchGate
+	 */
+	private function recordingHeadingGate( bool $available, int $score, int $image_id ): HeadingMatchGate {
+		return new class( $available, $score, $image_id ) implements HeadingMatchGate {
+			private bool $available;
+			private int $score;
+			private int $image_id;
+
+			public function __construct( bool $available, int $score, int $image_id ) {
+				$this->available = $available;
+				$this->score     = $score;
+				$this->image_id  = $image_id;
+			}
+
+			public function isAvailable(): bool {
+				return $this->available;
+			}
+
+			public function bestMatch( array $heading ): array {
+				unset( $heading );
+				return array(
+					'score'    => $this->score,
+					'image_id' => $this->image_id,
+				);
+			}
+		};
 	}
 
 	/**

@@ -93,7 +93,7 @@ class MatchController extends Controller {
 	 */
 	public function findMatches( \WP_REST_Request $request ) {
 		$postId = (int) $request->get_param( 'post_id' );
-		$mode   = (string) $request->get_param( 'mode' );
+		$mode   = self::resolveMode( (string) $request->get_param( 'mode' ) );
 
 		$post = get_post( $postId );
 		if ( ! $post instanceof \WP_Post ) {
@@ -135,9 +135,8 @@ class MatchController extends Controller {
 		$hierarchyMode  = (string) Settings::get( 'hierarchy_mode' );
 		$headings       = $matcher->filterByHierarchy( $headings, $hierarchyMode );
 
-		// Score per heading using the inverted index (Phase 3).
-		// For AI mode: enqueue a background job and return a queued status.
-		if ( 'ai' === $mode && \SmartImageMatcher\AI\ProviderBridge::isAvailable() && \SmartImageMatcher\Queue\Queue::isAvailable() ) {
+		// AI mode: queue the job. Keywords only shortlist inside the worker.
+		if ( 'ai' === $mode ) {
 			$actionId = ( new \SmartImageMatcher\Queue\Queue() )->enqueueAiMatch( $postId, 'ai' );
 
 			if ( $actionId ) {
@@ -149,9 +148,15 @@ class MatchController extends Controller {
 					'from_cache' => false,
 				) );
 			}
+
+			return new \WP_Error(
+				'smart_image_matcher_ai_queue_failed',
+				__( 'Could not queue AI matching. Try again in a moment.', 'smart-image-matcher' ),
+				array( 'status' => 503 )
+			);
 		}
 
-		// Keyword mode (or AI mode fallback when AS/provider unavailable).
+		// Keyword mode when no text provider is connected.
 		$repo   = new ImageRepository();
 		$groups = array();
 		foreach ( $headings as $heading ) {
@@ -180,4 +185,23 @@ class MatchController extends Controller {
 		) );
 	}
 
+	/**
+	 * When a text provider and Action Scheduler are ready, AI takes over.
+	 *
+	 * @since 3.4.0
+	 * @param string $requested Requested mode from the client.
+	 * @return string keyword|ai
+	 */
+	public static function resolveMode( string $requested ): string {
+		$requested = sanitize_key( $requested );
+		if ( ! in_array( $requested, array( 'keyword', 'ai' ), true ) ) {
+			$requested = 'keyword';
+		}
+
+		if ( \SmartImageMatcher\AI\ProviderBridge::isAvailable() && Queue::isAvailable() ) {
+			return 'ai';
+		}
+
+		return 'keyword';
+	}
 }

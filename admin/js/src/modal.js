@@ -62,6 +62,8 @@
 	let carouselIndices = {};  // headingHash → current carousel index
 	let focusKeyword = '';
 	let aiImageGeneration = !!( features && features.aiImageGeneration );
+	const aiMatching = !!( features && features.aiMatching );
+	const matchMode = aiMatching ? 'ai' : 'keyword';
 	let aiImageStyle = ( localizedStyle === 'illustration' ) ? 'illustration' : 'photo';
 	let generateAllRunning = false;
 
@@ -146,10 +148,10 @@
 		}
 
 		try {
-			updateProgress( 30, 'Analysing post&hellip;' );
+			updateProgress( 30, aiMatching ? 'Asking the AI to rank matches&hellip;' : 'Analysing post&hellip;' );
 			const data = await request( `${ REST_BASE }/posts/${ postId }/match`, {
 				post_id: postId,
-				mode: 'keyword',
+				mode: matchMode,
 			} );
 			updateProgress( 100 );
 
@@ -170,14 +172,14 @@
 
 	function pollForAiResults( pollUrl ) {
 		let attempts = 0;
-		const maxAttempts = 30; // 30 × 2 s = 60 s timeout
+		const maxAttempts = 90; // 90 × 2 s = 3 min (one OpenRouter call per heading).
 
 		const timer = setInterval( async () => {
 			attempts++;
 
 			if ( attempts > maxAttempts ) {
 				clearInterval( timer );
-				showError( 'AI matching timed out. Try again or switch to Keyword mode.' );
+				showError( 'AI matching timed out. Close the matcher and try again.' );
 				return;
 			}
 

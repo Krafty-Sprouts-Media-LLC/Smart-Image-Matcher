@@ -39,7 +39,8 @@ class JobRunner {
 	/**
 	 * Run an AI match job for a single post.
 	 *
-	 * Uses AI\Matcher for ai mode; falls back to keyword on any AI error.
+	 * Uses AI\Matcher for ai mode. A failed AI call does not fall back to
+	 * keyword scores (that path auto-inserted wrong subjects).
 	 * Stores results as a short-lived transient so the modal can poll for them.
 	 *
 	 * @since 3.0.0
@@ -87,16 +88,19 @@ class JobRunner {
 
 		foreach ( $headings as $heading ) {
 			if ( 'ai' === $mode ) {
-				// AI\Matcher handles the ProviderBridge call and falls back
-				// to keyword internally if AI is unavailable.
 				$aiMatcher = new \SmartImageMatcher\AI\Matcher();
-				$matches   = $aiMatcher->findMatches( $heading, $repo, $threshold );
+				$matches   = $aiMatcher->findMatches( $heading, $repo, $threshold, false );
 
 				if ( is_wp_error( $matches ) ) {
-					// AI unavailable; graceful keyword fallback.
-					$terms   = $kwMatcher->extractKeywords( $heading['text'] ?? '' );
-					$images  = $repo->findCandidates( $terms );
-					$matches = $kwMatcher->findKeywordMatches( $heading, $images );
+					Logger::warn(
+						'JobRunner: AI match failed; not falling back to keywords',
+						array(
+							'post_id' => $postId,
+							'heading' => (string) ( $heading['text'] ?? '' ),
+							'error'   => $matches->get_error_message(),
+						)
+					);
+					$matches = array();
 				}
 			} else {
 				$terms   = $kwMatcher->extractKeywords( $heading['text'] ?? '' );
@@ -325,9 +329,17 @@ class JobRunner {
 	 * @return ArticleProcessor
 	 */
 	private static function makeArticleProcessor(): ArticleProcessor {
-		$generation = null;
+		$generation     = null;
+		$heading_match  = null;
+		$featured_match = null;
 		if ( class_exists( \SmartImageMatcher\Premium\ArticleGenerationFallback::class ) ) {
 			$generation = new \SmartImageMatcher\Premium\ArticleGenerationFallback();
+		}
+		if ( class_exists( \SmartImageMatcher\Premium\ArticleHeadingAiGate::class ) ) {
+			$heading_match = new \SmartImageMatcher\Premium\ArticleHeadingAiGate( new ImageRepository() );
+		}
+		if ( class_exists( \SmartImageMatcher\Premium\ArticleFeaturedAiGate::class ) ) {
+			$featured_match = new \SmartImageMatcher\Premium\ArticleFeaturedAiGate( new ImageRepository() );
 		}
 
 		return new ArticleProcessor(
@@ -337,7 +349,9 @@ class JobRunner {
 			new InsertionService( new BlockBuilder() ),
 			new MatchRepository(),
 			new FeaturedImageService( new SlugMapBuilder() ),
-			$generation
+			$generation,
+			$heading_match,
+			$featured_match
 		);
 	}
 
