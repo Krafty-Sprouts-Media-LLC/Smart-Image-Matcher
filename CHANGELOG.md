@@ -7,6 +7,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.4.2] - 04/09/2026
+
+### Changed
+
+- Settings → AI Features keeps one card. Matching (OpenRouter text), Generation (fal.ai), Vision, and Alt text are labeled groups inside it.
+
 ## [3.4.1] - 04/09/2026
 
 ### Changed

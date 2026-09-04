@@ -4,7 +4,7 @@ Tags: images, media library, alt text, featured image, automation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 3.4.1
+Stable tag: 3.4.2
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -95,6 +95,9 @@ No AI data is sent automatically — only when you explicitly trigger AI matchin
 The plugin stores match results and job metadata in your own database only. Update checks may contact GitHub (see External services). No post content leaves your server unless you explicitly use AI features with a configured provider.
 
 == Changelog ==
+
+= 3.4.2 =
+* Settings → AI Features groups Matching (OpenRouter text), Generation (fal.ai), Vision, and Alt text inside the same card.
 
 = 3.4.1 =
 * Featured images on Process articles / on-publish use the same AI ranking as headings when a text provider is connected. Title, slug, and focus keyword only build the shortlist. A rejected or failed AI response does not slug-assign a wrong file. Upload-time FIAA stays slug-only.

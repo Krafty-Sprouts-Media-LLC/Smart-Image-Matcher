@@ -372,7 +372,7 @@ class Settings {
 		$this->addField( 'smart_image_matcher_developer', 'debug_mode', __( 'Debug Logging', 'smart-image-matcher' ), 'renderCheckbox' );
 		$this->addField( 'smart_image_matcher_developer', 'delete_on_uninstall', __( 'Delete data on uninstall', 'smart-image-matcher' ), 'renderCheckbox' );
 
-		// ---- AI Features section ----
+		// ---- AI Features (one card; groups below are headings inside it) ----
 		add_settings_section(
 			'smart_image_matcher_ai',
 			__( 'AI Features', 'smart-image-matcher' ),
@@ -380,19 +380,53 @@ class Settings {
 			'smart_image_matcher_settings'
 		);
 
-		$this->addField( 'smart_image_matcher_ai', 'ai_alt_text_on_upload', __( 'Auto-generate alt text on upload', 'smart-image-matcher' ), 'renderAiAltTextToggle' );
-		$this->addField( 'smart_image_matcher_ai', 'ai_vision_match_enabled', __( 'Vision-based matching', 'smart-image-matcher' ), 'renderAiVisionToggle' );
-		$this->addField( 'smart_image_matcher_ai', 'ai_featured_image_enabled', __( 'Generate featured images (FIAA fallback)', 'smart-image-matcher' ), 'renderAiFeaturedImageToggle' );
-		$this->addField( 'smart_image_matcher_ai', 'ai_image_generation_enabled', __( 'On-demand image generation', 'smart-image-matcher' ), 'renderAiImageGenToggle' );
-		$this->addField( 'smart_image_matcher_ai', 'ai_text_model', __( 'Preferred text model', 'smart-image-matcher' ), 'renderAiTextModelField' );
-		$this->addField( 'smart_image_matcher_ai', 'ai_text_model_backup', __( 'Backup text model', 'smart-image-matcher' ), 'renderAiTextModelBackupField' );
-		$this->addField( 'smart_image_matcher_ai', 'ai_image_model', __( 'Preferred image model', 'smart-image-matcher' ), 'renderAiImageModelSelect' );
-		$this->addField( 'smart_image_matcher_ai', 'ai_image_subject_gate', __( 'Subject gate', 'smart-image-matcher' ), 'renderAiSubjectGateToggle' );
-		$this->addField( 'smart_image_matcher_ai', 'ai_image_style', __( 'Preferred image style', 'smart-image-matcher' ), 'renderAiImageStyleSelect' );
-		$this->addField( 'smart_image_matcher_ai', 'ai_image_verify_vision', __( 'Vision verification', 'smart-image-matcher' ), 'renderAiVerifyVisionToggle' );
-		$this->addField( 'smart_image_matcher_ai', 'ai_image_auto_featured_on_publish', __( 'Process article on first publish', 'smart-image-matcher' ), 'renderAiAutoFeaturedOnPublishToggle' );
-		$this->addField( 'smart_image_matcher_ai', 'ai_image_alt_mode', __( 'Generated image alt text', 'smart-image-matcher' ), 'renderAiAltModeSelect' );
-		$this->addField( 'smart_image_matcher_ai', 'ai_image_save_prompt_as_description', __( 'Save prompt as media Description', 'smart-image-matcher' ), 'renderAiSavePromptDescriptionToggle' );
+		add_settings_section(
+			'smart_image_matcher_ai_matching',
+			__( 'Matching (OpenRouter text)', 'smart-image-matcher' ),
+			array( $this, 'renderAiMatchingSectionDescription' ),
+			'smart_image_matcher_settings'
+		);
+
+		$this->addField( 'smart_image_matcher_ai_matching', 'ai_text_model', __( 'Matching model (OpenRouter)', 'smart-image-matcher' ), 'renderAiTextModelField' );
+		$this->addField( 'smart_image_matcher_ai_matching', 'ai_text_model_backup', __( 'Backup matching model', 'smart-image-matcher' ), 'renderAiTextModelBackupField' );
+		$this->addField( 'smart_image_matcher_ai_matching', 'ai_image_auto_featured_on_publish', __( 'Process article on first publish', 'smart-image-matcher' ), 'renderAiAutoFeaturedOnPublishToggle' );
+
+		// ---- AI generation (fal.ai) ----
+		add_settings_section(
+			'smart_image_matcher_ai_generation',
+			__( 'Generation (fal.ai)', 'smart-image-matcher' ),
+			array( $this, 'renderAiGenerationSectionDescription' ),
+			'smart_image_matcher_settings'
+		);
+
+		$this->addField( 'smart_image_matcher_ai_generation', 'ai_image_generation_enabled', __( 'On-demand image generation', 'smart-image-matcher' ), 'renderAiImageGenToggle' );
+		$this->addField( 'smart_image_matcher_ai_generation', 'ai_featured_image_enabled', __( 'Generate featured images (FIAA fallback)', 'smart-image-matcher' ), 'renderAiFeaturedImageToggle' );
+		$this->addField( 'smart_image_matcher_ai_generation', 'ai_image_model', __( 'Generation model (fal.ai)', 'smart-image-matcher' ), 'renderAiImageModelSelect' );
+		$this->addField( 'smart_image_matcher_ai_generation', 'ai_image_style', __( 'Generation style', 'smart-image-matcher' ), 'renderAiImageStyleSelect' );
+		$this->addField( 'smart_image_matcher_ai_generation', 'ai_image_subject_gate', __( 'Subject gate', 'smart-image-matcher' ), 'renderAiSubjectGateToggle' );
+		$this->addField( 'smart_image_matcher_ai_generation', 'ai_image_save_prompt_as_description', __( 'Save prompt as media Description', 'smart-image-matcher' ), 'renderAiSavePromptDescriptionToggle' );
+		$this->addField( 'smart_image_matcher_ai_generation', 'ai_image_alt_mode', __( 'Generated image alt text', 'smart-image-matcher' ), 'renderAiAltModeSelect' );
+
+		// ---- AI vision ----
+		add_settings_section(
+			'smart_image_matcher_ai_vision',
+			__( 'Vision', 'smart-image-matcher' ),
+			array( $this, 'renderAiVisionSectionDescription' ),
+			'smart_image_matcher_settings'
+		);
+
+		$this->addField( 'smart_image_matcher_ai_vision', 'ai_vision_match_enabled', __( 'Score library images with vision', 'smart-image-matcher' ), 'renderAiVisionToggle' );
+		$this->addField( 'smart_image_matcher_ai_vision', 'ai_image_verify_vision', __( 'Check generated images with vision', 'smart-image-matcher' ), 'renderAiVerifyVisionToggle' );
+
+		// ---- AI alt text ----
+		add_settings_section(
+			'smart_image_matcher_ai_alt',
+			__( 'Alt text', 'smart-image-matcher' ),
+			array( $this, 'renderAiAltSectionDescription' ),
+			'smart_image_matcher_settings'
+		);
+
+		$this->addField( 'smart_image_matcher_ai_alt', 'ai_alt_text_on_upload', __( 'Auto-generate alt text on upload', 'smart-image-matcher' ), 'renderAiAltTextToggle' );
 	}
 
 	/**
@@ -936,21 +970,76 @@ class Settings {
 	}
 
 	/**
-	 * Render the AI features section description.
+	 * Render the AI Features card intro.
 	 *
 	 * @since 3.0.0
 	 * @return void
 	 */
 	public function renderAiSectionDescription(): void {
+		echo '<p>' . esc_html__( 'Text ranking, image generation, vision, and alt text live in this card. Each group uses a different connector and does a different job.', 'smart-image-matcher' ) . '</p>';
+		$this->renderConnectorsHint( __( 'Providers are configured in', 'smart-image-matcher' ) );
+	}
+
+	/**
+	 * Render the AI matching card intro (OpenRouter text ranking).
+	 *
+	 * @since 3.4.2
+	 * @return void
+	 */
+	public function renderAiMatchingSectionDescription(): void {
+		echo '<p>' . esc_html__( 'Ranks media-library candidates for headings and featured images. Keywords only build a shortlist. These fields pick the OpenRouter text model; they do not turn matching on or off.', 'smart-image-matcher' ) . '</p>';
 		if ( ! \SmartImageMatcher\AI\ProviderBridge::isAvailable() ) {
-			$url = admin_url( 'options-general.php?page=connectors' );
-			printf(
-				'<p>%s <a href="%s">%s</a></p>',
-				esc_html__( 'Configure an AI provider to enable these features.', 'smart-image-matcher' ),
-				esc_url( $url ),
-				esc_html__( 'Settings → Connectors', 'smart-image-matcher' )
-			);
+			$this->renderConnectorsHint( __( 'Connect a text provider to use AI matching.', 'smart-image-matcher' ) );
 		}
+	}
+
+	/**
+	 * Render the AI generation card intro (fal.ai).
+	 *
+	 * @since 3.4.2
+	 * @return void
+	 */
+	public function renderAiGenerationSectionDescription(): void {
+		echo '<p>' . esc_html__( 'Creates new images with fal.ai when the library has no suitable match. Generation model and style apply here, not to heading ranking.', 'smart-image-matcher' ) . '</p>';
+		if ( ! \SmartImageMatcher\AI\ProviderBridge::isImageGenerationAvailable() ) {
+			$this->renderConnectorsHint( __( 'Connect fal.ai to generate images.', 'smart-image-matcher' ) );
+		}
+	}
+
+	/**
+	 * Render the AI vision card intro.
+	 *
+	 * @since 3.4.2
+	 * @return void
+	 */
+	public function renderAiVisionSectionDescription(): void {
+		echo '<p>' . esc_html__( 'Looks at image pixels. Library matching blends vision with keywords. Generated-image verification checks a new fal.ai image against the heading or keyword. Both use extra credits and need a vision-capable connector.', 'smart-image-matcher' ) . '</p>';
+	}
+
+	/**
+	 * Render the AI alt-text card intro.
+	 *
+	 * @since 3.4.2
+	 * @return void
+	 */
+	public function renderAiAltSectionDescription(): void {
+		echo '<p>' . esc_html__( 'Writes alt text for new uploads that have none. Uses the text connector (same family as AI matching), not fal.ai. Alt text for generated images is under AI generation.', 'smart-image-matcher' ) . '</p>';
+	}
+
+	/**
+	 * Print a Settings → Connectors hint after an AI section intro.
+	 *
+	 * @since 3.4.2
+	 * @param string $message Sentence before the Connectors link.
+	 * @return void
+	 */
+	private function renderConnectorsHint( string $message ): void {
+		printf(
+			'<p>%s <a href="%s">%s</a></p>',
+			esc_html( $message ),
+			esc_url( admin_url( 'options-general.php?page=connectors' ) ),
+			esc_html__( 'Settings → Connectors', 'smart-image-matcher' )
+		);
 	}
 
 	/**
@@ -974,7 +1063,7 @@ class Settings {
 	 */
 	public function renderAiVisionToggle( array $args ): void {
 		$this->renderCheckbox( array( 'key' => 'ai_vision_match_enabled' ) );
-		echo '<p class="description">' . esc_html__( 'Blend visual content scoring (60%) with keyword scoring (40%) for higher accuracy. Uses additional AI credits per image scored.', 'smart-image-matcher' ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'Vision matching: blend what the image looks like (60%) with keyword scoring (40%). Uses extra credits per library image scored. Does not generate images.', 'smart-image-matcher' ) . '</p>';
 	}
 
 	/**
@@ -1017,7 +1106,7 @@ class Settings {
 			esc_attr( $key ),
 			esc_attr( $value )
 		);
-		echo '<p class="description">' . esc_html__( 'Main OpenRouter model for article matching (example: mistralai/mistral-nemo). Tried first when a text provider is connected. Copy the slug from openrouter.ai.', 'smart-image-matcher' ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'OpenRouter slug for heading and featured ranking (example: mistralai/mistral-nemo). Tried first. Copy the slug from openrouter.ai.', 'smart-image-matcher' ) . '</p>';
 	}
 
 	/**
@@ -1036,7 +1125,7 @@ class Settings {
 			esc_attr( $key ),
 			esc_attr( $value )
 		);
-		echo '<p class="description">' . esc_html__( 'Used if the main text model is unavailable. Example: meta-llama/llama-3.1-8b-instruct.', 'smart-image-matcher' ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'Fallback OpenRouter slug if the matching model is unavailable. Example: meta-llama/llama-3.1-8b-instruct.', 'smart-image-matcher' ) . '</p>';
 	}
 
 	/**
@@ -1064,7 +1153,7 @@ class Settings {
 		}
 		echo '</select>';
 		echo '<p class="description">' . esc_html__(
-			'Used for on-demand Generate and AI featured-image fallback. Requires fal.ai connected under Settings → Connectors. Visual briefs still need a separate text provider.',
+			'fal.ai model for on-demand Generate and featured-image fallback. Not used for heading ranking. Visual briefs still need a separate text provider.',
 			'smart-image-matcher'
 		) . '</p>';
 	}
@@ -1119,7 +1208,7 @@ class Settings {
 	 */
 	public function renderAiVerifyVisionToggle( array $args ): void {
 		$this->renderCheckbox( array( 'key' => 'ai_image_verify_vision' ) );
-		echo '<p class="description">' . esc_html__( 'After generation, score the image against the focus keyword or heading with vision AI. Failed checks stay in the modal for review instead of auto-approving. Uses additional AI credits per image.', 'smart-image-matcher' ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'Vision verification: after fal.ai generation, score the new image against the heading or keyword. Failed checks stay in the modal for review. Uses extra credits per generated image.', 'smart-image-matcher' ) . '</p>';
 	}
 
 	/**

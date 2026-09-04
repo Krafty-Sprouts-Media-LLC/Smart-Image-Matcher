@@ -30,7 +30,53 @@ $smart_image_matcher_settings_sections = array(
 	'smart_image_matcher_developer'   => __( 'Developer', 'smart-image-matcher' ),
 );
 
-$smart_image_matcher_render_settings_section = static function ( string $section_id ) use ( $wp_settings_sections, $wp_settings_fields ): void {
+$smart_image_matcher_settings_groups = array(
+	'smart_image_matcher_ai' => array(
+		'smart_image_matcher_ai_matching',
+		'smart_image_matcher_ai_generation',
+		'smart_image_matcher_ai_vision',
+		'smart_image_matcher_ai_alt',
+	),
+);
+
+$smart_image_matcher_render_fields = static function ( array $fields ): void {
+	if ( empty( $fields ) ) {
+		return;
+	}
+	?>
+	<table class="form-table sim-form-table" role="presentation">
+		<tbody>
+			<?php foreach ( $fields as $field ) : ?>
+				<?php $field_args = isset( $field['args'] ) && is_array( $field['args'] ) ? $field['args'] : array(); ?>
+				<tr>
+					<th scope="row">
+						<?php
+						if ( ! empty( $field_args['label_for'] ) ) {
+							printf(
+								'<label for="%1$s">%2$s</label>',
+								esc_attr( (string) $field_args['label_for'] ),
+								esc_html( (string) $field['title'] )
+							);
+						} else {
+							echo esc_html( (string) $field['title'] );
+						}
+						?>
+					</th>
+					<td>
+						<?php
+						if ( isset( $field['callback'] ) && is_callable( $field['callback'] ) ) {
+							call_user_func( $field['callback'], $field_args );
+						}
+						?>
+					</td>
+				</tr>
+			<?php endforeach; ?>
+		</tbody>
+	</table>
+	<?php
+};
+
+$smart_image_matcher_render_group = static function ( string $section_id ) use ( $wp_settings_sections, $wp_settings_fields, $smart_image_matcher_render_fields ): void {
 	$section = $wp_settings_sections['smart_image_matcher_settings'][ $section_id ] ?? null;
 
 	if ( ! is_array( $section ) ) {
@@ -39,6 +85,31 @@ $smart_image_matcher_render_settings_section = static function ( string $section
 
 	$title  = isset( $section['title'] ) ? (string) $section['title'] : '';
 	$fields = $wp_settings_fields['smart_image_matcher_settings'][ $section_id ] ?? array();
+	?>
+	<div class="sim-settings-group" id="<?php echo esc_attr( $section_id ); ?>">
+		<?php if ( '' !== $title ) : ?>
+			<h3><?php echo esc_html( $title ); ?></h3>
+		<?php endif; ?>
+		<?php
+		if ( isset( $section['callback'] ) && is_callable( $section['callback'] ) ) {
+			call_user_func( $section['callback'], $section );
+		}
+		$smart_image_matcher_render_fields( $fields );
+		?>
+	</div>
+	<?php
+};
+
+$smart_image_matcher_render_settings_section = static function ( string $section_id ) use ( $wp_settings_sections, $wp_settings_fields, $smart_image_matcher_settings_groups, $smart_image_matcher_render_fields, $smart_image_matcher_render_group ): void {
+	$section = $wp_settings_sections['smart_image_matcher_settings'][ $section_id ] ?? null;
+
+	if ( ! is_array( $section ) ) {
+		return;
+	}
+
+	$title  = isset( $section['title'] ) ? (string) $section['title'] : '';
+	$fields = $wp_settings_fields['smart_image_matcher_settings'][ $section_id ] ?? array();
+	$groups = $smart_image_matcher_settings_groups[ $section_id ] ?? array();
 	?>
 	<section class="sim-card sim-settings-section" id="<?php echo esc_attr( $section_id ); ?>">
 		<div class="sim-section-head">
@@ -50,37 +121,15 @@ $smart_image_matcher_render_settings_section = static function ( string $section
 			?>
 		</div>
 
-		<?php if ( ! empty( $fields ) ) : ?>
-			<table class="form-table sim-form-table" role="presentation">
-				<tbody>
-					<?php foreach ( $fields as $field ) : ?>
-						<?php $field_args = isset( $field['args'] ) && is_array( $field['args'] ) ? $field['args'] : array(); ?>
-						<tr>
-							<th scope="row">
-								<?php
-								if ( ! empty( $field_args['label_for'] ) ) {
-									printf(
-										'<label for="%1$s">%2$s</label>',
-										esc_attr( (string) $field_args['label_for'] ),
-										esc_html( (string) $field['title'] )
-									);
-								} else {
-									echo esc_html( (string) $field['title'] );
-								}
-								?>
-							</th>
-							<td>
-								<?php
-								if ( isset( $field['callback'] ) && is_callable( $field['callback'] ) ) {
-									call_user_func( $field['callback'], $field_args );
-								}
-								?>
-							</td>
-						</tr>
-					<?php endforeach; ?>
-				</tbody>
-			</table>
-		<?php endif; ?>
+		<?php
+		if ( ! empty( $groups ) ) {
+			foreach ( $groups as $group_id ) {
+				$smart_image_matcher_render_group( $group_id );
+			}
+		} else {
+			$smart_image_matcher_render_fields( $fields );
+		}
+		?>
 	</section>
 	<?php
 };

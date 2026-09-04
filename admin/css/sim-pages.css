@@ -838,12 +838,43 @@ a.sim-metric-link:focus {
 	color: #646970;
 }
 
+/* stylelint-disable-next-line no-descending-specificity */
+.sim-section-head p + p {
+	margin-top: 8px;
+}
+
+.sim-settings-group {
+	border-top: 1px solid #f0f0f1;
+	margin-top: 16px;
+	padding-top: 16px;
+}
+
+.sim-settings-section > .sim-settings-group:first-of-type {
+	border-top: 0;
+	margin-top: 8px;
+	padding-top: 8px;
+}
+
+.sim-settings-group h3 {
+	color: #1d2327;
+	font-size: 14px;
+	font-weight: 650;
+	line-height: 1.4;
+	margin: 0 0 4px;
+}
+
+/* stylelint-disable-next-line no-descending-specificity */
+.sim-settings-group p {
+	color: #646970;
+	margin: 0 0 8px;
+}
+
 .sim-form-table {
 	margin-top: 0;
 }
 
 .sim-form-table th {
-	width: 230px;
+	width: 260px;
 	padding-left: 0;
 }
 
