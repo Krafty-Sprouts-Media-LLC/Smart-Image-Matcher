@@ -214,12 +214,11 @@ unset( $post_types['attachment'] );
 
 				<div class="sim-card-body">
 					<div class="sim-fiaa-notice-box">
-						<p><?php esc_html_e( 'Add one filename or slug per line. Example: fly-fishing or fly-fishing.jpg. Those images will not be auto-assigned on upload, Match Runner, or scheduled runs.', 'smart-image-matcher' ); ?></p>
+						<p><?php esc_html_e( 'Add a filename (Types-of-Sparrows.jpg) or a full uploads URL. Those images will not be assigned as featured images. They can still be used next to headings.', 'smart-image-matcher' ); ?></p>
 						<p><?php esc_html_e( 'After saving, use Fix Incorrect Featured Images below to find and clear posts that already use an excluded image.', 'smart-image-matcher' ); ?></p>
 					</div>
 
-					<label class="screen-reader-text" for="sim-fiaa-excluded-slugs"><?php esc_html_e( 'Excluded image filenames', 'smart-image-matcher' ); ?></label>
-					<textarea id="sim-fiaa-excluded-slugs" class="large-text code" rows="5" placeholder="<?php esc_attr_e( 'fly-fishing', 'smart-image-matcher' ); ?>"><?php echo esc_textarea( $excluded_image_slugs ); ?></textarea>
+					<?php Settings::renderExcludedImageEditor( 'sim_fiaa_excluded_slugs', 'sim-fiaa-excluded-slugs', $excluded_image_slugs ); ?>
 
 					<div class="sim-form-actions">
 						<button type="button" id="sim-fiaa-exclusions-save-button" class="button button-secondary">

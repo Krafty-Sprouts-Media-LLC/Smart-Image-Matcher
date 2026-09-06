@@ -99,15 +99,16 @@ class MatcherTest extends TestCase {
 	}
 
 	/** @test */
-	public function excluded_filename_scores_zero(): void {
+	public function excluded_filename_still_scores_for_heading_matches(): void {
 		$GLOBALS['sim_test_options']['smart_image_matcher_settings'] = array(
-			'fiaa_excluded_image_slugs' => 'types-of-sparrows',
+			'fiaa_excluded_image_slugs' => 'types-of-sparrows.jpg',
 		);
 
 		$score = $this->matcher->calculateScore(
 			array( 'types', 'of', 'sparrows' ),
 			$this->image( 'Types-of-Sparrows.jpg' )
 		);
-		$this->assertSame( 0, $score );
+		$this->assertGreaterThan( 0, $score );
+		unset( $GLOBALS['sim_test_options']['smart_image_matcher_settings'] );
 	}
 }

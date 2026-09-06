@@ -25,7 +25,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 use SmartImageMatcher\Logging\Logger;
-use SmartImageMatcher\Settings\Sanitizer;
 
 /**
  * Class ImageRepository
@@ -101,24 +100,7 @@ class ImageRepository {
 		// Re-sort by score descending (fetchMetadata preserves original order).
 		usort( $metadata, static fn( $a, $b ) => $b['match_score'] - $a['match_score'] );
 
-		$sanitizer = new Sanitizer();
-
-		return array_values(
-			array_filter(
-				$metadata,
-				static function ( array $row ) use ( $sanitizer ): bool {
-					$filename = (string) ( $row['filename'] ?? '' );
-					$url      = (string) ( $row['url'] ?? '' );
-					if ( '' !== $filename && $sanitizer->isExcludedImageSlug( $filename ) ) {
-						return false;
-					}
-					if ( '' !== $url && $sanitizer->isExcludedImageSlug( $url ) ) {
-						return false;
-					}
-					return true;
-				}
-			)
-		);
+		return array_values( $metadata );
 	}
 
 	// -------------------------------------------------------------------------

@@ -869,6 +869,59 @@ a.sim-metric-link:focus {
 	margin: 0 0 8px;
 }
 
+.sim-exclude-editor {
+	max-width: 560px;
+}
+
+.sim-exclude-editor-add {
+	align-items: center;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.sim-exclude-editor-input {
+	flex: 1 1 220px;
+	margin: 0;
+	min-width: 0;
+}
+
+.sim-exclude-editor-list {
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	list-style: none;
+	margin: 10px 0 0;
+	max-height: 220px;
+	overflow: auto;
+	padding: 0;
+}
+
+.sim-exclude-editor-item {
+	align-items: center;
+	border-bottom: 1px solid #f0f0f1;
+	display: flex;
+	gap: 12px;
+	justify-content: space-between;
+	padding: 7px 10px;
+}
+
+.sim-exclude-editor-item:last-child {
+	border-bottom: 0;
+}
+
+/* stylelint-disable-next-line no-descending-specificity */
+.sim-exclude-editor-item code {
+	background: none;
+	font-size: 12px;
+	padding: 0;
+	word-break: break-all;
+}
+
+.sim-exclude-editor-empty {
+	margin: 8px 0 0;
+}
+
 .sim-form-table {
 	margin-top: 0;
 }

@@ -249,6 +249,7 @@ class ArticleProcessor {
 
 		$insertions = array();
 		$use_ai     = null !== $this->heading_match && $this->heading_match->isAvailable();
+		$used_ids   = $this->insertion->attachmentIdsInContent( (int) $post->ID );
 
 		foreach ( $headings as $heading ) {
 			$hash = (string) ( $heading['heading_hash'] ?? '' );
@@ -263,7 +264,7 @@ class ArticleProcessor {
 				continue;
 			}
 
-			$best   = $this->bestHeadingMatch( $heading );
+			$best   = $this->bestHeadingMatch( $heading, $used_ids );
 			$score  = (int) $best['score'];
 			$image  = (int) $best['image_id'];
 			$action = MatchDecision::decide( $score, $auto, $review_min, $can_generate );
@@ -271,7 +272,8 @@ class ArticleProcessor {
 			$tag    = (string) ( $heading['tag'] ?? 'h2' );
 
 			if ( MatchDecision::INSERT === $action && $image > 0 ) {
-				$insertions[] = array(
+				$used_ids[ $image ] = $image;
+				$insertions[]       = array(
 					'heading_hash' => $hash,
 					'image_id'     => $image,
 					'heading_text' => $text,
@@ -279,6 +281,10 @@ class ArticleProcessor {
 					'score'        => $score,
 				);
 				continue;
+			}
+
+			if ( MatchDecision::REVIEW === $action && $image > 0 ) {
+				$used_ids[ $image ] = $image;
 			}
 
 			$this->applyOutcome(
@@ -411,12 +417,21 @@ class ArticleProcessor {
 	/**
 	 * Best keyword score for a heading without applying the review floor.
 	 *
-	 * @param array<string, mixed> $heading Heading descriptor.
+	 * @param array<string, mixed> $heading     Heading descriptor.
+	 * @param array<int, int>      $exclude_ids Attachment IDs already used in this article.
 	 * @return array{score:int,image_id:int}
 	 */
-	private function bestHeadingMatch( array $heading ): array {
+	private function bestHeadingMatch( array $heading, array $exclude_ids = array() ): array {
+		$skip = array();
+		foreach ( $exclude_ids as $exclude_id ) {
+			$id = (int) $exclude_id;
+			if ( $id > 0 ) {
+				$skip[ $id ] = true;
+			}
+		}
+
 		if ( null !== $this->heading_match && $this->heading_match->isAvailable() ) {
-			return $this->heading_match->bestMatch( $heading );
+			return $this->heading_match->bestMatch( $heading, array_keys( $skip ) );
 		}
 
 		$terms      = $this->matcher->extractKeywords( (string) ( $heading['text'] ?? '' ) );
@@ -425,10 +440,14 @@ class ArticleProcessor {
 		$best_id    = 0;
 
 		foreach ( $candidates as $image ) {
+			$id = (int) ( $image['id'] ?? 0 );
+			if ( $id > 0 && isset( $skip[ $id ] ) ) {
+				continue;
+			}
 			$score = $this->matcher->calculateScore( $terms, $image );
 			if ( $score > $best_score ) {
 				$best_score = $score;
-				$best_id    = (int) ( $image['id'] ?? 0 );
+				$best_id    = $id;
 			}
 		}
 

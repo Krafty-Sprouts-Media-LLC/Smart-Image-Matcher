@@ -21,7 +21,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-use SmartImageMatcher\Settings\Sanitizer;
 use SmartImageMatcher\Settings\Settings;
 
 /**
@@ -111,9 +110,6 @@ class Matcher {
 
 		$scored = array();
 		foreach ( $images as $image ) {
-			if ( $this->isExcludedImage( $image ) ) {
-				continue;
-			}
 			$score = $this->calculateScore( $keywords, $image );
 			if ( $score >= $threshold ) {
 				$scored[] = array(
@@ -142,10 +138,6 @@ class Matcher {
 	 */
 	public function calculateScore( array $keywords, array $image ): int {
 		if ( empty( $keywords ) ) {
-			return 0;
-		}
-
-		if ( $this->isExcludedImage( $image ) ) {
 			return 0;
 		}
 
@@ -291,32 +283,6 @@ class Matcher {
 	// -------------------------------------------------------------------------
 	// Private helpers
 	// -------------------------------------------------------------------------
-
-	/**
-	 * Whether this image is on the excluded-filename blocklist.
-	 *
-	 * @since 3.3.2
-	 * @param array<string, mixed> $image Image metadata row.
-	 * @return bool
-	 */
-	private function isExcludedImage( array $image ): bool {
-		$sanitizer = new Sanitizer();
-		$filename  = (string) ( $image['filename'] ?? '' );
-		$url       = (string) ( $image['url'] ?? '' );
-		$slug      = (string) ( $image['slug'] ?? $image['post_name'] ?? '' );
-
-		if ( '' !== $filename && $sanitizer->isExcludedImageSlug( $filename ) ) {
-			return true;
-		}
-		if ( '' !== $url && $sanitizer->isExcludedImageSlug( $url ) ) {
-			return true;
-		}
-		if ( '' !== $slug && $sanitizer->isExcludedImageSlug( $slug ) ) {
-			return true;
-		}
-
-		return false;
-	}
 
 	/**
 	 * Count how many heading keywords match any word in a field's word list.

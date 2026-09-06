@@ -453,6 +453,19 @@ class Plugin {
 			);
 		}
 
+		if (
+			false !== strpos( $hook, 'smart-image-matcher-settings' )
+			|| false !== strpos( $hook, 'smart-image-matcher-featured-images' )
+		) {
+			wp_enqueue_script(
+				'smart-image-matcher-exclude-list',
+				SMART_IMAGE_MATCHER_PLUGIN_URL . 'admin/js/src/exclude-list.js',
+				array(),
+				SMART_IMAGE_MATCHER_VERSION,
+				true
+			);
+		}
+
 		// Post edit screens — modal.
 		if ( in_array( $hook, array( 'post.php', 'post-new.php' ), true ) ) {
 			wp_enqueue_style(
@@ -531,7 +544,7 @@ class Plugin {
 			wp_enqueue_script(
 				'smart-image-matcher-featured-images',
 				SMART_IMAGE_MATCHER_PLUGIN_URL . 'admin/js/src/featured-images.js',
-				array( 'wp-api-fetch' ),
+				array( 'wp-api-fetch', 'smart-image-matcher-exclude-list' ),
 				SMART_IMAGE_MATCHER_VERSION,
 				true
 			);

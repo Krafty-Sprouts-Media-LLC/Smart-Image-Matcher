@@ -440,6 +440,7 @@
 
 			if ( saved && 'string' === typeof saved.excluded_image_slugs ) {
 				textarea.value = saved.excluded_image_slugs;
+				textarea.dispatchEvent( new Event( 'sim-exclude-refresh' ) );
 			}
 
 			showNotice( 'success', i18n.exclusionsSaved, 'exclusions' );

@@ -151,7 +151,7 @@ class BulkProcessor {
 					'approved'          => __( 'Approved', 'smart-image-matcher' ),
 					'rejected'          => __( 'Rejected', 'smart-image-matcher' ),
 					'neverUse'          => __( 'Never use', 'smart-image-matcher' ),
-					'confirmNeverUse'   => __( 'Block %s from all future matching (featured and in-article)? Open review slots that use this file will be rejected.', 'smart-image-matcher' ),
+					'confirmNeverUse'   => __( 'Block %s from featured-image auto-assign? Other heading review slots keep this file. Existing featured assignments are flagged by Fix Incorrect Featured Images.', 'smart-image-matcher' ),
 				),
 			)
 		);

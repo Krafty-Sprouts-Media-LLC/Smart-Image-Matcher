@@ -136,11 +136,12 @@ class Sanitizer {
 	}
 
 	/**
-	 * Sanitize excluded image filenames/slugs into a newline-separated list.
+	 * Sanitize excluded image filenames into a newline-separated list.
 	 *
 	 * Accepts newlines or commas. Full media URLs keep the filename.
-	 * Strips extensions and normalizes to attachment-style slugs
-	 * (e.g. Types-of-Sparrows.jpg → types-of-sparrows).
+	 * Stores the filename with extension when known (e.g. Types-of-Sparrows.jpg
+	 * → types-of-sparrows.jpg) so the list is not confused with post slugs.
+	 * Comparison still ignores case, extension, and WordPress size/copy suffixes.
 	 *
 	 * @since 3.0.9
 	 * @param mixed $value Raw value.
@@ -158,16 +159,20 @@ class Sanitizer {
 			return '';
 		}
 
-		$slugs = array();
+		$labels = array();
 		foreach ( $parts as $part ) {
-			$slug = $this->peelWpMediaCopySuffix( $this->normalizeImageSlug( (string) $part ) );
-			if ( '' === $slug ) {
+			$key = $this->peelWpMediaCopySuffix( $this->normalizeImageSlug( (string) $part ) );
+			if ( '' === $key ) {
 				continue;
 			}
-			$slugs[ $slug ] = $slug;
+			$label = $this->excludedImageDisplayName( (string) $part, $key );
+			if ( isset( $labels[ $key ] ) && $this->hasImageExtension( $labels[ $key ] ) && ! $this->hasImageExtension( $label ) ) {
+				continue;
+			}
+			$labels[ $key ] = $label;
 		}
 
-		return implode( "\n", array_values( $slugs ) );
+		return implode( "\n", array_values( $labels ) );
 	}
 
 	/**
@@ -213,6 +218,129 @@ class Sanitizer {
 		} while ( $slug !== $prev && '' !== $slug );
 		$slug = (string) preg_replace( '/[^a-z0-9]+/', '-', $slug );
 		return trim( $slug, '-' );
+	}
+
+	/**
+	 * Filename shown in the exclusion list (keeps the extension when known).
+	 *
+	 * @since 3.4.3
+	 * @param string $raw             Raw filename, slug, or URL.
+	 * @param string $normalized_slug Attachment-style slug used for matching.
+	 * @return string
+	 */
+	private function excludedImageDisplayName( string $raw, string $normalized_slug ): string {
+		$base = $this->basenameKeepingExtension( $raw );
+		if ( $this->hasImageExtension( $base ) ) {
+			return $this->canonicalizeExcludedFilename( $base );
+		}
+
+		$from_media = $this->attachmentFilenameForSlug( $normalized_slug );
+		if ( '' !== $from_media ) {
+			return $from_media;
+		}
+
+		return $normalized_slug;
+	}
+
+	/**
+	 * Basename from a filename, slug, or URL, keeping any file extension.
+	 *
+	 * @since 3.4.3
+	 * @param string $raw Raw value.
+	 * @return string
+	 */
+	private function basenameKeepingExtension( string $raw ): string {
+		$slug = trim( $raw );
+		if ( '' === $slug ) {
+			return '';
+		}
+
+		if ( preg_match( '#^https?://#i', $slug ) ) {
+			$path = function_exists( 'wp_parse_url' ) ? wp_parse_url( $slug, PHP_URL_PATH ) : parse_url( $slug, PHP_URL_PATH );
+			$slug = is_string( $path ) && '' !== $path ? $path : $slug;
+		}
+
+		if ( false !== strpos( $slug, '/' ) || false !== strpos( $slug, '\\' ) ) {
+			$slug = str_replace( '\\', '/', $slug );
+			$slug = function_exists( 'wp_basename' ) ? wp_basename( $slug ) : basename( $slug );
+		}
+
+		return $slug;
+	}
+
+	/**
+	 * Lowercase filename and strip WordPress size/copy suffixes from the stem.
+	 *
+	 * @since 3.4.3
+	 * @param string $filename Filename with extension.
+	 * @return string
+	 */
+	private function canonicalizeExcludedFilename( string $filename ): string {
+		$filename = strtolower( trim( $filename ) );
+		if ( ! preg_match( '/\.([a-z0-9]{2,5})$/', $filename, $matches ) ) {
+			return $filename;
+		}
+
+		$ext  = $matches[1];
+		$stem = substr( $filename, 0, - ( strlen( $ext ) + 1 ) );
+		do {
+			$prev = $stem;
+			$stem = (string) preg_replace( '/-(?:scaled|\d+x\d+)$/', '', $stem );
+		} while ( $stem !== $prev && '' !== $stem );
+
+		$stem = $this->peelWpMediaCopySuffix( $stem );
+		if ( '' === $stem ) {
+			return $filename;
+		}
+
+		return $stem . '.' . $ext;
+	}
+
+	/**
+	 * Whether a name still has a common image extension.
+	 *
+	 * @since 3.4.3
+	 * @param string $name Filename or slug.
+	 * @return bool
+	 */
+	private function hasImageExtension( string $name ): bool {
+		return (bool) preg_match( '/\.(jpe?g|png|gif|webp|avif|svg|bmp)$/i', $name );
+	}
+
+	/**
+	 * Look up the media-library filename for an attachment slug.
+	 *
+	 * @since 3.4.3
+	 * @param string $slug Attachment post_name.
+	 * @return string Filename with extension, or empty.
+	 */
+	private function attachmentFilenameForSlug( string $slug ): string {
+		if ( '' === $slug || ! function_exists( 'get_posts' ) || ! function_exists( 'get_attached_file' ) ) {
+			return '';
+		}
+
+		$found = get_posts(
+			array(
+				'post_type'              => 'attachment',
+				'name'                   => $slug,
+				'post_status'            => 'inherit',
+				'posts_per_page'         => 1,
+				'no_found_rows'          => true,
+				'update_post_meta_cache' => false,
+				'update_post_term_cache' => false,
+			)
+		);
+		if ( empty( $found ) || ! isset( $found[0]->ID ) ) {
+			return '';
+		}
+
+		$file = get_attached_file( (int) $found[0]->ID );
+		if ( ! is_string( $file ) || '' === $file ) {
+			return '';
+		}
+
+		$base = function_exists( 'wp_basename' ) ? wp_basename( $file ) : basename( $file );
+		return $this->canonicalizeExcludedFilename( (string) $base );
 	}
 
 	/**

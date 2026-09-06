@@ -176,6 +176,76 @@ class InsertionService {
 		return $this->htmlHeadingHasFollowingImage( $content, $heading_hash );
 	}
 
+	/**
+	 * Attachment IDs already present in the post (image blocks, galleries, classic markup).
+	 *
+	 * @since 3.4.3
+	 * @param int $post_id Post ID.
+	 * @return array<int, int> Map of attachment ID => attachment ID.
+	 */
+	public function attachmentIdsInContent( int $post_id ): array {
+		$post = get_post( $post_id );
+		if ( ! $post instanceof \WP_Post ) {
+			return array();
+		}
+
+		$content = (string) $post->post_content;
+		if ( '' === $content ) {
+			return array();
+		}
+
+		$ids = array();
+		if ( function_exists( 'has_blocks' ) && has_blocks( $content ) && function_exists( 'parse_blocks' ) ) {
+			$this->collectBlockAttachmentIds( parse_blocks( $content ), $ids );
+		}
+
+		if ( preg_match_all( '/wp-image-(\d+)/', $content, $matches ) ) {
+			foreach ( $matches[1] as $raw_id ) {
+				$id = (int) $raw_id;
+				if ( $id > 0 ) {
+					$ids[ $id ] = $id;
+				}
+			}
+		}
+
+		return $ids;
+	}
+
+	/**
+	 * Collect core/image and core/gallery attachment IDs from a block tree.
+	 *
+	 * @since 3.4.3
+	 * @param array<int, array<string, mixed>> $blocks Block tree.
+	 * @param array<int, int>                  $ids    Collected IDs (by ref).
+	 * @return void
+	 */
+	private function collectBlockAttachmentIds( array $blocks, array &$ids ): void {
+		foreach ( $blocks as $block ) {
+			$name = isset( $block['blockName'] ) ? (string) $block['blockName'] : '';
+			$attrs = isset( $block['attrs'] ) && is_array( $block['attrs'] ) ? $block['attrs'] : array();
+
+			if ( 'core/image' === $name ) {
+				$id = isset( $attrs['id'] ) ? (int) $attrs['id'] : 0;
+				if ( $id > 0 ) {
+					$ids[ $id ] = $id;
+				}
+			}
+
+			if ( 'core/gallery' === $name && isset( $attrs['ids'] ) && is_array( $attrs['ids'] ) ) {
+				foreach ( $attrs['ids'] as $raw_id ) {
+					$id = (int) $raw_id;
+					if ( $id > 0 ) {
+						$ids[ $id ] = $id;
+					}
+				}
+			}
+
+			if ( ! empty( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) ) {
+				$this->collectBlockAttachmentIds( $block['innerBlocks'], $ids );
+			}
+		}
+	}
+
 	// -------------------------------------------------------------------------
 	// Gutenberg path
 	// -------------------------------------------------------------------------

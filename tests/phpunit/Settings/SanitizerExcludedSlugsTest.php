@@ -38,7 +38,7 @@ class SanitizerExcludedSlugsTest extends TestCase {
 			"fly-fishing.jpg\nFly Fishing\nfly-fishing, bass-fishing.png"
 		);
 
-		$this->assertSame( "fly-fishing\nbass-fishing", $result );
+		$this->assertSame( "fly-fishing.jpg\nbass-fishing.png", $result );
 	}
 
 	/**
@@ -51,7 +51,7 @@ class SanitizerExcludedSlugsTest extends TestCase {
 			'https://animalofthings.com/wp-content/uploads/2025/11/Types-of-Sparrows.jpg'
 		);
 
-		$this->assertSame( 'types-of-sparrows', $result );
+		$this->assertSame( 'types-of-sparrows.jpg', $result );
 	}
 
 	/**
@@ -86,7 +86,7 @@ class SanitizerExcludedSlugsTest extends TestCase {
 	 */
 	public function test_is_excluded_image_slug_is_case_insensitive(): void {
 		$GLOBALS['sim_test_options']['smart_image_matcher_settings'] = array(
-			'fiaa_excluded_image_slugs' => 'types-of-sparrows',
+			'fiaa_excluded_image_slugs' => 'types-of-sparrows.jpg',
 		);
 
 		$this->assertTrue( $this->sanitizer->isExcludedImageSlug( 'Types-of-Sparrows.jpg' ) );
@@ -112,9 +112,9 @@ class SanitizerExcludedSlugsTest extends TestCase {
 			'https://animalofthings.com/wp-content/uploads/2025/11/Types-of-Sparrows.jpg'
 		);
 
-		$this->assertSame( "fly-fishing\ntypes-of-sparrows", $result );
+		$this->assertSame( "fly-fishing\ntypes-of-sparrows.jpg", $result );
 		$this->assertSame(
-			'fly-fishing',
+			'fly-fishing.jpg',
 			$this->sanitizer->addExcludedImageSlug( 'Fly-Fishing.jpg' )
 		);
 

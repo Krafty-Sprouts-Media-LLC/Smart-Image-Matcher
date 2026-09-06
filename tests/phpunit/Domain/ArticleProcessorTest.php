@@ -199,6 +199,68 @@ class ArticleProcessorTest extends TestCase {
 	 *
 	 * @return void
 	 */
+	public function test_second_heading_uses_next_image_instead_of_reusing(): void {
+		$second = array(
+			'heading_hash' => 'hash-wren',
+			'text'         => 'Carolina Wren',
+			'tag'          => 'h2',
+			'level'        => 2,
+		);
+
+		$extractor = $this->createMock( HeadingExtractor::class );
+		$extractor->method( 'extract' )->willReturn( array( $this->heading, $second ) );
+
+		$matcher = $this->createMock( Matcher::class );
+		$matcher->method( 'filterByHierarchy' )->willReturnCallback(
+			static function ( array $headings ) {
+				return $headings;
+			}
+		);
+		$matcher->method( 'extractKeywords' )->willReturn( array( 'bird' ) );
+		$matcher->method( 'calculateScore' )->willReturnCallback(
+			static function ( array $terms, array $image ) {
+				unset( $terms );
+				return 42 === (int) ( $image['id'] ?? 0 ) ? 100 : 95;
+			}
+		);
+
+		$images = $this->createMock( ImageRepository::class );
+		$images->method( 'findCandidates' )->willReturn(
+			array(
+				array( 'id' => 42 ),
+				array( 'id' => 43 ),
+			)
+		);
+
+		$insertion = $this->createMock( InsertionService::class );
+		$insertion->method( 'headingHasFollowingImage' )->willReturn( false );
+		$insertion->method( 'attachmentIdsInContent' )->willReturn( array() );
+		$insertion->expects( $this->once() )->method( 'bulkInsert' )->with(
+			10,
+			$this->equalTo(
+				array(
+					array(
+						'heading_hash' => 'hash-goldfinch',
+						'image_id'     => 42,
+					),
+					array(
+						'heading_hash' => 'hash-wren',
+						'image_id'     => 43,
+					),
+				)
+			)
+		)->willReturn( true );
+
+		$matches = $this->createMock( MatchRepository::class );
+		$featured = $this->createMock( FeaturedImageService::class );
+		$featured->method( 'needsFeaturedImage' )->willReturn( false );
+
+		$processor = new ArticleProcessor( $matcher, $images, $extractor, $insertion, $matches, $featured, null, null, null );
+		$result    = $processor->process( 10 );
+
+		$this->assertSame( 2, $result['inserted'] );
+	}
+
 	public function test_unavailable_adapter_never_enqueues(): void {
 		$generation = $this->recordingFallback( false );
 		$processor  = $this->processor( 0, 0, false, $generation );
@@ -244,6 +306,7 @@ class ArticleProcessorTest extends TestCase {
 
 		$insertion = $this->createMock( InsertionService::class );
 		$insertion->method( 'headingHasFollowingImage' )->willReturn( $already_has_image );
+		$insertion->method( 'attachmentIdsInContent' )->willReturn( array() );
 		$insertion->method( 'bulkInsert' )->willReturn( true );
 
 		if ( null === $matches ) {
@@ -318,8 +381,8 @@ class ArticleProcessorTest extends TestCase {
 				return $this->available;
 			}
 
-			public function bestMatch( array $heading ): array {
-				unset( $heading );
+			public function bestMatch( array $heading, array $exclude_ids = array() ): array {
+				unset( $heading, $exclude_ids );
 				return array(
 					'score'    => $this->score,
 					'image_id' => $this->image_id,

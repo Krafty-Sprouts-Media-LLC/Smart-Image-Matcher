@@ -212,19 +212,38 @@ class InsertController extends Controller {
 		}
 
 		$service = new InsertionService( new BlockBuilder() );
-		$result  = $service->bulkInsert( $postId, $insertions );
+		$used    = $service->attachmentIdsInContent( $postId );
+		$unique  = array();
+		foreach ( $insertions as $item ) {
+			$image_id = (int) $item['image_id'];
+			if ( $image_id <= 0 || isset( $used[ $image_id ] ) ) {
+				continue;
+			}
+			$used[ $image_id ] = $image_id;
+			$unique[]          = $item;
+		}
+
+		if ( empty( $unique ) ) {
+			return new \WP_Error(
+				'smart_image_matcher_duplicate_image',
+				__( 'Each image can be inserted only once per article. Those images are already in the post.', 'smart-image-matcher' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$result = $service->bulkInsert( $postId, $unique );
 
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}
 
 		$repo = new MatchRepository();
-		foreach ( $insertions as $item ) {
+		foreach ( $unique as $item ) {
 			$repo->markInserted( $postId, $item['image_id'], $item['heading_hash'] );
 		}
 
 		return rest_ensure_response( array(
-			'inserted' => count( $insertions ),
+			'inserted' => count( $unique ),
 			'post_id'  => $postId,
 		) );
 	}

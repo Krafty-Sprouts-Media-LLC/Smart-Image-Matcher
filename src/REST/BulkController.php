@@ -908,7 +908,7 @@ class BulkController extends Controller {
 	}
 
 	/**
-	 * Add a Review image to the excluded-filename list and reject open slots that use it.
+	 * Add a Review image to the featured-image exclusion list.
 	 *
 	 * @since 3.3.2
 	 * @param \WP_REST_Request $request Request.
@@ -922,7 +922,7 @@ class BulkController extends Controller {
 		$table = $wpdb->prefix . 'smart_image_matcher_matches';
 		$row   = $wpdb->get_row( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 			$wpdb->prepare(
-				"SELECT id, image_id FROM {$table} WHERE id = %d",
+				"SELECT id, image_id, heading_hash FROM {$table} WHERE id = %d",
 				$match_id
 			),
 			ARRAY_A
@@ -967,8 +967,9 @@ class BulkController extends Controller {
 
 		$rejected = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 			$wpdb->prepare(
-				"UPDATE {$table} SET status = 'rejected' WHERE image_id = %d AND status IN ('pending','approved')",
-				$image_id
+				"UPDATE {$table} SET status = 'rejected' WHERE image_id = %d AND status IN ('pending','approved') AND ( id = %d OR heading_hash = 'featured' )",
+				$image_id,
+				$match_id
 			)
 		);
 

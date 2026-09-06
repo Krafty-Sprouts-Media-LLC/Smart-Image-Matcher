@@ -65,10 +65,11 @@ class ArticleHeadingAiGate implements HeadingMatchGate {
 	 * AI-ranked best match, or zeros when the model rejects every candidate.
 	 *
 	 * @since 3.4.0
-	 * @param array<string, mixed> $heading Heading descriptor.
+	 * @param array<string, mixed> $heading     Heading descriptor.
+	 * @param int[]                $exclude_ids Attachment IDs already used in this article.
 	 * @return array{score:int,image_id:int}
 	 */
-	public function bestMatch( array $heading ): array {
+	public function bestMatch( array $heading, array $exclude_ids = array() ): array {
 		$threshold = (int) Settings::get( 'confidence_threshold' );
 		$ai        = new AiMatcher();
 		$results   = $ai->findMatches( $heading, $this->images, $threshold, false );
@@ -87,17 +88,29 @@ class ArticleHeadingAiGate implements HeadingMatchGate {
 			);
 		}
 
-		if ( empty( $results ) ) {
+		$skip = array();
+		foreach ( $exclude_ids as $exclude_id ) {
+			$id = (int) $exclude_id;
+			if ( $id > 0 ) {
+				$skip[ $id ] = true;
+			}
+		}
+
+		foreach ( $results as $top ) {
+			$id = (int) ( $top['image_id'] ?? 0 );
+			if ( $id > 0 && isset( $skip[ $id ] ) ) {
+				continue;
+			}
+
 			return array(
-				'score'    => 0,
-				'image_id' => 0,
+				'score'    => (int) ( $top['confidence_score'] ?? 0 ),
+				'image_id' => $id,
 			);
 		}
 
-		$top = $results[0];
 		return array(
-			'score'    => (int) ( $top['confidence_score'] ?? 0 ),
-			'image_id' => (int) ( $top['image_id'] ?? 0 ),
+			'score'    => 0,
+			'image_id' => 0,
 		);
 	}
 }

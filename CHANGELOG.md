@@ -7,6 +7,15 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.4.3] - 06/09/2026
+
+### Changed
+
+- Excluded Image Filenames block featured-image auto-assign only. Those files can still be inserted next to headings.
+- The exclusion list keeps the filename plus extension (`types-of-sparrows.jpg`) instead of a bare slug.
+- Process articles and Insert all skip an image that is already in the same article, and pick the next match instead of inserting it twice.
+- Excluded Image Filenames is an add/remove list with a fixed-height scroller, not a growing textarea.
+
 ## [3.4.2] - 04/09/2026
 
 ### Changed

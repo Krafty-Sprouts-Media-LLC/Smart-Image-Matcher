@@ -38,8 +38,9 @@ interface HeadingMatchGate {
 	 * Best library match for one heading.
 	 *
 	 * @since 3.4.0
-	 * @param array<string, mixed> $heading Heading descriptor.
+	 * @param array<string, mixed> $heading      Heading descriptor.
+	 * @param int[]                $exclude_ids  Attachment IDs already used in this article.
 	 * @return array{score:int,image_id:int}
 	 */
-	public function bestMatch( array $heading ): array;
+	public function bestMatch( array $heading, array $exclude_ids = array() ): array;
 }

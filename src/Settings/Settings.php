@@ -786,15 +786,74 @@ class Settings {
 	public function renderFiaaExcludedSlugs( array $args ): void {
 		$key   = $args['key'];
 		$value = (string) self::get( $key );
-		$name  = self::OPTION . '[' . esc_attr( $key ) . ']';
+		$name  = self::OPTION . '[' . $key . ']';
 
-		printf(
-			'<textarea name="%s" id="smart_image_matcher_%s" rows="5" class="large-text code">%s</textarea>',
-			esc_attr( $name ),
-			esc_attr( $key ),
-			esc_textarea( $value )
-		);
-		echo '<p class="description">' . esc_html__( 'One filename, slug, or image URL per line (commas also accepted). Example: Types-of-Sparrows.jpg or a full uploads URL. Matching is case-insensitive. Blocked images are not used for featured-image auto-assign or in-article heading matches. Existing featured assignments that use them are flagged by Fix Incorrect Featured Images.', 'smart-image-matcher' ) . '</p>';
+		self::renderExcludedImageEditor( $name, 'smart_image_matcher_' . $key, $value );
+		echo '<p class="description">' . esc_html__( 'Add a filename (Types-of-Sparrows.jpg) or a full uploads URL. Matching is case-insensitive. Blocked images are not used as featured images. They can still be inserted next to headings. Existing featured assignments that use them are flagged by Fix Incorrect Featured Images.', 'smart-image-matcher' ) . '</p>';
+	}
+
+	/**
+	 * Render the add-one / scrollable exclusion list (not a growing textarea).
+	 *
+	 * @since 3.4.3
+	 * @param string $textarea_name Form name for the hidden value.
+	 * @param string $textarea_id   Form id for the hidden value.
+	 * @param string $value         Newline-separated filenames.
+	 * @return void
+	 */
+	public static function renderExcludedImageEditor( string $textarea_name, string $textarea_id, string $value ): void {
+		$parts = preg_split( '/\R+/', $value );
+		$items = array();
+		if ( is_array( $parts ) ) {
+			foreach ( $parts as $part ) {
+				$part = trim( (string) $part );
+				if ( '' !== $part ) {
+					$items[] = $part;
+				}
+			}
+		}
+		?>
+		<div
+			class="sim-exclude-editor"
+			data-sim-exclude-editor
+			data-remove="<?php echo esc_attr__( 'Remove', 'smart-image-matcher' ); ?>"
+		>
+			<div class="sim-exclude-editor-add">
+				<label class="screen-reader-text" for="<?php echo esc_attr( $textarea_id . '_add' ); ?>">
+					<?php esc_html_e( 'Add excluded image filename', 'smart-image-matcher' ); ?>
+				</label>
+				<input
+					type="text"
+					id="<?php echo esc_attr( $textarea_id . '_add' ); ?>"
+					class="regular-text sim-exclude-editor-input"
+					placeholder="<?php echo esc_attr__( 'types-of-sparrows.jpg or uploads URL', 'smart-image-matcher' ); ?>"
+				/>
+				<button type="button" class="button sim-exclude-editor-add-btn">
+					<?php esc_html_e( 'Add', 'smart-image-matcher' ); ?>
+				</button>
+			</div>
+			<p class="sim-exclude-editor-empty description"<?php echo empty( $items ) ? '' : ' hidden'; ?>>
+				<?php esc_html_e( 'No excluded images yet.', 'smart-image-matcher' ); ?>
+			</p>
+			<ul class="sim-exclude-editor-list"<?php echo empty( $items ) ? ' hidden' : ''; ?>>
+				<?php foreach ( $items as $item ) : ?>
+					<li class="sim-exclude-editor-item" data-value="<?php echo esc_attr( $item ); ?>">
+						<code><?php echo esc_html( $item ); ?></code>
+						<button type="button" class="button-link sim-exclude-editor-remove">
+							<?php esc_html_e( 'Remove', 'smart-image-matcher' ); ?>
+						</button>
+					</li>
+				<?php endforeach; ?>
+			</ul>
+			<textarea
+				name="<?php echo esc_attr( $textarea_name ); ?>"
+				id="<?php echo esc_attr( $textarea_id ); ?>"
+				class="sim-exclude-editor-value"
+				rows="1"
+				hidden
+			><?php echo esc_textarea( $value ); ?></textarea>
+		</div>
+		<?php
 	}
 
 	/**
