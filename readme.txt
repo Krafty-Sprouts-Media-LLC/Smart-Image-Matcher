@@ -4,7 +4,7 @@ Tags: images, media library, alt text, featured image, automation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 3.4.3
+Stable tag: 3.4.4
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -95,6 +95,9 @@ No AI data is sent automatically — only when you explicitly trigger AI matchin
 The plugin stores match results and job metadata in your own database only. Update checks may contact GitHub (see External services). No post content leaves your server unless you explicitly use AI features with a configured provider.
 
 == Changelog ==
+
+= 3.4.4 =
+* The in-content matcher skips headings that already have an image, so those headings are not sent to the AI.
 
 = 3.4.3 =
 * Excluded Image Filenames block featured images only (not heading inserts). The list keeps the filename plus extension. Add or remove one file at a time in a scrollable list. Process articles / Insert all will not reuse the same image twice in one article.

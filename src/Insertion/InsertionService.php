@@ -177,6 +177,40 @@ class InsertionService {
 	}
 
 	/**
+	 * Keep headings that do not already have a following image.
+	 *
+	 * Editor matching and AI ranking skip these so attached headings
+	 * are not sent to the provider.
+	 *
+	 * @since 3.4.4
+	 * @param int                              $post_id  Post ID.
+	 * @param array<int, array<string, mixed>> $headings Extracted headings.
+	 * @return array<int, array<string, mixed>>
+	 */
+	public function headingsNeedingImages( int $post_id, array $headings ): array {
+		$kept = array();
+
+		foreach ( $headings as $heading ) {
+			if ( ! is_array( $heading ) ) {
+				continue;
+			}
+
+			$hash = isset( $heading['heading_hash'] ) ? (string) $heading['heading_hash'] : '';
+			if ( '' === $hash ) {
+				continue;
+			}
+
+			if ( $this->headingHasFollowingImage( $post_id, $hash ) ) {
+				continue;
+			}
+
+			$kept[] = $heading;
+		}
+
+		return $kept;
+	}
+
+	/**
 	 * Attachment IDs already present in the post (image blocks, galleries, classic markup).
 	 *
 	 * @since 3.4.3

@@ -81,6 +81,19 @@ class JobRunner {
 		$kwMatcher = new Matcher();
 		$hierarchy = (string) Settings::get( 'hierarchy_mode' );
 		$headings  = $kwMatcher->filterByHierarchy( $headings, $hierarchy );
+		$headings  = ( new InsertionService( new BlockBuilder() ) )->headingsNeedingImages( $postId, $headings );
+
+		if ( empty( $headings ) ) {
+			set_transient(
+				"smart_image_matcher_job_result_{$postId}",
+				array(
+					'matches' => array(),
+					'done'    => true,
+				),
+				300
+			);
+			return;
+		}
 
 		$repo      = new ImageRepository();
 		$groups    = array();

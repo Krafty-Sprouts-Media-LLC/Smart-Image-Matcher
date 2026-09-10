@@ -199,4 +199,37 @@ class InsertionServiceTest extends TestCase {
 		$this->assertTrue( $this->service->headingHasFollowingImage( 14, $hash ) );
 		unset( $GLOBALS['sim_test_parse_blocks'] );
 	}
+
+	/** @test */
+	public function headings_needing_images_drops_attached_headings(): void {
+		$attached = HeadingLocator::computeHash( 2, 'american goldfinch', 0 );
+		$open     = HeadingLocator::computeHash( 2, 'bald eagle', 0 );
+		$post     = new \WP_Post();
+		$post->ID = 15;
+		$post->post_content = '<h2>American Goldfinch</h2><img src="goldfinch.jpg" alt="" /><h2>Bald Eagle</h2><p>Diet.</p>';
+		$GLOBALS['sim_test_get_post'] = static function () use ( $post ) {
+			return $post;
+		};
+
+		$kept = $this->service->headingsNeedingImages(
+			15,
+			array(
+				array(
+					'heading_hash' => $attached,
+					'text'         => 'American Goldfinch',
+				),
+				array(
+					'heading_hash' => $open,
+					'text'         => 'Bald Eagle',
+				),
+				array(
+					'heading_hash' => '',
+					'text'         => 'Broken',
+				),
+			)
+		);
+
+		$this->assertCount( 1, $kept );
+		$this->assertSame( $open, $kept[0]['heading_hash'] );
+	}
 }

@@ -21,6 +21,8 @@ use SmartImageMatcher\Domain\HeadingExtractor;
 use SmartImageMatcher\Domain\ImageRepository;
 use SmartImageMatcher\Domain\Matcher;
 use SmartImageMatcher\Domain\MatchRepository;
+use SmartImageMatcher\Insertion\BlockBuilder;
+use SmartImageMatcher\Insertion\InsertionService;
 use SmartImageMatcher\Logging\Logger;
 use SmartImageMatcher\Queue\Queue;
 use SmartImageMatcher\Settings\Settings;
@@ -131,9 +133,19 @@ class MatchController extends Controller {
 		}
 
 		// Apply hierarchy filter.
-		$matcher        = new Matcher();
-		$hierarchyMode  = (string) Settings::get( 'hierarchy_mode' );
-		$headings       = $matcher->filterByHierarchy( $headings, $hierarchyMode );
+		$matcher       = new Matcher();
+		$hierarchyMode = (string) Settings::get( 'hierarchy_mode' );
+		$headings      = $matcher->filterByHierarchy( $headings, $hierarchyMode );
+		$headings      = ( new InsertionService( new BlockBuilder() ) )->headingsNeedingImages( $postId, $headings );
+
+		if ( empty( $headings ) ) {
+			return rest_ensure_response(
+				array(
+					'matches'        => array(),
+					'headings_found' => 0,
+				)
+			);
+		}
 
 		// AI mode: queue the job. Keywords only shortlist inside the worker.
 		if ( 'ai' === $mode ) {

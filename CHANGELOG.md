@@ -7,6 +7,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.4.4] - 10/09/2026
+
+### Fixed
+
+- The in-content matcher no longer sends headings that already have a following image to the AI (or keyword matching). Those headings are skipped, same as Process articles.
+
 ## [3.4.3] - 06/09/2026
 
 ### Changed
