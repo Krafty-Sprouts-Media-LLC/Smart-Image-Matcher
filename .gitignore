@@ -34,7 +34,7 @@ admin/js/build/
 wp-config.php
 .htaccess
 uploads/
-cache/
+/cache/
 
 # -------------------------------------------------------
 # wp.org zip exclusions

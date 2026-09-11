@@ -34,9 +34,25 @@ use SmartImageMatcher\Settings\Settings;
  */
 class ProviderBridge {
 
+	/**
+	 * Nested SIM text-call depth. OpenRouter HTTP is tagged only while > 0.
+	 *
+	 * @since 3.4.7
+	 * @var int
+	 */
+	private static int $openRouterAppTagDepth = 0;
+
 	// -------------------------------------------------------------------------
 	// Availability
 	// -------------------------------------------------------------------------
+
+	/**
+	 * Request-local cache for isAvailable().
+	 *
+	 * @since 3.4.7
+	 * @var bool|null
+	 */
+	private static ?bool $textAvailable = null;
 
 	/**
 	 * Whether the WP 7.0 AI Client is present and has a configured text provider.
@@ -45,19 +61,53 @@ class ProviderBridge {
 	 * @return bool
 	 */
 	public static function isAvailable(): bool {
+		if ( null !== self::$textAvailable ) {
+			return self::$textAvailable;
+		}
+
+		++self::$openRouterAppTagDepth;
+		try {
+			self::$textAvailable = self::probeTextAvailable();
+			return self::$textAvailable;
+		} finally {
+			--self::$openRouterAppTagDepth;
+		}
+	}
+
+	/**
+	 * Probe whether a text provider can run. OpenRouter is checked on its
+	 * own registry entry so WP AI Request Logs do not attribute a
+	 * list-models call to Anthropic/DeepSeek.
+	 *
+	 * PromptBuilder::isSupported() ignores using_provider() and walks every
+	 * connected provider's /models endpoint.
+	 *
+	 * @since 3.4.7
+	 * @return bool
+	 */
+	private static function probeTextAvailable(): bool {
 		if ( ! function_exists( 'wp_ai_client_prompt' ) ) {
 			return false;
 		}
 
-		$wp_ai_client_prompt = 'wp_ai_client_prompt';
-		$probe               = $wp_ai_client_prompt();
-
-		if ( is_wp_error( $probe ) ) {
-			return false;
-		}
-
 		try {
-			$probe = self::applyTextProviderPin( $probe->with_text( 'x' ) );
+			if ( class_exists( '\WordPress\OpenRouterAiProvider\Provider\OpenRouterProvider' )
+				&& class_exists( '\WordPress\AiClient\AiClient' ) ) {
+				$registry = \WordPress\AiClient\AiClient::defaultRegistry();
+				if ( ! $registry->hasProvider( 'openrouter' ) ) {
+					return false;
+				}
+				return (bool) $registry->isProviderConfigured( 'openrouter' );
+			}
+
+			$wp_ai_client_prompt = 'wp_ai_client_prompt';
+			$probe               = $wp_ai_client_prompt();
+
+			if ( is_wp_error( $probe ) ) {
+				return false;
+			}
+
+			$probe = $probe->with_text( 'x' );
 
 			if ( is_callable( array( $probe, 'is_supported_for_text_generation' ) ) ) {
 				return (bool) $probe->is_supported_for_text_generation();
@@ -127,6 +177,28 @@ class ProviderBridge {
 		string $systemPrompt,
 		string $userPrompt,
 		?float $temperature = null
+	) {
+		++self::$openRouterAppTagDepth;
+		try {
+			return self::generateTextInner( $systemPrompt, $userPrompt, $temperature );
+		} finally {
+			--self::$openRouterAppTagDepth;
+		}
+	}
+
+	/**
+	 * Generate text after OpenRouter app tagging is active.
+	 *
+	 * @since 3.4.7
+	 * @param string     $systemPrompt Instructions for the model.
+	 * @param string     $userPrompt   The actual user-turn prompt.
+	 * @param float|null $temperature  Optional; null = do not send temperature.
+	 * @return string|\WP_Error
+	 */
+	private static function generateTextInner(
+		string $systemPrompt,
+		string $userPrompt,
+		?float $temperature
 	) {
 		if ( ! self::isAvailable() ) {
 			return new \WP_Error(
@@ -200,6 +272,67 @@ class ProviderBridge {
 		}
 
 		return $builder;
+	}
+
+	/**
+	 * Tag SIM OpenRouter HTTP so Tools → AI Request Logs and openrouter.ai
+	 * show this plugin instead of Unknown / a sibling connector.
+	 *
+	 * @since 3.4.7
+	 * @param mixed  $args wp_remote_* arguments.
+	 * @param string $url  Request URL.
+	 * @return mixed
+	 */
+	public static function filterOpenRouterHttpArgs( $args, $url ) {
+		if ( self::$openRouterAppTagDepth < 1 || ! is_array( $args ) ) {
+			return $args;
+		}
+
+		if ( ! is_string( $url ) || false === strpos( $url, 'openrouter.ai' ) ) {
+			return $args;
+		}
+
+		if ( ! isset( $args['headers'] ) || ! is_array( $args['headers'] ) ) {
+			$args['headers'] = array();
+		}
+
+		$has_referer = false;
+		$has_title   = false;
+		foreach ( array_keys( $args['headers'] ) as $name ) {
+			$lower = strtolower( (string) $name );
+			if ( 'http-referer' === $lower || 'referer' === $lower ) {
+				$has_referer = true;
+			}
+			if ( 'x-title' === $lower ) {
+				$has_title = true;
+			}
+		}
+
+		if ( ! $has_referer ) {
+			$args['headers']['HTTP-Referer'] = home_url( '/' );
+		}
+		if ( ! $has_title ) {
+			$args['headers']['X-Title'] = 'Smart Image Matcher';
+		}
+
+		return $args;
+	}
+
+	/**
+	 * Label openrouter.ai traffic as OpenRouter in Tools → AI Request Logs.
+	 *
+	 * @since 3.4.7
+	 * @param mixed $patterns Provider slug => host substrings.
+	 * @return mixed
+	 */
+	public static function filterOpenRouterLogProviders( $patterns ) {
+		if ( ! is_array( $patterns ) ) {
+			return $patterns;
+		}
+
+		$patterns['openrouter'] = array( 'openrouter.ai' );
+
+		return $patterns;
 	}
 
 	/**

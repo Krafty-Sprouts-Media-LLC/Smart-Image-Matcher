@@ -19,6 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 use SmartImageMatcher\Admin\GenerateImagesBulkAction;
 use SmartImageMatcher\Abilities\Registry as AbilitiesRegistry;
+use SmartImageMatcher\AI\ProviderBridge;
 use SmartImageMatcher\Cache\Cache;
 use SmartImageMatcher\Domain\ArticleProcessor;
 use SmartImageMatcher\Domain\Matcher;
@@ -370,6 +371,10 @@ class Plugin {
 
 		// Action Scheduler job hooks.
 		Queue::registerHooks();
+
+		// OpenRouter dashboard App column (HTTP-Referer / X-Title) for SIM text calls.
+		add_filter( 'http_request_args', array( ProviderBridge::class, 'filterOpenRouterHttpArgs' ), 10, 2 );
+		add_filter( 'wpai_request_log_providers', array( ProviderBridge::class, 'filterOpenRouterLogProviders' ) );
 
 		// Inverted index — keep in sync with the media library.
 		$imageRepo = $this->container->get( 'image.repository' );

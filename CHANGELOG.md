@@ -7,6 +7,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.4.7] - 11/09/2026
+
+### Fixed
+
+- Insert no longer fatals with `Class "SmartImageMatcher\Cache\Cache" not found`. `.gitignore` had `cache/`, which ignored `src/Cache/` so those classes never shipped in the GitHub zip.
+- Tools → AI Request Logs no longer labels SIM ranking as Anthropic with no model. Availability used `is_supported_for_text_generation()`, which ignores `using_provider()` and hits every connector’s `/models` endpoint. OpenRouter is now checked on its own registry entry.
+- OpenRouter requests from SIM send `X-Title: Smart Image Matcher` and `HTTP-Referer` so the OpenRouter App column is not Unknown.
+
 ## [3.4.6] - 11/09/2026
 
 ### Fixed
