@@ -7,6 +7,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.4.6] - 11/09/2026
+
+### Fixed
+
+- Text ranking now actually pins OpenRouter. `method_exists( $builder, 'using_provider' )` is always false on WordPress’s magic prompt builder, so the declared pin never ran and the Client used Anthropic or DeepSeek instead.
+
 ## [3.4.5] - 11/09/2026
 
 ### Fixed

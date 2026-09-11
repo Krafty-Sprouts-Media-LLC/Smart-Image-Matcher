@@ -4,7 +4,7 @@ Tags: images, media library, alt text, featured image, automation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 3.4.5
+Stable tag: 3.4.6
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -95,6 +95,9 @@ No AI data is sent automatically — only when you explicitly trigger AI matchin
 The plugin stores match results and job metadata in your own database only. Update checks may contact GitHub (see External services). No post content leaves your server unless you explicitly use AI features with a configured provider.
 
 == Changelog ==
+
+= 3.4.6 =
+* Text ranking now pins OpenRouter. A `method_exists()` guard on WordPress’s magic prompt builder had skipped `using_provider( 'openrouter' )`, so calls went to Anthropic or DeepSeek.
 
 = 3.4.5 =
 * Insert Image: nested headings no longer crash with WordPress's generic critical-error page. The modal shows the real error, and the last 20 errors appear on Smart Image Matcher → Dashboard (no debug.log required).

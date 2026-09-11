@@ -57,11 +57,13 @@ class ProviderBridge {
 		}
 
 		try {
+			$probe = self::applyTextProviderPin( $probe->with_text( 'x' ) );
+
 			if ( is_callable( array( $probe, 'is_supported_for_text_generation' ) ) ) {
-				return (bool) $probe->with_text( 'x' )->is_supported_for_text_generation();
+				return (bool) $probe->is_supported_for_text_generation();
 			}
 
-			return (bool) $probe->with_text( 'x' )->is_supported();
+			return (bool) $probe->is_supported();
 		} catch ( \Throwable $e ) {
 			Logger::warn( 'ProviderBridge::isAvailable() threw', array( 'error' => $e->getMessage() ) );
 			return false;
@@ -141,22 +143,11 @@ class ProviderBridge {
 				return $builder;
 			}
 
-			$builder = $builder
-				->using_system_instruction( $systemPrompt )
-				->with_text( $userPrompt );
-
-			// Pin OpenRouter the same way image gen pins fal: slugs like
-			// mistralai/mistral-nemo only resolve on this connector.
-			if ( class_exists( '\WordPress\OpenRouterAiProvider\Provider\OpenRouterProvider' )
-				&& is_object( $builder )
-				&& method_exists( $builder, 'using_provider' ) ) {
-				$builder = $builder->using_provider( 'openrouter' );
-			}
-
-			$prefs = self::textModelPreferences();
-			if ( ! empty( $prefs ) && is_object( $builder ) && method_exists( $builder, 'using_model_preference' ) ) {
-				$builder = $builder->using_model_preference( ...$prefs );
-			}
+			$builder = self::applyTextProviderPin(
+				$builder
+					->using_system_instruction( $systemPrompt )
+					->with_text( $userPrompt )
+			);
 
 			if ( null !== $temperature ) {
 				$builder = $builder->using_temperature( $temperature );
@@ -179,6 +170,36 @@ class ProviderBridge {
 			Logger::error( 'ProviderBridge::generateText() exception', array( 'error' => $e->getMessage() ) );
 			return new \WP_Error( 'smart_image_matcher_ai_exception', $e->getMessage() );
 		}
+	}
+
+	/**
+	 * Pin OpenRouter and SIM text model slugs on a prompt builder.
+	 *
+	 * WP_AI_Client_Prompt_Builder exposes using_provider() / using_model_preference()
+	 * through __call. method_exists() is false for those names, so a guard here
+	 * silently skipped the pin and the Client used the first connected text
+	 * provider (Anthropic, then DeepSeek). Image generation already calls the
+	 * methods directly — text ranking must do the same.
+	 *
+	 * @since 3.4.6
+	 * @param mixed $builder Prompt builder from wp_ai_client_prompt().
+	 * @return mixed
+	 */
+	private static function applyTextProviderPin( $builder ) {
+		if ( ! is_object( $builder ) || is_wp_error( $builder ) ) {
+			return $builder;
+		}
+
+		if ( class_exists( '\WordPress\OpenRouterAiProvider\Provider\OpenRouterProvider' ) ) {
+			$builder = $builder->using_provider( 'openrouter' );
+		}
+
+		$prefs = self::textModelPreferences();
+		if ( ! empty( $prefs ) ) {
+			$builder = $builder->using_model_preference( ...$prefs );
+		}
+
+		return $builder;
 	}
 
 	/**
