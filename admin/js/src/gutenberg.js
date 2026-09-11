@@ -95,7 +95,12 @@
 		const resp = await fetch( url, options );
 		const data = await resp.json().catch( () => ( {} ) );
 		if ( ! resp.ok ) {
-			throw new Error( data.message || ( 'HTTP ' + resp.status ) );
+			let message = typeof data.message === 'string' ? data.message : '';
+			message = message.replace( /<[^>]+>/g, ' ' ).replace( /\s+/g, ' ' ).trim();
+			if ( /critical error on this website/i.test( message ) ) {
+				message = 'Request failed with a server error. Open Smart Image Matcher → Dashboard for the last error.';
+			}
+			throw new Error( message || ( 'HTTP ' + resp.status ) );
 		}
 		return data;
 	}

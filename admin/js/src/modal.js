@@ -90,6 +90,23 @@
 	// REST API calls
 	// -------------------------------------------------------------------------
 
+	function restErrorMessage( payload, status ) {
+		let message = '';
+		if ( payload && typeof payload.message === 'string' ) {
+			message = payload.message;
+		}
+		message = message.replace( /<[^>]+>/g, ' ' ).replace( /\s+/g, ' ' ).trim();
+		if ( /critical error on this website/i.test( message ) ) {
+			return 'Insert failed with a server error. Open Smart Image Matcher → Dashboard for the last error.';
+		}
+		return message || ( 'HTTP ' + status );
+	}
+
+	async function parseRestError( resp ) {
+		const err = await resp.json().catch( () => ( {} ) );
+		return restErrorMessage( err, resp.status );
+	}
+
 	async function request( url, body ) {
 		const resp = await fetch( url, {
 			method: 'POST',
@@ -102,8 +119,7 @@
 			body: JSON.stringify( body ),
 		} );
 		if ( ! resp.ok ) {
-			const err = await resp.json().catch( () => ( {} ) );
-			throw new Error( err.message || `HTTP ${ resp.status }` );
+			throw new Error( await parseRestError( resp ) );
 		}
 		return resp.json();
 	}
@@ -114,8 +130,7 @@
 			headers: { 'X-WP-Nonce': nonces.wpRest },
 		} );
 		if ( ! resp.ok ) {
-			const err = await resp.json().catch( () => ( {} ) );
-			throw new Error( err.message || `HTTP ${ resp.status }` );
+			throw new Error( await parseRestError( resp ) );
 		}
 		return resp.json();
 	}
@@ -548,6 +563,8 @@
 		const result = await insertOne( hash, imageId );
 
 		if ( result instanceof Error ) {
+			btn.disabled = false;
+			btn.textContent = 'Insert Now';
 			showError( result.message );
 			return;
 		}
@@ -579,6 +596,10 @@
 		const result = await insertBatch( insertions );
 
 		if ( result instanceof Error ) {
+			const insertAllBtn = q( '.sim-insert-all-button', getModal() );
+			if ( insertAllBtn ) {
+				insertAllBtn.disabled = false;
+			}
 			showError( result.message );
 			return;
 		}

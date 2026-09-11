@@ -7,6 +7,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.4.5] - 11/09/2026
+
+### Fixed
+
+- Insert Image no longer surfaces WordPress's generic "critical error" HTML. Nested heading inserts keep block `innerContent` in sync so `serialize_blocks()` does not fatal. Crashes are caught; the modal shows the real error and the last 20 errors are stored on Smart Image Matcher → Dashboard (debug.log is not required).
+
 ## [3.4.4] - 10/09/2026
 
 ### Fixed

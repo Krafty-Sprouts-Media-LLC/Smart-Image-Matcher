@@ -65,9 +65,15 @@ class InsertionService {
 	 * @return true|\WP_Error
 	 */
 	public function insert( int $postId, string $headingHash, int $imageId ) {
-		return $this->bulkInsert( $postId, array(
-			array( 'heading_hash' => $headingHash, 'image_id' => $imageId ),
-		) );
+		return $this->bulkInsert(
+			$postId,
+			array(
+				array(
+					'heading_hash' => $headingHash,
+					'image_id'     => $imageId,
+				),
+			)
+		);
 	}
 
 	/**
@@ -86,6 +92,39 @@ class InsertionService {
 			return new \WP_Error( 'smart_image_matcher_no_insertions', __( 'No insertions requested.', 'smart-image-matcher' ) );
 		}
 
+		try {
+			return $this->performBulkInsert( $postId, $insertions );
+		} catch ( \Throwable $e ) {
+			Logger::error(
+				'InsertionService: insert crashed',
+				array(
+					'post_id' => $postId,
+					'error'   => $e->getMessage(),
+					'file'    => $e->getFile(),
+					'line'    => $e->getLine(),
+				)
+			);
+
+			return new \WP_Error(
+				'smart_image_matcher_insertion_crashed',
+				sprintf(
+					/* translators: %s: exception message */
+					__( 'Insert failed: %s', 'smart-image-matcher' ),
+					$e->getMessage()
+				)
+			);
+		}
+	}
+
+	/**
+	 * Run the insert after validation.
+	 *
+	 * @since 3.4.5
+	 * @param int                                                    $postId     Post ID.
+	 * @param array<int, array{heading_hash: string, image_id: int}> $insertions Ordered list of insertions.
+	 * @return true|\WP_Error
+	 */
+	private function performBulkInsert( int $postId, array $insertions ) {
 		$post = get_post( $postId );
 		if ( ! $post instanceof \WP_Post ) {
 			return new \WP_Error( 'smart_image_matcher_invalid_post', __( 'Post not found.', 'smart-image-matcher' ) );
@@ -115,18 +154,23 @@ class InsertionService {
 		}
 
 		if ( $content === $original ) {
-			Logger::warn( 'InsertionService: content unchanged — headings may not have been found.', array(
-				'post_id'    => $postId,
-				'insertions' => count( $insertions ),
-			) );
+			Logger::warn(
+				'InsertionService: content unchanged — headings may not have been found.',
+				array(
+					'post_id'    => $postId,
+					'insertions' => count( $insertions ),
+				)
+			);
 			return new \WP_Error( 'smart_image_matcher_insertion_failed', __( 'No headings were found for the requested hashes.', 'smart-image-matcher' ) );
 		}
 
-		// ONE wp_update_post() for all insertions.
+		// ONE wp_update_post() for all insertions. wp_update_post expects slashed data.
 		$result = wp_update_post(
-			array(
-				'ID'           => $postId,
-				'post_content' => $content,
+			wp_slash(
+				array(
+					'ID'           => $postId,
+					'post_content' => $content,
+				)
 			),
 			true
 		);
@@ -137,10 +181,13 @@ class InsertionService {
 
 		Cache::clearPost( $postId );
 
-		Logger::info( 'InsertionService: bulk insert complete.', array(
-			'post_id' => $postId,
-			'count'   => count( $insertions ),
-		) );
+		Logger::info(
+			'InsertionService: bulk insert complete.',
+			array(
+				'post_id' => $postId,
+				'count'   => count( $insertions ),
+			)
+		);
 
 		return true;
 	}
@@ -302,16 +349,17 @@ class InsertionService {
 		}
 
 		$newBlocks = $this->insertBlocksRecursive( $blocks, $hashMap );
+		$newBlocks = $this->normalizeBlocksForSerialize( $newBlocks );
 
-		if ( empty( $hashMap ) ) {
-			// All hashes were consumed — full success.
-			return serialize_blocks( $newBlocks );
+		if ( ! empty( $hashMap ) ) {
+			Logger::warn(
+				'InsertionService: some heading hashes not found in block tree.',
+				array(
+					'unmatched' => array_keys( $hashMap ),
+				)
+			);
 		}
 
-		// Some hashes were not matched — still serialize what we have.
-		Logger::warn( 'InsertionService: some heading hashes not found in block tree.', array(
-			'unmatched' => array_keys( $hashMap ),
-		) );
 		return serialize_blocks( $newBlocks );
 	}
 
@@ -332,21 +380,33 @@ class InsertionService {
 		$seen   = array(); // key "{level}:{text}" => occurrence count
 
 		foreach ( $blocks as $block ) {
+			if ( ! is_array( $block ) ) {
+				continue;
+			}
+
 			// Recurse into inner blocks first.
-			if ( ! empty( $block['innerBlocks'] ) ) {
-				$block['innerBlocks'] = $this->insertBlocksRecursive( $block['innerBlocks'], $hashMap );
+			if ( ! empty( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) ) {
+				$before                 = count( $block['innerBlocks'] );
+				$block['innerBlocks']   = $this->insertBlocksRecursive( $block['innerBlocks'], $hashMap );
+				if ( count( $block['innerBlocks'] ) !== $before ) {
+					$block = $this->alignInnerContentPlaceholders( $block );
+				}
 			}
 
 			$result[] = $block;
 
 			// Check whether this is a heading block we need to follow with an image.
 			if ( ( $block['blockName'] ?? '' ) === 'core/heading' && ! empty( $hashMap ) ) {
-				$level  = (int) ( $block['attrs']['level'] ?? 2 );
-				$text   = strtolower( trim( wp_strip_all_tags(
-					html_entity_decode( $block['innerHTML'] ?? '', ENT_QUOTES, 'UTF-8' )
-				) ) );
-				$key        = "{$level}:{$text}";
-				$occurrence = $seen[ $key ] ?? 0;
+				$level = (int) ( $block['attrs']['level'] ?? 2 );
+				$text  = strtolower(
+					trim(
+						wp_strip_all_tags(
+							html_entity_decode( (string) ( $block['innerHTML'] ?? '' ), ENT_QUOTES, 'UTF-8' )
+						)
+					)
+				);
+				$key          = "{$level}:{$text}";
+				$occurrence   = $seen[ $key ] ?? 0;
 				$seen[ $key ] = $occurrence + 1;
 
 				$hash = HeadingLocator::computeHash( $level, $text, $occurrence );
@@ -359,6 +419,109 @@ class InsertionService {
 		}
 
 		return $result;
+	}
+
+	/**
+	 * Make a block tree safe for serialize_blocks() (PHP 8 TypeError guard).
+	 *
+	 * serialize_block() foreach-es innerContent and then reads innerBlocks
+	 * by placeholder index. Missing innerContent, or more placeholders than
+	 * inner blocks, fatals with "critical error on this website".
+	 *
+	 * @since 3.4.5
+	 * @param array<int, mixed> $blocks Block list.
+	 * @return array<int, array<string, mixed>>
+	 */
+	private function normalizeBlocksForSerialize( array $blocks ): array {
+		$out = array();
+
+		foreach ( $blocks as $block ) {
+			if ( ! is_array( $block ) ) {
+				continue;
+			}
+
+			$block['blockName']   = $block['blockName'] ?? null;
+			$block['attrs']       = isset( $block['attrs'] ) && is_array( $block['attrs'] ) ? $block['attrs'] : array();
+			$block['innerHTML']   = isset( $block['innerHTML'] ) && is_string( $block['innerHTML'] ) ? $block['innerHTML'] : '';
+			$block['innerBlocks'] = isset( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] )
+				? $this->normalizeBlocksForSerialize( $block['innerBlocks'] )
+				: array();
+
+			if ( ! isset( $block['innerContent'] ) || ! is_array( $block['innerContent'] ) ) {
+				$block['innerContent'] = array( $block['innerHTML'] );
+			}
+
+			$block  = $this->alignInnerContentPlaceholders( $block );
+			$out[]  = $block;
+		}
+
+		return $out;
+	}
+
+	/**
+	 * Keep innerContent null placeholders in lockstep with innerBlocks.
+	 *
+	 * Extra inner blocks (an image inserted after a nested heading) need a
+	 * matching null or Gutenberg omits them. Extra nulls make serialize_block()
+	 * pass null into itself and throw.
+	 *
+	 * @since 3.4.5
+	 * @param array<string, mixed> $block Block.
+	 * @return array<string, mixed>
+	 */
+	private function alignInnerContentPlaceholders( array $block ): array {
+		$inner   = isset( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) ? $block['innerBlocks'] : array();
+		$content = isset( $block['innerContent'] ) && is_array( $block['innerContent'] ) ? $block['innerContent'] : array();
+		$need    = count( $inner );
+		$nulls   = 0;
+
+		foreach ( $content as $chunk ) {
+			if ( ! is_string( $chunk ) ) {
+				++$nulls;
+			}
+		}
+
+		if ( $nulls === $need ) {
+			$block['innerContent'] = $content;
+			return $block;
+		}
+
+		if ( $nulls > $need ) {
+			$kept = array();
+			$seen = 0;
+			foreach ( $content as $chunk ) {
+				if ( ! is_string( $chunk ) ) {
+					if ( $seen >= $need ) {
+						continue;
+					}
+					++$seen;
+				}
+				$kept[] = $chunk;
+			}
+			$block['innerContent'] = $kept;
+			return $block;
+		}
+
+		$extra          = $need - $nulls;
+		$last_string_at = -1;
+		for ( $i = count( $content ) - 1; $i >= 0; $i-- ) {
+			if ( is_string( $content[ $i ] ) ) {
+				$last_string_at = $i;
+				break;
+			}
+		}
+
+		$insert_at  = ( $last_string_at >= 0 ) ? $last_string_at : count( $content );
+		$injection  = array();
+		for ( $i = 0; $i < $extra; $i++ ) {
+			$injection[] = "\n";
+			$injection[] = null;
+		}
+
+		array_splice( $content, $insert_at, 0, $injection );
+		$block['innerContent'] = $content;
+
+		return $block;
 	}
 
 	// -------------------------------------------------------------------------

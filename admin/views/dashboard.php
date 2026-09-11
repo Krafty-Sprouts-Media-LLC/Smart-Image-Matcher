@@ -210,5 +210,47 @@ $floor = (int) Settings::get( 'confidence_threshold' );
 			</div>
 		</section>
 	</div>
+
+	<?php
+	$recent_errors = \SmartImageMatcher\Logging\Logger::getRecentErrors();
+	if ( ! empty( $recent_errors ) ) :
+		?>
+	<section class="sim-card">
+		<div class="sim-card-head">
+			<div>
+				<h2><?php esc_html_e( 'Recent errors', 'smart-image-matcher' ); ?></h2>
+				<p class="description"><?php esc_html_e( 'Last 20 plugin errors. Stored on this site; debug.log is not required.', 'smart-image-matcher' ); ?></p>
+			</div>
+		</div>
+		<table class="widefat striped">
+			<thead>
+				<tr>
+					<th><?php esc_html_e( 'When', 'smart-image-matcher' ); ?></th>
+					<th><?php esc_html_e( 'What', 'smart-image-matcher' ); ?></th>
+					<th><?php esc_html_e( 'Detail', 'smart-image-matcher' ); ?></th>
+				</tr>
+			</thead>
+			<tbody>
+			<?php foreach ( $recent_errors as $smart_image_matcher_error ) : ?>
+				<tr>
+					<td><?php echo esc_html( (string) ( $smart_image_matcher_error['at'] ?? '' ) ); ?></td>
+					<td><?php echo esc_html( (string) ( $smart_image_matcher_error['message'] ?? '' ) ); ?></td>
+					<td>
+						<?php
+						$smart_image_matcher_bits = array();
+						if ( ! empty( $smart_image_matcher_error['context'] ) && is_array( $smart_image_matcher_error['context'] ) ) {
+							foreach ( $smart_image_matcher_error['context'] as $smart_image_matcher_ck => $smart_image_matcher_cv ) {
+								$smart_image_matcher_bits[] = $smart_image_matcher_ck . '=' . $smart_image_matcher_cv;
+							}
+						}
+						echo esc_html( implode( ' ', $smart_image_matcher_bits ) );
+						?>
+					</td>
+				</tr>
+			<?php endforeach; ?>
+			</tbody>
+		</table>
+	</section>
+	<?php endif; ?>
 </div>
 <?php // phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound ?>

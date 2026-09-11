@@ -52,6 +52,13 @@ if ( file_exists( $tests_dir . '/includes/functions.php' ) ) {
 			return isset( $args[2] ) ? (string) $args[2] : '';
 		}
 		function apply_filters( $tag, $value ) { return $value; }
+		function do_action() {}
+		function wp_slash( $value ) {
+			if ( is_array( $value ) ) {
+				return array_map( 'wp_slash', $value );
+			}
+			return addslashes( (string) $value );
+		}
 		// Stateful in-memory option store so tests can round-trip
 		// get_option()/update_option()/delete_option() calls.
 		function get_option( $option, $default = false ) {
@@ -109,7 +116,12 @@ if ( file_exists( $tests_dir . '/includes/functions.php' ) ) {
 			}
 			return $defaults;
 		}
-		function serialize_blocks( $blocks ) { return ''; }
+		function serialize_blocks( $blocks ) {
+			if ( isset( $GLOBALS['sim_test_serialize_blocks'] ) && is_callable( $GLOBALS['sim_test_serialize_blocks'] ) ) {
+				return $GLOBALS['sim_test_serialize_blocks']( $blocks );
+			}
+			return '';
+		}
 		function wp_unslash( $value ) { return stripslashes_deep( $value ); }
 		function stripslashes_deep( $value ) {
 			return is_array( $value ) ? array_map( 'stripslashes_deep', $value ) : stripslashes( $value );

@@ -232,4 +232,81 @@ class InsertionServiceTest extends TestCase {
 		$this->assertCount( 1, $kept );
 		$this->assertSame( $open, $kept[0]['heading_hash'] );
 	}
+
+	/** @test */
+	public function nested_heading_insert_adds_innercontent_placeholder(): void {
+		$hash = HeadingLocator::computeHash( 2, 'american goldfinch', 0 );
+		$post = new \WP_Post();
+		$post->ID = 16;
+		$post->post_content = '<!-- wp:group --><!-- wp:heading --><h2>American Goldfinch</h2><!-- /wp:heading --><!-- /wp:group -->';
+		$GLOBALS['sim_test_get_post'] = static function () use ( $post ) {
+			return $post;
+		};
+		$GLOBALS['sim_test_parse_blocks'] = static function () {
+			return array(
+				array(
+					'blockName'    => 'core/group',
+					'attrs'        => array(),
+					'innerHTML'    => '<div class="wp-block-group"></div>',
+					'innerContent' => array( '<div class="wp-block-group">', null, '</div>' ),
+					'innerBlocks'  => array(
+						array(
+							'blockName'    => 'core/heading',
+							'attrs'        => array( 'level' => 2 ),
+							'innerHTML'    => '<h2>American Goldfinch</h2>',
+							'innerContent' => array( '<h2>American Goldfinch</h2>' ),
+							'innerBlocks'  => array(),
+						),
+					),
+				),
+			);
+		};
+		$captured = null;
+		$GLOBALS['sim_test_serialize_blocks'] = static function ( $blocks ) use ( &$captured ) {
+			$captured = $blocks;
+			return 'changed-content';
+		};
+
+		$result = $this->service->insert( 16, $hash, 42 );
+
+		$this->assertTrue( $result );
+		$this->assertIsArray( $captured );
+		$group = $captured[0];
+		$this->assertCount( 2, $group['innerBlocks'] );
+		$this->assertSame( 'core/image', $group['innerBlocks'][1]['blockName'] );
+		$nulls = 0;
+		foreach ( $group['innerContent'] as $chunk ) {
+			if ( ! is_string( $chunk ) ) {
+				++$nulls;
+			}
+		}
+		$this->assertSame( 2, $nulls );
+
+		unset( $GLOBALS['sim_test_parse_blocks'], $GLOBALS['sim_test_serialize_blocks'], $GLOBALS['sim_test_get_post'] );
+	}
+
+	/** @test */
+	public function insert_crash_returns_wp_error_not_fatal(): void {
+		$hash = HeadingLocator::computeHash( 2, 'american goldfinch', 0 );
+		$post = new \WP_Post();
+		$post->ID = 17;
+		$post->post_content = '<!-- wp:heading --><h2>American Goldfinch</h2><!-- /wp:heading -->';
+		$GLOBALS['sim_test_get_post'] = static function () use ( $post ) {
+			return $post;
+		};
+		$GLOBALS['sim_test_parse_blocks'] = static function () {
+			throw new \TypeError( 'foreach() argument must be of type array|object, null given' );
+		};
+
+		$result = $this->service->insert( 17, $hash, 42 );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'smart_image_matcher_insertion_crashed', $result->get_error_code() );
+
+		$stored = \SmartImageMatcher\Logging\Logger::getRecentErrors();
+		$this->assertNotEmpty( $stored );
+		$this->assertSame( 'InsertionService: insert crashed', $stored[0]['message'] );
+
+		unset( $GLOBALS['sim_test_parse_blocks'], $GLOBALS['sim_test_get_post'] );
+	}
 }
