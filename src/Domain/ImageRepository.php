@@ -57,6 +57,8 @@ class ImageRepository {
 	 * @return array<int, array<string, mixed>>
 	 */
 	public function findCandidates( array $terms, int $limit = 20 ): array {
+		// Match the stemmed form the index stores (see Normalizer::indexTerms()).
+		$terms = Normalizer::lookupTerms( $terms );
 		if ( empty( $terms ) ) {
 			return array();
 		}
@@ -344,17 +346,23 @@ class ImageRepository {
 	 * @return string[]
 	 */
 	private function tokenize( string $text ): array {
-		// Remove special chars, split.
-		$text   = (string) preg_replace( '/[^a-z0-9\s]/', ' ', $text );
-		$words  = preg_split( '/\s+/', trim( $text ), -1, PREG_SPLIT_NO_EMPTY );
-		if ( ! $words ) {
-			return array();
-		}
+		// Same stemming + stop words as heading lookups, or plural/state
+		// filenames ("massachusetts", "rules") never match stemmed queries.
+		return Normalizer::indexTerms( $text );
+	}
 
-		// Filter very short tokens (< 2 chars) unless they are meaningful short
-		// codes. The full whitelist logic lives in Normalizer; here we use a
-		// simple length gate for the index.
-		return array_values( array_filter( $words, static fn( $w ) => strlen( $w ) >= 2 ) );
+	/**
+	 * Metadata row for one attachment (filename, title, alt, caption, url).
+	 *
+	 * @since 3.4.8
+	 * @param int $imageId Attachment ID.
+	 * @return array<string, mixed>|null Null for a non-positive ID.
+	 */
+	public function metadataFor( int $imageId ): ?array {
+		if ( $imageId <= 0 ) {
+			return null;
+		}
+		return $this->fetchMetadata( array( $imageId ) )[0] ?? null;
 	}
 
 	/**

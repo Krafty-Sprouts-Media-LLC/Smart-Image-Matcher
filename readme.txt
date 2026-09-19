@@ -4,7 +4,7 @@ Tags: images, media library, alt text, featured image, automation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 3.4.7
+Stable tag: 3.4.8
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -95,6 +95,12 @@ No AI data is sent automatically — only when you explicitly trigger AI matchin
 The plugin stores match results and job metadata in your own database only. Update checks may contact GitHub (see External services). No post content leaves your server unless you explicitly use AI features with a configured provider.
 
 == Changelog ==
+
+= 3.4.8 =
+* Fixed wrong images for state and plural headings: the image index and heading lookups now use the same word stemming. The index rebuilds once in the background after updating.
+* Pronouns (`you`, `your`, `own`…) no longer count as matching words.
+* Featured images auto-assign only on exact / prefix slug matches again; weaker matches go to Review.
+* AI-ranked heading images auto-insert only when the filename, title, or alt also matches the heading; otherwise they go to Review.
 
 = 3.4.7 =
 * Insert no longer fatals because `src/Cache` was gitignored and missing from the zip.

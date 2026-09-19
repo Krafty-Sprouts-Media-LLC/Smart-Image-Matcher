@@ -310,6 +310,32 @@ class FeaturedImageService {
 	}
 
 	/**
+	 * Whether an attachment is an exact / prefix slug match for a post.
+	 *
+	 * Auto-assign gate for every featured path (slug or AI ranked): anything
+	 * weaker goes to review, never straight onto the post.
+	 *
+	 * @since 3.4.8
+	 * @param int $post_id       Post ID.
+	 * @param int $attachment_id Attachment ID.
+	 * @return bool
+	 */
+	public function isAutoAssignSafeAttachment( int $post_id, int $attachment_id ): bool {
+		$post = get_post( $post_id );
+		if ( $attachment_id <= 0 || ! $post instanceof \WP_Post || '' === (string) $post->post_name ) {
+			return false;
+		}
+
+		foreach ( array_keys( $this->slugMap->get(), $attachment_id, false ) as $image_slug ) {
+			if ( $this->isAutoAssignSafePair( (string) $post->post_name, (string) $image_slug ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
 	 * Whether a post slug and image slug are safe to auto-assign under current rules.
 	 *
 	 * @since 3.0.5

@@ -261,6 +261,44 @@ class ArticleProcessorTest extends TestCase {
 		$this->assertSame( 2, $result['inserted'] );
 	}
 
+	/**
+	 * A confident model pick whose filename barely matches the heading is
+	 * parked for review, not inserted ("Firearm Discharge Rules in
+	 * Massachusetts" → One-bite-rule-in-Maine.jpg).
+	 *
+	 * @return void
+	 */
+	public function test_ai_heading_pick_without_keyword_support_goes_to_review(): void {
+		$matches = $this->createMock( MatchRepository::class );
+		$matches->expects( $this->never() )->method( 'markInserted' );
+		$matches->expects( $this->once() )->method( 'upsertPending' );
+		$gate      = $this->recordingHeadingGate( true, 95, 42 );
+		$processor = $this->processor( 13, 42, false, null, $matches, $gate );
+
+		$result = $processor->process( 10 );
+
+		$this->assertSame( 0, $result['inserted'] );
+		$this->assertSame( 1, $result['review'] );
+	}
+
+	/**
+	 * A high featured score on a non exact / prefix slug is never assigned.
+	 *
+	 * @return void
+	 */
+	public function test_featured_without_exact_or_prefix_slug_goes_to_review(): void {
+		$matches = $this->createMock( MatchRepository::class );
+		$matches->expects( $this->never() )->method( 'markInserted' );
+		$matches->expects( $this->once() )->method( 'upsertPending' )->with( 10, 'featured' );
+		$gate      = $this->recordingFeaturedGate( true, 95, 77 );
+		$processor = $this->processor( 0, 0, false, null, $matches, null, $gate, true );
+
+		$result = $processor->process( 10 );
+
+		$this->assertSame( 0, $result['inserted'] );
+		$this->assertSame( 1, $result['review'] );
+	}
+
 	public function test_unavailable_adapter_never_enqueues(): void {
 		$generation = $this->recordingFallback( false );
 		$processor  = $this->processor( 0, 0, false, $generation );

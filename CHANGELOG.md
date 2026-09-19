@@ -7,6 +7,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.4.8] - 19/09/2026
+
+### Fixed
+
+- Wrong images inserted for state and plural headings. The image index stored raw words (`massachusetts`, `rules`) while headings looked up stemmed words (`massachusett`, `rule`), so correctly spelled filenames never made the shortlist and typo’d or singular filenames won instead. Index and lookup now share one normalisation, and the index rebuilds once in the background after updating (DB version 5).
+- Pronouns and question words (`you`, `your`, `own`, `how`, `what`…) no longer count as matches. “Can You Hunt on Your Own Property…” no longer pulls in `can-you-butcher-your-own-animals-…`.
+
+### Changed
+
+- Featured auto-assign is exact / prefix slug only again, on every path (slug scoring and AI ranking). Anything weaker is parked in Review instead of being set on the post.
+- An AI-ranked heading image only auto-inserts when its filename, title, or alt also covers the heading’s keywords (keyword score at or above the Confidence Threshold). Otherwise it goes to Review.
+
 ## [3.4.7] - 11/09/2026
 
 ### Fixed

@@ -12,6 +12,7 @@ declare( strict_types=1 );
 
 namespace SmartImageMatcher;
 
+use SmartImageMatcher\Domain\ImageRepository;
 use SmartImageMatcher\Queue\Queue;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -30,7 +31,7 @@ class Migrator {
 	 *
 	 * Bump this constant whenever a new migration is added.
 	 */
-	const SCHEMA_VERSION = 4;
+	const SCHEMA_VERSION = 5;
 
 	/**
 	 * Action Scheduler hook names used by prior versions of this plugin
@@ -79,6 +80,10 @@ class Migrator {
 			$this->migration4ClearLegacyActionHooks();
 		}
 
+		if ( $installed < 5 ) {
+			$this->migration5ReindexStemmedTerms();
+		}
+
 		// Always ensure the inverted index table exists, even on sites that
 		// were activated before Migration 3 was introduced.
 		$this->ensureInvertedIndexExists();
@@ -102,6 +107,7 @@ class Migrator {
 		$this->migration2AddHeadingHash();
 		$this->migration3CreateInvertedIndex();
 		$this->migration4ClearLegacyActionHooks();
+		$this->migration5ReindexStemmedTerms();
 		update_option( 'smart_image_matcher_db_version', self::SCHEMA_VERSION, false );
 	}
 
@@ -305,6 +311,20 @@ class Migrator {
 	 */
 	private function migration4ClearLegacyActionHooks(): void {
 		Queue::clearLegacyHooks( self::LEGACY_ACTION_HOOKS );
+	}
+
+	/**
+	 * Migration 5 — Rebuild the inverted index with stemmed, stop-word
+	 * filtered terms so it matches heading lookups (Normalizer::indexTerms()).
+	 *
+	 * Resetting the cursor is enough: maybeResumeIndexBackfill() re-enqueues
+	 * the batched backfill and indexImage() replaces each image's rows.
+	 *
+	 * @since 3.4.8
+	 * @return void
+	 */
+	private function migration5ReindexStemmedTerms(): void {
+		( new ImageRepository() )->resetBackfillState();
 	}
 
 	/**

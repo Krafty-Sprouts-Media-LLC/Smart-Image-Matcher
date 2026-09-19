@@ -188,6 +188,31 @@ class Normalizer {
 	}
 
 	/**
+	 * Terms to store in the inverted index for one image field.
+	 *
+	 * Always stemmed and stop-word filtered, independent of the stemming
+	 * setting, so the index never drifts from what lookupTerms() queries.
+	 *
+	 * @since 3.4.8
+	 * @param string $text Filename (dashes ok), title, alt, or caption.
+	 * @return string[]
+	 */
+	public static function indexTerms( string $text ): array {
+		return self::normalize( $text, true, false );
+	}
+
+	/**
+	 * Map heading keywords to the index form used by indexTerms().
+	 *
+	 * @since 3.4.8
+	 * @param string[] $terms Keywords from normalize() (stemmed or not).
+	 * @return string[]
+	 */
+	public static function lookupTerms( array $terms ): array {
+		return array_values( array_unique( array_map( array( self::class, 'stemWord' ), $terms ) ) );
+	}
+
+	/**
 	 * Stem a single word (simplified Porter-like rules).
 	 *
 	 * @since 3.0.0
@@ -308,6 +333,12 @@ class Normalizer {
 				'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'been', 'be',
 				'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
 				'should', 'may', 'might', 'can', 'this', 'that', 'these', 'those',
+				// Pronouns and question words: "Can You ... Your Own" must not
+				// match every other "can-you-...-your-own-..." filename.
+				'you', 'your', 'yours', 'own', 'it', 'its', 'they', 'their', 'them',
+				'we', 'our', 'my', 'me', 'how', 'what', 'when', 'where', 'why',
+				'which', 'who', 'whom', 'not', 'no', 'if', 'so', 'than', 'then',
+				'into', 'about', 'also', 'just', 'very',
 			);
 		}
 		return self::$stopWords;

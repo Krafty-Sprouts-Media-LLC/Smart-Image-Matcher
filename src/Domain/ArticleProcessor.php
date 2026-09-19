@@ -213,6 +213,11 @@ class ArticleProcessor {
 		}
 		$action = MatchDecision::decide( $score, $auto, $review_min, $can_generate );
 
+		// Only exact / prefix slug matches go straight onto the post.
+		if ( MatchDecision::INSERT === $action && ! $this->featured->isAutoAssignSafeAttachment( (int) $post->ID, $image ) ) {
+			$action = MatchDecision::REVIEW;
+		}
+
 		$this->applyOutcome(
 			$post,
 			$action,
@@ -270,6 +275,12 @@ class ArticleProcessor {
 			$action = MatchDecision::decide( $score, $auto, $review_min, $can_generate );
 			$text   = (string) ( $heading['text'] ?? '' );
 			$tag    = (string) ( $heading['tag'] ?? 'h2' );
+
+			// A model score alone never auto-inserts: the filename/title/alt
+			// must carry most of the heading's keywords too.
+			if ( MatchDecision::INSERT === $action && $use_ai && $this->keywordScore( $heading, $image ) < $review_min ) {
+				$action = MatchDecision::REVIEW;
+			}
 
 			if ( MatchDecision::INSERT === $action && $image > 0 ) {
 				$used_ids[ $image ] = $image;
@@ -455,6 +466,22 @@ class ArticleProcessor {
 			'score'    => $best_score,
 			'image_id' => $best_id,
 		);
+	}
+
+	/**
+	 * Keyword score of one specific image against a heading.
+	 *
+	 * @param array<string, mixed> $heading  Heading descriptor.
+	 * @param int                  $image_id Attachment ID.
+	 * @return int 0 when the image cannot be loaded.
+	 */
+	private function keywordScore( array $heading, int $image_id ): int {
+		$meta = $this->images->metadataFor( $image_id );
+		if ( null === $meta ) {
+			return 0;
+		}
+		$terms = $this->matcher->extractKeywords( (string) ( $heading['text'] ?? '' ) );
+		return $this->matcher->calculateScore( $terms, $meta );
 	}
 
 	/**
