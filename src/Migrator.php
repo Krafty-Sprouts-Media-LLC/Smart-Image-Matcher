@@ -13,6 +13,7 @@ declare( strict_types=1 );
 namespace SmartImageMatcher;
 
 use SmartImageMatcher\Domain\ImageRepository;
+use SmartImageMatcher\Domain\PendingRecheck;
 use SmartImageMatcher\Queue\Queue;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -31,7 +32,7 @@ class Migrator {
 	 *
 	 * Bump this constant whenever a new migration is added.
 	 */
-	const SCHEMA_VERSION = 5;
+	const SCHEMA_VERSION = 6;
 
 	/**
 	 * Action Scheduler hook names used by prior versions of this plugin
@@ -84,6 +85,10 @@ class Migrator {
 			$this->migration5ReindexStemmedTerms();
 		}
 
+		if ( $installed < 6 ) {
+			$this->migration6RecheckPendingRows();
+		}
+
 		// Always ensure the inverted index table exists, even on sites that
 		// were activated before Migration 3 was introduced.
 		$this->ensureInvertedIndexExists();
@@ -92,6 +97,7 @@ class Migrator {
 		// index backfill (e.g. killed by a timeout, or abandoned after a
 		// hook rename) and re-enqueue it. Cheap no-op once fully indexed.
 		( new Queue() )->maybeResumeIndexBackfill();
+		( new Queue() )->maybeResumePendingRecheck();
 
 		update_option( 'smart_image_matcher_db_version', self::SCHEMA_VERSION, false );
 	}
@@ -108,6 +114,7 @@ class Migrator {
 		$this->migration3CreateInvertedIndex();
 		$this->migration4ClearLegacyActionHooks();
 		$this->migration5ReindexStemmedTerms();
+		$this->migration6RecheckPendingRows();
 		update_option( 'smart_image_matcher_db_version', self::SCHEMA_VERSION, false );
 	}
 
@@ -325,6 +332,28 @@ class Migrator {
 	 */
 	private function migration5ReindexStemmedTerms(): void {
 		( new ImageRepository() )->resetBackfillState();
+	}
+
+	/**
+	 * Migration 6 — Reject existing Review rows that fail RelevanceGuard
+	 * (image for another state, or only the state name in common).
+	 *
+	 * Only arms the cursor; Queue::maybeResumePendingRecheck() schedules
+	 * the batched Action Scheduler job.
+	 *
+	 * @since 3.4.9
+	 * @return void
+	 */
+	private function migration6RecheckPendingRows(): void {
+		update_option(
+			PendingRecheck::STATE_OPTION,
+			array(
+				'after_id' => 0,
+				'done'     => false,
+				'rejected' => 0,
+			),
+			false
+		);
 	}
 
 	/**

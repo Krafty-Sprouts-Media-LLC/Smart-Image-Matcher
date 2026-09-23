@@ -23,6 +23,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 use SmartImageMatcher\Domain\ImageRepository;
 use SmartImageMatcher\Domain\Matcher as KeywordMatcher;
+use SmartImageMatcher\Domain\RelevanceGuard;
 use SmartImageMatcher\Logging\Logger;
 use SmartImageMatcher\Settings\Settings;
 
@@ -67,7 +68,12 @@ class Matcher {
 		// Step 1: fast keyword-based candidate list.
 		$kwMatcher = new KeywordMatcher();
 		$terms     = $kwMatcher->extractKeywords( $heading['text'] ?? '' );
-		$candidates = $repo->findCandidates( $terms, self::MAX_CANDIDATES );
+		$candidates = RelevanceGuard::filter(
+			$repo->findCandidates( $terms, self::MAX_CANDIDATES * 3 ),
+			(string) ( $heading['text'] ?? '' ),
+			(string) ( $heading['context'] ?? '' )
+		);
+		$candidates = array_slice( $candidates, 0, self::MAX_CANDIDATES );
 
 		if ( empty( $candidates ) ) {
 			Logger::info( 'AI\Matcher: no keyword candidates, skipping AI', array( 'heading' => $heading['text'] ?? '' ) );
@@ -135,7 +141,12 @@ class Matcher {
 			)
 		);
 		$terms      = $kwMatcher->extractKeywords( $blob );
-		$candidates = $repo->findCandidates( $terms, self::MAX_CANDIDATES );
+		$candidates = RelevanceGuard::filter(
+			$repo->findCandidates( $terms, self::MAX_CANDIDATES * 3 ),
+			(string) $post->post_title,
+			$focus
+		);
+		$candidates = array_slice( $candidates, 0, self::MAX_CANDIDATES );
 
 		if ( empty( $candidates ) ) {
 			Logger::info(

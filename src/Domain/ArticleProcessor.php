@@ -269,6 +269,8 @@ class ArticleProcessor {
 				continue;
 			}
 
+			$heading['context'] = (string) $post->post_title;
+
 			$best   = $this->bestHeadingMatch( $heading, $used_ids );
 			$score  = (int) $best['score'];
 			$image  = (int) $best['image_id'];
@@ -413,6 +415,9 @@ class ArticleProcessor {
 			return;
 		}
 
+		// Not a review outcome any more: drop the stale Review row from an earlier run.
+		$this->matches->clearPendingForHeading( (int) $post->ID, $heading_hash );
+
 		if ( MatchDecision::GENERATE === $action ) {
 			$ok = null !== $this->generation
 				&& $this->generation->enqueue( (int) $post->ID, $heading_hash, $heading_text, $section_text );
@@ -446,7 +451,11 @@ class ArticleProcessor {
 		}
 
 		$terms      = $this->matcher->extractKeywords( (string) ( $heading['text'] ?? '' ) );
-		$candidates = $this->images->findCandidates( $terms );
+		$candidates = RelevanceGuard::filter(
+			$this->images->findCandidates( $terms ),
+			(string) ( $heading['text'] ?? '' ),
+			(string) ( $heading['context'] ?? '' )
+		);
 		$best_score = 0;
 		$best_id    = 0;
 

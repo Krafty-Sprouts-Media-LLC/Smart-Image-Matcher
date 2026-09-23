@@ -7,6 +7,19 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.4.9] - 23/09/2026
+
+### Fixed
+
+- Review suggested images for the wrong state (22 of 176 rows on one Review page: Idaho → `Right-to-Farm-Laws-in-Virginia`, Hawaii → `…-in-Colorado`). New `Domain\RelevanceGuard` rejects any image naming a US state that the heading and article title do not. Multi-word states are matched first, so West Virginia ≠ Virginia.
+- Review suggested images sharing only the state name (another 22 of 176: “Property Tax … in Kansas” → `Bowfishing-laws-in-Kansas`). With places and generic legal words removed, heading and image must share at least one word.
+- Stale Review rows survived re-processing when a heading’s outcome changed to skip or generate. They are now cleared.
+
+### Changed
+
+- The guard runs on the candidate shortlist before keyword scoring or AI ranking (headings and featured), so rejected images never reach the model. Place and generic lists are filterable: `sim_relevance_place_terms`, `sim_relevance_generic_terms`.
+- DB version 6: existing pending rows are re-checked once by a batched Action Scheduler job (`smart_image_matcher_queue_pending_recheck`, 200 rows per batch); failing rows are marked rejected.
+
 ## [3.4.8] - 19/09/2026
 
 ### Fixed

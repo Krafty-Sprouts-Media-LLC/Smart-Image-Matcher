@@ -236,6 +236,33 @@ class MatchRepository {
 	}
 
 	/**
+	 * Pending rows after an ID cursor, oldest first (for batched re-checks).
+	 *
+	 * @since 3.4.9
+	 * @param int $afterId Last row ID already processed.
+	 * @param int $limit   Batch size.
+	 * @return array<int, array<string, mixed>> Rows with id, post_id, heading_text, image_id.
+	 */
+	public function pendingBatchAfter( int $afterId, int $limit ): array {
+		global $wpdb;
+
+		$rows = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$wpdb->prepare(
+				"SELECT id, post_id, heading_text, image_id FROM {$wpdb->prefix}smart_image_matcher_matches
+				 WHERE status = %s AND id > %d
+				 ORDER BY id ASC
+				 LIMIT %d",
+				'pending',
+				$afterId,
+				$limit
+			),
+			ARRAY_A
+		);
+
+		return is_array( $rows ) ? $rows : array();
+	}
+
+	/**
 	 * Get matches for a post by status.
 	 *
 	 * @since 3.0.0

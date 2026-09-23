@@ -22,6 +22,7 @@ use SmartImageMatcher\Domain\HeadingExtractor;
 use SmartImageMatcher\Domain\ImageRepository;
 use SmartImageMatcher\Domain\Matcher;
 use SmartImageMatcher\Domain\MatchRepository;
+use SmartImageMatcher\Domain\PendingRecheck;
 use SmartImageMatcher\FeaturedImages\FeaturedImageService;
 use SmartImageMatcher\FeaturedImages\SlugMapBuilder;
 use SmartImageMatcher\Insertion\BlockBuilder;
@@ -145,6 +146,41 @@ class JobRunner {
 				'headings' => count( $groups ),
 			)
 		);
+	}
+
+	/**
+	 * Re-check one batch of Review rows against RelevanceGuard.
+	 *
+	 * Hooked to Queue::HOOK_PENDING_RECHECK. Bounded batch + persisted cursor,
+	 * same pattern as runIndexBackfill().
+	 *
+	 * @since 3.4.9
+	 * @return void
+	 */
+	public static function runPendingRecheck(): void {
+		$state = get_option( PendingRecheck::STATE_OPTION, array() );
+		if ( ! is_array( $state ) || empty( $state ) || ! empty( $state['done'] ) ) {
+			return;
+		}
+
+		$result = ( new PendingRecheck( new MatchRepository(), new ImageRepository() ) )
+			->runBatch( (int) ( $state['after_id'] ?? 0 ), 200 );
+
+		update_option(
+			PendingRecheck::STATE_OPTION,
+			array(
+				'after_id' => $result['next_after'],
+				'done'     => $result['done'],
+				'rejected' => (int) ( $state['rejected'] ?? 0 ) + $result['rejected'],
+			),
+			false
+		);
+
+		Logger::info( 'JobRunner: pending re-check batch', $result );
+
+		if ( ! $result['done'] && function_exists( 'as_enqueue_async_action' ) ) {
+			as_enqueue_async_action( Queue::HOOK_PENDING_RECHECK, array(), Queue::GROUP );
+		}
 	}
 
 	/**

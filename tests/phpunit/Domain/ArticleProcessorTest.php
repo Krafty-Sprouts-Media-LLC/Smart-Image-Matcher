@@ -227,8 +227,8 @@ class ArticleProcessorTest extends TestCase {
 		$images = $this->createMock( ImageRepository::class );
 		$images->method( 'findCandidates' )->willReturn(
 			array(
-				array( 'id' => 42 ),
-				array( 'id' => 43 ),
+				array( 'id' => 42, 'filename' => 'goldfinch-and-wren-1.jpg' ),
+				array( 'id' => 43, 'filename' => 'goldfinch-and-wren-2.jpg' ),
 			)
 		);
 
@@ -338,7 +338,7 @@ class ArticleProcessorTest extends TestCase {
 		$images = $this->createMock( ImageRepository::class );
 		$images->method( 'findCandidates' )->willReturn(
 			$image_id > 0 || $score > 0
-				? array( array( 'id' => max( 1, $image_id ) ) )
+				? array( array( 'id' => max( 1, $image_id ), 'filename' => 'american-goldfinch.jpg' ) )
 				: array()
 		);
 

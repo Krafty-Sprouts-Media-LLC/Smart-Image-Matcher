@@ -19,6 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 use SmartImageMatcher\Domain\ImageRepository;
+use SmartImageMatcher\Domain\PendingRecheck;
 use SmartImageMatcher\Logging\Logger;
 
 /**
@@ -90,6 +91,13 @@ class Queue {
 	const HOOK_FAL_RECOVER = 'smart_image_matcher_queue_fal_recover';
 
 	/**
+	 * Action hook: re-check one batch of Review rows against RelevanceGuard.
+	 *
+	 * @since 3.4.9
+	 */
+	const HOOK_PENDING_RECHECK = 'smart_image_matcher_queue_pending_recheck';
+
+	/**
 	 * Seconds between fal poll AS jobs.
 	 *
 	 * @since 3.2.18
@@ -126,6 +134,33 @@ class Queue {
 		add_action( self::HOOK_AI_IMAGE_GEN, array( JobRunner::class, 'runAiImageGenJob' ), 10, 2 );
 		add_action( self::HOOK_AI_IMAGE_GEN_POLL, array( JobRunner::class, 'runAiImageGenPollJob' ), 10, 2 );
 		add_action( self::HOOK_FAL_RECOVER, array( JobRunner::class, 'runFalRecoverJob' ), 10, 2 );
+		add_action( self::HOOK_PENDING_RECHECK, array( JobRunner::class, 'runPendingRecheck' ) );
+	}
+
+	/**
+	 * Schedule the Review re-check when its state says it is unfinished.
+	 *
+	 * Safe on every request: no-op once done, or while a batch is queued.
+	 *
+	 * @since 3.4.9
+	 * @return void
+	 */
+	public function maybeResumePendingRecheck(): void {
+		$state = get_option( PendingRecheck::STATE_OPTION, array() );
+		if ( ! is_array( $state ) || empty( $state ) || ! empty( $state['done'] ) || ! self::isAvailable() ) {
+			return;
+		}
+
+		if ( class_exists( 'ActionScheduler' ) && ! \ActionScheduler::is_initialized() ) {
+			add_action( 'action_scheduler_init', array( $this, 'maybeResumePendingRecheck' ) );
+			return;
+		}
+
+		if ( as_has_scheduled_action( self::HOOK_PENDING_RECHECK, array(), self::GROUP ) ) {
+			return;
+		}
+
+		as_enqueue_async_action( self::HOOK_PENDING_RECHECK, array(), self::GROUP );
 	}
 
 	// -------------------------------------------------------------------------

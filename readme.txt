@@ -4,7 +4,7 @@ Tags: images, media library, alt text, featured image, automation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 3.4.8
+Stable tag: 3.4.9
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -95,6 +95,12 @@ No AI data is sent automatically — only when you explicitly trigger AI matchin
 The plugin stores match results and job metadata in your own database only. Update checks may contact GitHub (see External services). No post content leaves your server unless you explicitly use AI features with a configured provider.
 
 == Changelog ==
+
+= 3.4.9 =
+* Review no longer suggests images for another state (Idaho heading → `…-in-Virginia.jpg`). The article title counts, so headings without a state name are covered too. West Virginia and Virginia are told apart.
+* Review no longer suggests images that share only the state name with the heading (“Property Tax … in Kansas” → `Bowfishing-laws-in-Kansas.jpg`). Generic words (laws, rules, requirements, legal) do not count as a shared topic.
+* These rules run before any keyword or AI score, on headings and featured images, so rejected images are never sent to the model.
+* Existing Review rows are re-checked once in the background after updating; failing rows are marked Rejected. Re-processing an article also clears its stale Review rows.
 
 = 3.4.8 =
 * Fixed wrong images for state and plural headings: the image index and heading lookups now use the same word stemming. The index rebuilds once in the background after updating.
