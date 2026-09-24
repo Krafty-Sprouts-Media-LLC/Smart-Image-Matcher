@@ -813,6 +813,18 @@ class JobRunner {
 	}
 
 	/**
+	 * Count an article action Action Scheduler killed (timeout / fatal) so the
+	 * job can still reach its total instead of blocking hourly runs.
+	 *
+	 * @since 3.5.0
+	 * @param string $jobId Job ID.
+	 * @return void
+	 */
+	public static function recordLostArticle( string $jobId ): void {
+		self::incrementBulkJobDone( $jobId, array( 'errors' => 1 ) );
+	}
+
+	/**
 	 * Increment bulk job progress and mark complete when all posts are scanned.
 	 *
 	 * @since 3.0.0
@@ -846,12 +858,17 @@ class JobRunner {
 		$totals['total'] = isset( $totals['total'] ) ? (int) $totals['total'] : 0;
 		$totals['done']  = min( $totals['total'], ( isset( $totals['done'] ) ? (int) $totals['done'] : 0 ) + 1 );
 
-		foreach ( array( 'inserted', 'review', 'generated', 'skipped' ) as $key ) {
+		foreach ( array( 'inserted', 'review', 'generated', 'skipped', 'errors' ) as $key ) {
 			$totals[ $key ] = ( isset( $totals[ $key ] ) ? (int) $totals[ $key ] : 0 ) + (int) ( $counts[ $key ] ?? 0 );
 		}
 
-		$status     = $totals['total'] > 0 && $totals['done'] >= $totals['total'] ? 'completed' : 'processing';
-		$finishedAt = 'completed' === $status ? current_time( 'mysql' ) : null;
+		// Last progress time: QueueWatchdog closes jobs that stop moving.
+		$totals['touched_at'] = (int) current_time( 'timestamp' ); // phpcs:ignore WordPress.DateTime.CurrentTimeTimestamp.Requested -- compared with local-time DB columns.
+
+		$finished = $totals['total'] > 0 && $totals['done'] >= $totals['total'];
+		// A job the watchdog or daily cleanup already closed stays closed until it truly finishes.
+		$status     = $finished ? 'completed' : ( 'failed' === ( $row['status'] ?? '' ) ? 'failed' : 'processing' );
+		$finishedAt = 'processing' === $status ? null : current_time( 'mysql' );
 
 		$wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$wpdb->prefix . 'smart_image_matcher_queue',

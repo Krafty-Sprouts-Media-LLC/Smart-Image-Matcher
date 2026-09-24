@@ -111,6 +111,70 @@ if ( ! function_exists( 'as_schedule_recurring_action' ) ) {
 		function as_unschedule_all_actions( $hook, $args = array(), $group = '' ): void {}
 	}
 
+	if ( ! class_exists( 'ActionScheduler_Action' ) ) {
+		/** Stub: one Action Scheduler action (QueueWatchdog reads hook/args/group). */
+		class ActionScheduler_Action {
+			public function get_hook(): string { return ''; }
+			/** @return array<string|int, mixed> */
+			public function get_args(): array { return array(); }
+			public function get_group(): string { return ''; }
+		}
+	}
+
+	if ( ! class_exists( 'ActionScheduler_Store' ) ) {
+		/** Stub: Action Scheduler store (status constants + fetch). */
+		abstract class ActionScheduler_Store {
+			const STATUS_PENDING = 'pending';
+			const STATUS_RUNNING = 'in-progress';
+			/** @param string $action_id Action ID. */
+			abstract public function fetch_action( $action_id ): ActionScheduler_Action;
+		}
+	}
+
+	if ( ! class_exists( 'ActionScheduler' ) ) {
+		/** Stub: Action Scheduler facade. */
+		abstract class ActionScheduler {
+			public static function store(): ActionScheduler_Store { throw new \RuntimeException( 'stub' ); }
+			public static function is_initialized(): bool { return true; }
+		}
+	}
+
+	if ( ! class_exists( 'ActionScheduler_QueueCleaner' ) ) {
+		/** Stub: Action Scheduler's own stale-claim / timeout cleaner. */
+		class ActionScheduler_QueueCleaner {
+			public function __construct( ?ActionScheduler_Store $store = null ) {}
+			public function reset_timeouts( int $time_limit = 300 ): void {}
+			public function mark_failures( int $time_limit = 300 ): void {}
+		}
+	}
+
+	if ( ! function_exists( 'as_get_scheduled_actions' ) ) {
+		/**
+		 * Stub for Action Scheduler query.
+		 *
+		 * @param array<string, mixed> $args         Query.
+		 * @param string               $return_format Format.
+		 * @return array<int, mixed>
+		 */
+		function as_get_scheduled_actions( $args = array(), $return_format = OBJECT ): array {
+			return array();
+		}
+	}
+
+	if ( ! function_exists( 'as_next_scheduled_action' ) ) {
+		/**
+		 * Stub for Action Scheduler next-run lookup.
+		 *
+		 * @param string $hook  Hook name.
+		 * @param array  $args  Action args.
+		 * @param string $group Action group.
+		 * @return int|bool
+		 */
+		function as_next_scheduled_action( $hook, $args = null, $group = '' ) {
+			return false;
+		}
+	}
+
 	if ( ! class_exists( 'LiteSpeed_Cache_API' ) ) {
 		class LiteSpeed_Cache_API {
 			public static function purge_post( int $postId ): void {}

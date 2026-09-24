@@ -4,7 +4,7 @@ Tags: images, media library, alt text, featured image, automation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 3.4.9
+Stable tag: 3.5.0
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -95,6 +95,12 @@ No AI data is sent automatically — only when you explicitly trigger AI matchin
 The plugin stores match results and job metadata in your own database only. Update checks may contact GitHub (see External services). No post content leaves your server unless you explicitly use AI features with a configured provider.
 
 == Changelog ==
+
+= 3.5.0 =
+* Hourly runs no longer stop silently. A new watchdog (WP-Cron, every 15 minutes) frees the Action Scheduler slot when an action is stuck "in progress", and closes runs that stopped making progress so the next hourly run can start.
+* Articles that Action Scheduler kills (timeout or fatal error) are now counted and logged on the Dashboard with the post ID, instead of leaving their run open for 24 hours.
+* AI ranking requests time out after 60 seconds, so one hung call cannot hold the queue.
+* Dashboard → Queue Health shows the real state: last hourly run and why it skipped, waiting / overdue / running articles, what is blocking the queue, and a Check now button.
 
 = 3.4.9 =
 * Review no longer suggests images for another state (Idaho heading → `…-in-Virginia.jpg`). The article title counts, so headings without a state name are covered too. West Virginia and Virginia are told apart.

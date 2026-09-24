@@ -35,6 +35,7 @@ use SmartImageMatcher\Insertion\InsertionService;
 use SmartImageMatcher\Logging\Logger;
 use SmartImageMatcher\Queue\JobRunner;
 use SmartImageMatcher\Queue\Queue;
+use SmartImageMatcher\Queue\QueueWatchdog;
 use SmartImageMatcher\REST\MatchController;
 use SmartImageMatcher\REST\InsertController;
 use SmartImageMatcher\REST\FeaturedImageController;
@@ -169,6 +170,7 @@ class Plugin {
 		wp_clear_scheduled_hook( 'smart_image_matcher_daily_cleanup' );
 		wp_clear_scheduled_hook( 'smart_image_matcher_fiaa_cron_run' );
 		wp_clear_scheduled_hook( Premium\FiaaCron::HOOK );
+		wp_clear_scheduled_hook( QueueWatchdog::HOOK );
 
 		if ( Queue::isAvailable() && function_exists( 'as_unschedule_all_actions' ) ) {
 			$hooks = array(
@@ -371,6 +373,9 @@ class Plugin {
 
 		// Action Scheduler job hooks.
 		Queue::registerHooks();
+
+		// WP-Cron watchdog: frees stuck queue slots, closes stalled jobs, logs lost articles.
+		( new QueueWatchdog() )->register();
 
 		// OpenRouter dashboard App column (HTTP-Referer / X-Title) for SIM text calls.
 		add_filter( 'http_request_args', array( ProviderBridge::class, 'filterOpenRouterHttpArgs' ), 10, 2 );

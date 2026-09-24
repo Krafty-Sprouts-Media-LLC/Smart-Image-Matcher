@@ -64,6 +64,24 @@ if ( $last_job ) {
 
 $auto  = (int) Settings::get( 'auto_insert_threshold' );
 $floor = (int) Settings::get( 'confidence_threshold' );
+
+$health       = \SmartImageMatcher\Queue\QueueWatchdog::health();
+$health_queue = $health['queue'];
+$health_class = array(
+	'good' => 'sim-status-good',
+	'warn' => 'sim-status-warn',
+	'bad'  => 'sim-status-bad',
+)[ $health['state'] ] ?? 'sim-status-info';
+$tick_labels  = array(
+	'queued'  => __( 'Ran', 'smart-image-matcher' ),
+	'skipped' => __( 'Skipped', 'smart-image-matcher' ),
+	'nothing' => __( 'Nothing to do', 'smart-image-matcher' ),
+);
+$fmt_time     = static function ( $ts ): string {
+	return $ts ? wp_date( 'j M H:i', (int) $ts ) : '—';
+};
+$watchdog     = $health['watchdog'];
+$wd_checked   = isset( $_GET['sim_wd_checked'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- display-only flag after redirect.
 ?>
 <div class="wrap sim-admin-page sim-dashboard-page">
 	<div class="sim-page-head">
@@ -123,10 +141,144 @@ $floor = (int) Settings::get( 'confidence_threshold' );
 			<div class="sim-card-head">
 				<div>
 					<h2><?php esc_html_e( 'Queue Health', 'smart-image-matcher' ); ?></h2>
-					<p class="description"><?php esc_html_e( 'Recent article runs.', 'smart-image-matcher' ); ?></p>
+					<p class="description"><?php echo esc_html( $health['title'] ); ?></p>
 				</div>
-				<span class="sim-status sim-status-good"><?php esc_html_e( 'Action Scheduler', 'smart-image-matcher' ); ?></span>
+				<span class="sim-status <?php echo esc_attr( $health_class ); ?>">
+					<?php echo esc_html( array( 'good' => __( 'Healthy', 'smart-image-matcher' ), 'warn' => __( 'Check', 'smart-image-matcher' ), 'bad' => __( 'Blocked', 'smart-image-matcher' ) )[ $health['state'] ] ?? '' ); ?>
+				</span>
 			</div>
+
+			<?php if ( $wd_checked ) : ?>
+				<div class="notice notice-info inline"><p>
+					<?php
+					echo esc_html(
+						sprintf(
+							/* translators: 1: stuck actions freed, 2: stalled jobs closed */
+							__( 'Checked just now. Freed %1$d stuck queue slot(s), closed %2$d stalled run(s).', 'smart-image-matcher' ),
+							isset( $_GET['sim_wd_freed'] ) ? absint( $_GET['sim_wd_freed'] ) : 0, // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+							isset( $_GET['sim_wd_closed'] ) ? absint( $_GET['sim_wd_closed'] ) : 0 // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+						)
+					);
+					?>
+				</p></div>
+			<?php endif; ?>
+
+			<table class="widefat sim-health-table">
+				<tbody>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Hourly run', 'smart-image-matcher' ); ?></th>
+						<td>
+							<?php if ( ! empty( $health['ticks'][0] ) ) : ?>
+								<?php
+								$last_tick = $health['ticks'][0];
+								echo esc_html(
+									sprintf(
+										/* translators: 1: time, 2: outcome, 3: detail */
+										__( 'Last %1$s — %2$s: %3$s', 'smart-image-matcher' ),
+										$fmt_time( $last_tick['at'] ?? 0 ),
+										$tick_labels[ $last_tick['outcome'] ?? '' ] ?? (string) ( $last_tick['outcome'] ?? '' ),
+										(string) ( $last_tick['detail'] ?? '' )
+									)
+								);
+								?>
+							<?php else : ?>
+								<?php esc_html_e( 'No run recorded since this version was installed.', 'smart-image-matcher' ); ?>
+							<?php endif; ?>
+							<br /><span class="description">
+								<?php
+								echo esc_html(
+									$health['next_tick']
+										/* translators: %s: time */
+										? sprintf( __( 'Next run %s', 'smart-image-matcher' ), $fmt_time( $health['next_tick'] ) )
+										: __( 'Scheduled run is off (Settings → Featured Images).', 'smart-image-matcher' )
+								);
+								?>
+							</span>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Article queue', 'smart-image-matcher' ); ?></th>
+						<td>
+							<?php
+							echo esc_html(
+								sprintf(
+									/* translators: 1: pending, 2: overdue, 3: running */
+									__( '%1$d waiting · %2$d overdue · %3$d running', 'smart-image-matcher' ),
+									$health_queue['pending'],
+									$health_queue['past_due'],
+									$health_queue['in_progress']
+								)
+							);
+							if ( $health_queue['past_due'] > 0 ) {
+								echo ' ';
+								/* translators: %d: minutes */
+								echo esc_html( sprintf( __( '(oldest overdue by %d min)', 'smart-image-matcher' ), $health_queue['oldest_past_due_minutes'] ) );
+							}
+							?>
+						</td>
+					</tr>
+					<?php if ( $health_queue['stuck'] > 0 || $health_queue['stale_claims'] > 0 ) : ?>
+						<tr>
+							<th scope="row"><?php esc_html_e( 'Blocked by', 'smart-image-matcher' ); ?></th>
+							<td class="sim-bad">
+								<?php
+								echo esc_html(
+									$health_queue['stuck'] > 0
+										/* translators: 1: hook, 2: minutes */
+										? sprintf( __( '%1$s, running for %2$d min. Action Scheduler runs one batch at a time, so everything waits behind it.', 'smart-image-matcher' ), $health_queue['stuck_hook'], $health_queue['stuck_minutes'] )
+										/* translators: %d: count */
+										: sprintf( __( '%d stale claim(s) holding queued actions.', 'smart-image-matcher' ), $health_queue['stale_claims'] )
+								);
+								?>
+							</td>
+						</tr>
+					<?php endif; ?>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Watchdog', 'smart-image-matcher' ); ?></th>
+						<td>
+							<?php
+							if ( ! empty( $watchdog['at'] ) ) {
+								echo esc_html(
+									sprintf(
+										/* translators: 1: time, 2: freed, 3: closed */
+										__( 'Checked %1$s · freed %2$d stuck slot(s) · closed %3$d stalled run(s). Runs every 15 minutes.', 'smart-image-matcher' ),
+										$fmt_time( $watchdog['at'] ),
+										(int) ( $watchdog['freed'] ?? 0 ),
+										(int) ( $watchdog['closed'] ?? 0 )
+									)
+								);
+							} else {
+								esc_html_e( 'Not run yet. Runs every 15 minutes on WP-Cron.', 'smart-image-matcher' );
+							}
+							?>
+							<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin-top:8px">
+								<input type="hidden" name="action" value="<?php echo esc_attr( \SmartImageMatcher\Queue\QueueWatchdog::CHECK_NOW_ACTION ); ?>" />
+								<?php wp_nonce_field( \SmartImageMatcher\Queue\QueueWatchdog::CHECK_NOW_ACTION ); ?>
+								<button type="submit" class="button"><?php esc_html_e( 'Check now', 'smart-image-matcher' ); ?></button>
+							</form>
+						</td>
+					</tr>
+				</tbody>
+			</table>
+
+			<?php if ( count( $health['ticks'] ) > 1 ) : ?>
+				<details class="sim-health-ticks">
+					<summary><?php esc_html_e( 'Last 12 hourly runs', 'smart-image-matcher' ); ?></summary>
+					<table class="widefat striped">
+						<tbody>
+						<?php foreach ( $health['ticks'] as $smart_image_matcher_tick ) : ?>
+							<tr>
+								<td><?php echo esc_html( $fmt_time( $smart_image_matcher_tick['at'] ?? 0 ) ); ?></td>
+								<td><?php echo esc_html( $tick_labels[ $smart_image_matcher_tick['outcome'] ?? '' ] ?? '' ); ?></td>
+								<td><?php echo esc_html( (string) ( $smart_image_matcher_tick['detail'] ?? '' ) ); ?></td>
+							</tr>
+						<?php endforeach; ?>
+						</tbody>
+					</table>
+				</details>
+			<?php endif; ?>
+
+			<h3 class="sim-health-subhead"><?php esc_html_e( 'Recent article runs', 'smart-image-matcher' ); ?></h3>
 
 			<?php if ( ! empty( $recent_jobs ) ) : ?>
 				<table class="widefat striped">

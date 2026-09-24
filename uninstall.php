@@ -24,6 +24,7 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 wp_clear_scheduled_hook( 'smart_image_matcher_daily_cleanup' );
 wp_clear_scheduled_hook( 'smart_image_matcher_fiaa_cron_run' );
 wp_clear_scheduled_hook( 'smart_image_matcher_fiaa_scheduled_run' );
+wp_clear_scheduled_hook( 'smart_image_matcher_watchdog' );
 
 if ( function_exists( 'as_unschedule_all_actions' ) ) {
 	$smart_image_matcher_action_hooks = array(

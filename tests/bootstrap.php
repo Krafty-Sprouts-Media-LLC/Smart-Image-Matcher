@@ -20,6 +20,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 if ( ! defined( 'HOUR_IN_SECONDS' ) ) {
 	define( 'HOUR_IN_SECONDS', 3600 );
 }
+if ( ! defined( 'ARRAY_A' ) ) {
+	define( 'ARRAY_A', 'ARRAY_A' );
+}
 
 // Load WordPress test environment only when available.
 $tests_dir = getenv( 'WP_TESTS_DIR' ) ?: '/tmp/wordpress-tests-lib';
@@ -81,6 +84,7 @@ if ( file_exists( $tests_dir . '/includes/functions.php' ) ) {
 		}
 		function wp_attachment_is_image() { return true; }
 		function __( $text ) { return $text; }
+		function _n( $single, $plural, $number ) { return 1 === (int) $number ? $single : $plural; }
 		function esc_html__( $text ) { return $text; }
 		function esc_attr__( $text ) { return $text; }
 		function sanitize_text_field( $str ) { return $str; }

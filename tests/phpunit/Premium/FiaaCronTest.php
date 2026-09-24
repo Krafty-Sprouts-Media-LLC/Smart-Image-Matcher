@@ -58,6 +58,15 @@ class FiaaCronTest extends TestCase {
 			public function get_var( $query ) { // phpcs:ignore
 				return $GLOBALS['sim_test_wpdb_queue_rows'][0] ?? null;
 			}
+			public function get_row( $query, $output = null ) { // phpcs:ignore
+				if ( empty( $GLOBALS['sim_test_wpdb_queue_rows'] ) ) {
+					return null;
+				}
+				return array(
+					'job_id' => 'smart_image_matcher_fiaa_scheduled_abc123',
+					'totals' => '{"total":326,"done":312}',
+				);
+			}
 			public function insert( $table, $data, $format = null ) { // phpcs:ignore
 				$GLOBALS['sim_test_wpdb_inserted'][] = $data;
 				return 1;

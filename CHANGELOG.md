@@ -7,6 +7,21 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.5.0] - 24/09/2026
+
+### Fixed
+
+- Hourly runs stopped for 31 hours (22 Sep 23:02 → 24 Sep 06:00). One article action of a scheduled run was killed without reporting back, so the run stayed `processing`, and `FiaaCron`'s overlap guard skipped every tick until the daily cleanup failed it after 24 h. Killed article actions are now counted (`JobRunner::recordLostArticle()` from `action_scheduler_failed_action` / `action_scheduler_unexpected_shutdown`), and a run with no progress for 45 min and nothing left in the queue is closed.
+- The whole queue stalled for 15+ hours behind one action stuck `in-progress` ("Maximum simultaneous queues already in progress"). New `Queue\QueueWatchdog` runs on WP-Cron — not Action Scheduler, so it runs while the slot is held — and calls Action Scheduler's own `QueueCleaner::mark_failures()` / `reset_timeouts()` (15 min) when an action is stuck or a claim is stale.
+- A closed run no longer flips back to `processing` when a late article reports in.
+
+### Added
+
+- Provider HTTP requests made by SIM text calls are capped at 60 s (`ProviderBridge::TEXT_TIMEOUT`).
+- Every scheduled tick is recorded with its outcome (ran / skipped and why / nothing to do); the last 12 appear on the Dashboard.
+- Dashboard → Queue Health: status badge from live data, last hourly run, next run, waiting / overdue / running counts for the plugin's Action Scheduler group, what is blocking the queue, watchdog activity, and a **Check now** button (`admin-post.php?action=smart_image_matcher_watchdog_now`).
+- Every plugin action failure (timeout, fatal, exception) is logged to Dashboard → Recent errors with hook, post and reason.
+
 ## [3.4.9] - 23/09/2026
 
 ### Fixed

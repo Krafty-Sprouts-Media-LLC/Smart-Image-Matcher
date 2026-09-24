@@ -206,6 +206,37 @@ a.sim-metric-link:focus {
 	color: #996800;
 }
 
+.sim-status-bad {
+	background: #fcf0f1;
+	color: #b32d2e;
+}
+
+/* Dashboard → Queue Health */
+.sim-health-table {
+	margin: 0 0 12px;
+}
+
+.sim-health-table th {
+	width: 120px;
+	font-weight: 600;
+	vertical-align: top;
+}
+
+.sim-health-ticks {
+	margin: 0 0 12px;
+}
+
+.sim-health-ticks summary {
+	cursor: pointer;
+	color: #2271b1;
+	margin-bottom: 6px;
+}
+
+.sim-health-subhead {
+	font-size: 13px;
+	margin: 16px 0 8px;
+}
+
 .sim-form-grid {
 	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));

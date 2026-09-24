@@ -19,6 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 use SmartImageMatcher\Logging\Logger;
 use SmartImageMatcher\Queue\Queue;
+use SmartImageMatcher\Queue\QueueWatchdog;
 use SmartImageMatcher\Settings\Settings;
 
 /**
@@ -122,8 +123,19 @@ class FiaaCron {
 		// processing (e.g. a very large library hasn't finished its batches
 		// yet when the next tick fires), skip this tick rather than
 		// starting a second concurrent pass over the same posts.
-		if ( $this->hasActiveScheduledJob() ) {
+		$active = $this->activeScheduledJob();
+		if ( null !== $active ) {
 			Logger::info( 'FiaaCron: previous scheduled run still in progress, skipping this tick.' );
+			QueueWatchdog::recordTick(
+				'skipped',
+				sprintf(
+					/* translators: 1: job id, 2: articles done, 3: articles total */
+					__( 'Previous run %1$s still open at %2$d / %3$d', 'smart-image-matcher' ),
+					$active['job_id'],
+					$active['done'],
+					$active['total']
+				)
+			);
 			return;
 		}
 
@@ -147,6 +159,7 @@ class FiaaCron {
 
 		if ( empty( $postIds ) ) {
 			Logger::info( 'FiaaCron: no candidate posts for this scheduled run.' );
+			QueueWatchdog::recordTick( 'nothing', __( 'No articles need images', 'smart-image-matcher' ) );
 			return;
 		}
 
@@ -175,35 +188,58 @@ class FiaaCron {
 
 		if ( 0 === $queued ) {
 			Logger::error( 'FiaaCron: could not queue scheduled article jobs.', array( 'job_id' => $jobId ) );
+			QueueWatchdog::recordTick( 'skipped', __( 'Could not queue any articles', 'smart-image-matcher' ) );
 			return;
 		}
+
+		QueueWatchdog::recordTick(
+			'queued',
+			sprintf(
+				/* translators: 1: articles queued, 2: job id */
+				_n( 'Queued %1$d article (%2$s)', 'Queued %1$d articles (%2$s)', $queued, 'smart-image-matcher' ),
+				$queued,
+				$jobId
+			)
+		);
 
 		Logger::info( 'FiaaCron: scheduled run queued', array( 'job_id' => $jobId, 'total_posts' => count( $postIds ), 'queued' => $queued ) );
 	}
 
 	/**
-	 * Whether a scheduled FIAA job is already queued or processing.
+	 * The scheduled FIAA job still queued or processing, if any.
 	 *
-	 * @since 3.1.0
-	 * @return bool
+	 * @since 3.1.0 (returns job progress since 3.5.0)
+	 * @return array{job_id:string,done:int,total:int}|null
 	 */
-	private function hasActiveScheduledJob(): bool {
+	private function activeScheduledJob(): ?array {
 		global $wpdb;
 
 		$table = esc_sql( $wpdb->prefix . 'smart_image_matcher_queue' );
 
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$row = $wpdb->get_var(
+		$row = $wpdb->get_row(
 			$wpdb->prepare(
-				"SELECT id FROM {$table}
+				"SELECT job_id, totals FROM {$table}
 				 WHERE job_id LIKE %s AND status IN ('queued', 'processing')
 				 LIMIT 1",
 				$wpdb->esc_like( 'smart_image_matcher_fiaa_scheduled_' ) . '%'
-			)
+			),
+			ARRAY_A
 		);
 		// phpcs:enable
 
-		return ! empty( $row );
+		if ( ! is_array( $row ) ) {
+			return null;
+		}
+
+		$totals = json_decode( (string) ( $row['totals'] ?? '' ), true );
+		$totals = is_array( $totals ) ? $totals : array();
+
+		return array(
+			'job_id' => (string) str_replace( 'smart_image_matcher_fiaa_scheduled_', '', (string) $row['job_id'] ),
+			'done'   => (int) ( $totals['done'] ?? 0 ),
+			'total'  => (int) ( $totals['total'] ?? 0 ),
+		);
 	}
 
 	/**

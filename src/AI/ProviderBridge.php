@@ -35,6 +35,13 @@ use SmartImageMatcher\Settings\Settings;
 class ProviderBridge {
 
 	/**
+	 * Max seconds for one provider HTTP request made by SIM text calls.
+	 *
+	 * @since 3.5.0
+	 */
+	const TEXT_TIMEOUT = 60;
+
+	/**
 	 * Nested SIM text-call depth. OpenRouter HTTP is tagged only while > 0.
 	 *
 	 * @since 3.4.7
@@ -286,6 +293,12 @@ class ProviderBridge {
 	public static function filterOpenRouterHttpArgs( $args, $url ) {
 		if ( self::$openRouterAppTagDepth < 1 || ! is_array( $args ) ) {
 			return $args;
+		}
+
+		// A hung provider call must not hold the Action Scheduler slot for hours.
+		$timeout = (float) ( $args['timeout'] ?? 0 );
+		if ( $timeout <= 0 || $timeout > self::TEXT_TIMEOUT ) {
+			$args['timeout'] = self::TEXT_TIMEOUT;
 		}
 
 		if ( ! is_string( $url ) || false === strpos( $url, 'openrouter.ai' ) ) {
