@@ -539,7 +539,7 @@ class Plugin {
 					'postId'       => get_the_ID() ?: 0,
 					'debug'        => (bool) Settings::get( 'debug_mode' ),
 					'features'     => array(
-						'aiMatching'        => \SmartImageMatcher\AI\ProviderBridge::isAvailable()
+						'aiMatching'        => \SmartImageMatcher\AI\ProviderBridge::isAiMatchingEnabled()
 							&& \SmartImageMatcher\Queue\Queue::isAvailable(),
 						'aiImageGeneration' => (bool) Settings::get( 'ai_image_generation_enabled' )
 							&& \SmartImageMatcher\AI\ProviderBridge::isImageGenerationAvailable(),

@@ -7,6 +7,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.5.1] - 02/10/2026
+
+### Fixed
+
+- AI calls were made with AI matching switched off. `match_mode` (Settings → Matching → Default Match Mode) was only read by the settings page; `ArticleHeadingAiGate`, `ArticleFeaturedAiGate`, `MatchController::resolveMode()` and the editor `aiMatching` flag all used `ProviderBridge::isAvailable()` alone, so a connected OpenRouter provider meant AI ranking on every article run since 3.4.0. New `ProviderBridge::isAiMatchingEnabled()` requires Match Mode = AI **and** a connected provider, and reads the setting first so Keyword mode never probes the provider. `resolveMode()` also honours an explicit keyword request.
+
 ## [3.5.0] - 24/09/2026
 
 ### Fixed

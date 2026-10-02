@@ -4,7 +4,7 @@ Tags: images, media library, alt text, featured image, automation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 3.5.0
+Stable tag: 3.5.1
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -95,6 +95,9 @@ No AI data is sent automatically — only when you explicitly trigger AI matchin
 The plugin stores match results and job metadata in your own database only. Update checks may contact GitHub (see External services). No post content leaves your server unless you explicitly use AI features with a configured provider.
 
 == Changelog ==
+
+= 3.5.1 =
+* Fixed: AI ranking ran whenever an AI provider was connected, even with Settings → Matching → Default Match Mode set to Keyword. The setting was never read. Article runs (hourly, on publish, Bulk Processor) and the post-editor matcher now call AI only when Match Mode is "AI via Connectors".
 
 = 3.5.0 =
 * Hourly runs no longer stop silently. A new watchdog (WP-Cron, every 15 minutes) frees the Action Scheduler slot when an action is stuck "in progress", and closes runs that stopped making progress so the next hourly run can start.

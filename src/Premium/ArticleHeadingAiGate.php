@@ -52,13 +52,13 @@ class ArticleHeadingAiGate implements HeadingMatchGate {
 	}
 
 	/**
-	 * Whether a text provider can run matching.
+	 * Whether AI ranking is switched on (Match Mode = AI) and a provider is connected.
 	 *
-	 * @since 3.4.0
+	 * @since 3.4.0 (honours Match Mode since 3.5.1)
 	 * @return bool
 	 */
 	public function isAvailable(): bool {
-		return ProviderBridge::isAvailable();
+		return ProviderBridge::isAiMatchingEnabled();
 	}
 
 	/**

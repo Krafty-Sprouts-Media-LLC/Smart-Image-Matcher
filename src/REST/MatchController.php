@@ -198,19 +198,20 @@ class MatchController extends Controller {
 	}
 
 	/**
-	 * When a text provider and Action Scheduler are ready, AI takes over.
+	 * AI only when Match Mode is AI, a provider is connected, and the queue runs.
 	 *
-	 * @since 3.4.0
+	 * A client asking for keyword always gets keyword.
+	 *
+	 * @since 3.4.0 (honours Match Mode since 3.5.1)
 	 * @param string $requested Requested mode from the client.
 	 * @return string keyword|ai
 	 */
 	public static function resolveMode( string $requested ): string {
-		$requested = sanitize_key( $requested );
-		if ( ! in_array( $requested, array( 'keyword', 'ai' ), true ) ) {
-			$requested = 'keyword';
+		if ( 'keyword' === sanitize_key( $requested ) ) {
+			return 'keyword';
 		}
 
-		if ( \SmartImageMatcher\AI\ProviderBridge::isAvailable() && Queue::isAvailable() ) {
+		if ( \SmartImageMatcher\AI\ProviderBridge::isAiMatchingEnabled() && Queue::isAvailable() ) {
 			return 'ai';
 		}
 

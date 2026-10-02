@@ -82,6 +82,20 @@ class ProviderBridge {
 	}
 
 	/**
+	 * Whether heading / featured matching may call the AI ranker.
+	 *
+	 * Settings → Default Match Mode must be "ai" AND a text provider must be
+	 * connected. A connected provider alone is not consent to spend calls.
+	 * The setting is read first so Keyword mode never probes the provider.
+	 *
+	 * @since 3.5.1
+	 * @return bool
+	 */
+	public static function isAiMatchingEnabled(): bool {
+		return 'ai' === (string) Settings::get( 'match_mode' ) && self::isAvailable();
+	}
+
+	/**
 	 * Probe whether a text provider can run. OpenRouter is checked on its
 	 * own registry entry so WP AI Request Logs do not attribute a
 	 * list-models call to Anthropic/DeepSeek.
