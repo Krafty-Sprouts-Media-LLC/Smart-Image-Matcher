@@ -203,6 +203,10 @@ if ( file_exists( $tests_dir . '/includes/functions.php' ) ) {
 			$id = is_object( $post ) ? (int) $post->ID : (int) $post;
 			return ! empty( $GLOBALS['sim_test_post_meta'][ $id ]['_thumbnail_id'] );
 		}
+		function get_post_thumbnail_id( $post = null ) {
+			$id = is_object( $post ) ? (int) $post->ID : (int) $post;
+			return (int) ( $GLOBALS['sim_test_post_meta'][ $id ]['_thumbnail_id'] ?? 0 );
+		}
 		function post_type_supports( $type = '', $feature = '' ) {
 			if ( isset( $GLOBALS['sim_test_post_type_supports'] ) && is_callable( $GLOBALS['sim_test_post_type_supports'] ) ) {
 				return (bool) $GLOBALS['sim_test_post_type_supports']( $type, $feature );

@@ -109,6 +109,40 @@ class InsertionServiceTest extends TestCase {
 	}
 
 	/** @test */
+	public function featured_image_is_never_inserted_into_the_body(): void {
+		$post               = new \WP_Post();
+		$post->ID           = 21;
+		$post->post_content = '<h2>Direct Answer</h2><p>Text.</p>';
+		$GLOBALS['sim_test_get_post']                       = static fn() => $post;
+		$GLOBALS['sim_test_post_meta'][21]['_thumbnail_id'] = 77;
+
+		$result = $this->service->bulkInsert(
+			21,
+			array( array( 'heading_hash' => 'h', 'image_id' => 77 ) )
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'smart_image_matcher_featured_in_body', $result->get_error_code() );
+		unset( $GLOBALS['sim_test_post_meta'][21] );
+	}
+
+	/** @test */
+	public function featured_image_rows_are_dropped_from_a_mixed_batch(): void {
+		$GLOBALS['sim_test_post_meta'][22]['_thumbnail_id'] = 77;
+
+		$kept = InsertionService::withoutFeaturedImage(
+			22,
+			array(
+				array( 'heading_hash' => 'a', 'image_id' => 77 ),
+				array( 'heading_hash' => 'b', 'image_id' => 78 ),
+			)
+		);
+
+		$this->assertSame( array( 78 ), array_column( $kept, 'image_id' ) );
+		unset( $GLOBALS['sim_test_post_meta'][22] );
+	}
+
+	/** @test */
 	public function classic_heading_reports_following_img(): void {
 		$hash = HeadingLocator::computeHash( 2, 'american goldfinch', 0 );
 		$post = new \WP_Post();

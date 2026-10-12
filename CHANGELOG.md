@@ -7,6 +7,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.5.2] - 12/10/2026
+
+### Fixed
+
+- The featured image could be inserted under a heading in the same article. `ArticleProcessor` excluded images already in the body but not `_thumbnail_id`, and the featured slot is filled first, so the first heading often got the same file. The featured image now counts as used when heading images are chosen, and `InsertionService::bulkInsert()` drops any row that would put the post's featured image in its body (`InsertionService::withoutFeaturedImage()`), covering Review approvals, the editor matcher and Abilities. A request containing only the featured image returns `smart_image_matcher_featured_in_body`.
+
 ## [3.5.1] - 02/10/2026
 
 ### Fixed

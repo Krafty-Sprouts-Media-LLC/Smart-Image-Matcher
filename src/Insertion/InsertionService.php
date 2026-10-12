@@ -117,6 +117,28 @@ class InsertionService {
 	}
 
 	/**
+	 * Drop insertion rows that would put the post's featured image in its body.
+	 *
+	 * @since 3.5.2
+	 * @param int                                                    $postId     Post ID.
+	 * @param array<int, array{heading_hash: string, image_id: int}> $insertions Rows.
+	 * @return array<int, array{heading_hash: string, image_id: int}>
+	 */
+	public static function withoutFeaturedImage( int $postId, array $insertions ): array {
+		$featured = (int) get_post_thumbnail_id( $postId );
+		if ( $featured <= 0 ) {
+			return $insertions;
+		}
+
+		return array_values(
+			array_filter(
+				$insertions,
+				static fn( array $row ): bool => (int) $row['image_id'] !== $featured
+			)
+		);
+	}
+
+	/**
 	 * Run the insert after validation.
 	 *
 	 * @since 3.4.5
@@ -128,6 +150,15 @@ class InsertionService {
 		$post = get_post( $postId );
 		if ( ! $post instanceof \WP_Post ) {
 			return new \WP_Error( 'smart_image_matcher_invalid_post', __( 'Post not found.', 'smart-image-matcher' ) );
+		}
+
+		// The featured image already shows above the article; never repeat it in the body.
+		$insertions = self::withoutFeaturedImage( $postId, $insertions );
+		if ( empty( $insertions ) ) {
+			return new \WP_Error(
+				'smart_image_matcher_featured_in_body',
+				__( 'That image is this article’s featured image, so it is not inserted into the body.', 'smart-image-matcher' )
+			);
 		}
 
 		// Validate every image before touching the content.

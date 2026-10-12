@@ -262,6 +262,49 @@ class ArticleProcessorTest extends TestCase {
 	}
 
 	/**
+	 * The post's featured image is never chosen for a heading in the body.
+	 *
+	 * @return void
+	 */
+	public function test_featured_image_is_not_reused_in_the_body(): void {
+		$GLOBALS['sim_test_post_meta'][10]['_thumbnail_id'] = 42;
+
+		$extractor = $this->createMock( HeadingExtractor::class );
+		$extractor->method( 'extract' )->willReturn( array( $this->heading ) );
+
+		$matcher = $this->createMock( Matcher::class );
+		$matcher->method( 'filterByHierarchy' )->willReturnCallback( static fn( array $h ) => $h );
+		$matcher->method( 'extractKeywords' )->willReturn( array( 'goldfinch' ) );
+		$matcher->method( 'calculateScore' )->willReturnCallback(
+			static fn( array $terms, array $image ) => 42 === (int) ( $image['id'] ?? 0 ) ? 100 : 95
+		);
+
+		$images = $this->createMock( ImageRepository::class );
+		$images->method( 'findCandidates' )->willReturn(
+			array(
+				array( 'id' => 42, 'filename' => 'american-goldfinch.jpg' ),
+				array( 'id' => 43, 'filename' => 'american-goldfinch-perched.jpg' ),
+			)
+		);
+
+		$insertion = $this->createMock( InsertionService::class );
+		$insertion->method( 'headingHasFollowingImage' )->willReturn( false );
+		$insertion->method( 'attachmentIdsInContent' )->willReturn( array() );
+		$insertion->expects( $this->once() )->method( 'bulkInsert' )->with(
+			10,
+			$this->equalTo( array( array( 'heading_hash' => 'hash-goldfinch', 'image_id' => 43 ) ) )
+		)->willReturn( true );
+
+		$featured = $this->createMock( FeaturedImageService::class );
+		$featured->method( 'needsFeaturedImage' )->willReturn( false );
+
+		$processor = new ArticleProcessor( $matcher, $images, $extractor, $insertion, $this->createMock( MatchRepository::class ), $featured, null, null, null );
+		$processor->process( 10 );
+
+		unset( $GLOBALS['sim_test_post_meta'][10] );
+	}
+
+	/**
 	 * A confident model pick whose filename barely matches the heading is
 	 * parked for review, not inserted ("Firearm Discharge Rules in
 	 * Massachusetts" → One-bite-rule-in-Maine.jpg).
