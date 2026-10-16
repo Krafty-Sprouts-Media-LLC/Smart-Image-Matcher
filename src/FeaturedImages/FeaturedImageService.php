@@ -151,7 +151,8 @@ class FeaturedImageService {
 		$batchSize      = (int) apply_filters( 'smart_image_matcher_fiaa_batch_size', self::DEFAULT_BATCH_SIZE ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- smart_image_matcher_ is the project hook prefix.
 		$batchSize      = max( 25, min( 1000, $batchSize ) );
 		$page           = 1;
-		$postStatuses   = $this->sanitizePostStatuses( $args['post_statuses'] ?? array( 'publish', 'draft', 'pending', 'future' ) );
+		// Published only when the caller asks for it.
+		$postStatuses   = $this->sanitizePostStatuses( $args['post_statuses'] ?? array( 'draft', 'pending', 'future' ) );
 		$featuredFilter = $this->sanitizeFeaturedFilter( (string) ( $args['featured_filter'] ?? ( $overwrite ? 'any' : 'missing' ) ) );
 
 		do {
@@ -445,6 +446,31 @@ class FeaturedImageService {
 			'score'        => $score,
 			'method'       => $method,
 			'shared_terms' => $sharedCount,
+		);
+	}
+
+	/**
+	 * Explain a post-slug / image-filename comparison in words.
+	 *
+	 * Used on Review cards to say why a featured suggestion was not assigned
+	 * automatically (only exact / prefix filename matches are).
+	 *
+	 * @since 3.6.2
+	 * @param string $postSlug  Post slug.
+	 * @param string $imageSlug Image slug or filename without extension.
+	 * @return array{auto:bool,method:string,shared:string[],post_only:string[],image_only:string[]}
+	 */
+	public function explainSlugMatch( string $postSlug, string $imageSlug ): array {
+		$score      = $this->scoreSlugMatch( $postSlug, $imageSlug );
+		$postTerms  = $this->slugTerms( $postSlug );
+		$imageTerms = $this->slugTerms( $this->normalizeImageMatchSlug( $imageSlug ) );
+
+		return array(
+			'auto'       => $this->canAutoAssign( $score ),
+			'method'     => (string) ( $score['method'] ?? '' ),
+			'shared'     => array_values( array_intersect( $postTerms, $imageTerms ) ),
+			'post_only'  => array_values( array_diff( $postTerms, $imageTerms ) ),
+			'image_only' => array_values( array_diff( $imageTerms, $postTerms ) ),
 		);
 	}
 

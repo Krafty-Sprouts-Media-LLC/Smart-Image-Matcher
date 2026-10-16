@@ -7,6 +7,22 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.6.2] - 16/10/2026
+
+### Added
+
+- Featured Review cards explain why the suggestion was not assigned: `FeaturedImageService::explainSlugMatch()` (auto-assignable?, shared words, words only in the article slug, words only in the filename) and `BulkController::featuredReason()`, returned as `reason` on featured rows from `GET /review` and shown under the filename.
+
+### Fixed
+
+- **Featured Review suggestions were invisible on sites with a fallback featured image.** `BulkController::pendingRowAlreadyHasImage()` used `has_post_thumbnail()`, which a fallback plugin (KSM Extensions `default_post_metadata`) makes true for every post, so every featured row was dropped by `omitInsertedHeadings()` — a run could report 256 sent to Review while Review said "Nothing to review". It now uses `FeaturedImageService::hasActionableFeaturedImage()`, the same saved-and-real rule runs use. Existing pending rows reappear. Same fix in `AiImageGenerator` (a finished fal.ai featured image was never set while a fallback was active). The 3.5.2 featured-in-body guards (`ArticleProcessor`, `InsertionService`, Missing Images library) use `getStoredThumbnailId()` instead of `get_post_thumbnail_id()`.
+- The Run tab "In progress" pill stayed on after a run finished while the Review tab was open; polling now updates it on any tab.
+- Run tiles: "No good match" reads "articles still without a featured image" for featured-only runs (was "headings still without an image"); the Review button counts suggestions, not articles.
+
+### Changed
+
+- Published is never chosen for the user. Bulk Processor Run and the Fix incorrect featured images tool no longer pre-tick Published (Draft stays ticked). `POST /jobs` with no status now returns `smart_image_matcher_no_status` (400) instead of falling back to Published + Draft — an empty list would also make WP_Query default to Published. Empty-status fallbacks are Draft in `PostStatuses::sanitizeList()`, `Sanitizer::postStatusList()`, `FiaaCron::getPostStatuses()`, `bulk.js` and `generate-images.js`; the `fiaa_cron_post_statuses` default is `draft`; `FeaturedImageService::run()` without statuses (`wp sim fiaa`) uses draft, pending and scheduled. Saved settings are unchanged. Removed "(Publish recommended)" from the fal.ai recovery help text.
+
 ## [3.6.1] - 16/10/2026
 
 ### Added

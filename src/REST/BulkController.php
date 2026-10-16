@@ -24,6 +24,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 use SmartImageMatcher\Domain\ArticleProcessor;
 use SmartImageMatcher\FeaturedImages\FeaturedImageService;
+use SmartImageMatcher\FeaturedImages\SlugMapBuilder;
 use SmartImageMatcher\Insertion\BlockBuilder;
 use SmartImageMatcher\Insertion\InsertionService;
 use SmartImageMatcher\Logging\Logger;
@@ -214,6 +215,11 @@ class BulkController extends Controller {
 		$rawIds   = $request->get_param( 'post_ids' );
 		$rawSlugs = $request->get_param( 'post_slugs' );
 		$filters  = $this->getSelectionFilters( $request );
+
+		// An empty status list would make WP_Query default to Published.
+		if ( empty( $filters['post_statuses'] ) ) {
+			return new \WP_Error( 'smart_image_matcher_no_status', __( 'Select at least one post status.', 'smart-image-matcher' ), array( 'status' => 400 ) );
+		}
 
 		// Validate post type exists.
 		if ( ! post_type_exists( $postType ) ) {
@@ -676,6 +682,47 @@ class BulkController extends Controller {
 	}
 
 	/**
+	 * Why a featured suggestion is in Review rather than assigned: compares the
+	 * post slug with the image filename, the same rule auto-assign uses.
+	 *
+	 * @since 3.6.2
+	 * @param array<string, mixed> $row Review row with post_id and image_file.
+	 * @return string Empty when there is nothing useful to say.
+	 */
+	public static function featuredReason( array $row ): string {
+		$post = get_post( (int) ( $row['post_id'] ?? 0 ) );
+		$file = (string) pathinfo( (string) ( $row['image_file'] ?? '' ), PATHINFO_FILENAME );
+		if ( ! $post instanceof \WP_Post || '' === (string) $post->post_name || '' === $file ) {
+			return '';
+		}
+
+		$explain = ( new FeaturedImageService( new SlugMapBuilder() ) )->explainSlugMatch(
+			(string) $post->post_name,
+			strtolower( $file ) // explainSlugMatch() normalises separators itself.
+		);
+
+		if ( $explain['auto'] ) {
+			return __( 'Filename matches the post slug.', 'smart-image-matcher' );
+		}
+
+		$parts = array( __( 'Similar filename, not exact', 'smart-image-matcher' ) );
+		if ( ! empty( $explain['shared'] ) ) {
+			/* translators: %s: comma-separated words */
+			$parts[] = sprintf( __( 'shares: %s', 'smart-image-matcher' ), implode( ', ', $explain['shared'] ) );
+		}
+		if ( ! empty( $explain['post_only'] ) || ! empty( $explain['image_only'] ) ) {
+			/* translators: 1: words only in the article slug, 2: words only in the image filename */
+			$parts[] = sprintf(
+				__( 'article has “%1$s”, image has “%2$s”', 'smart-image-matcher' ),
+				implode( ', ', $explain['post_only'] ) ?: '—',
+				implode( ', ', $explain['image_only'] ) ?: '—'
+			);
+		}
+
+		return implode( ' · ', $parts );
+	}
+
+	/**
 	 * Whether this pending row is already satisfied in post content.
 	 *
 	 * @since 3.3.3
@@ -693,7 +740,9 @@ class BulkController extends Controller {
 		}
 
 		if ( 'featured' === $hash || 'featured' === $tag ) {
-			return function_exists( 'has_post_thumbnail' ) && has_post_thumbnail( $post_id );
+			// Same rule as article runs: a saved, real featured image. has_post_thumbnail()
+			// is true for every post when a fallback featured-image plugin is active.
+			return FeaturedImageService::hasActionableFeaturedImage( $post_id );
 		}
 
 		if ( '' === $hash ) {
@@ -809,7 +858,12 @@ class BulkController extends Controller {
 		);
 		// phpcs:enable
 
-		$rows     = self::omitInsertedHeadings( self::attachImageUrls( is_array( $rows ) ? $rows : array() ) );
+		$rows = self::omitInsertedHeadings( self::attachImageUrls( is_array( $rows ) ? $rows : array() ) );
+		foreach ( $rows as $i => $row ) {
+			if ( 'featured' === ( $row['heading_hash'] ?? '' ) || 'featured' === ( $row['heading_tag'] ?? '' ) ) {
+				$rows[ $i ]['reason'] = self::featuredReason( $row );
+			}
+		}
 		$articles = array_values(
 			array_filter(
 				self::groupMatchesByPost( $rows ),
@@ -1506,11 +1560,8 @@ class BulkController extends Controller {
 		$statuses = $request->get_param( 'post_statuses' );
 		$statuses = is_array( $statuses ) ? array_map( 'sanitize_key', $statuses ) : array();
 		$allowed  = array( 'publish', 'draft', 'pending', 'future', 'private' );
+		// No fallback: an empty choice is refused in createJob(), never widened to Published.
 		$statuses = array_values( array_intersect( $statuses, $allowed ) );
-
-		if ( empty( $statuses ) ) {
-			$statuses = array( 'publish', 'draft' );
-		}
 
 		return array(
 			'post_statuses'   => $statuses,

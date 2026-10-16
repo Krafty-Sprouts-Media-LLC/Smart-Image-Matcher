@@ -125,7 +125,7 @@ class InsertionService {
 	 * @return array<int, array{heading_hash: string, image_id: int}>
 	 */
 	public static function withoutFeaturedImage( int $postId, array $insertions ): array {
-		$featured = (int) get_post_thumbnail_id( $postId );
+		$featured = \SmartImageMatcher\FeaturedImages\FeaturedImageService::getStoredThumbnailId( $postId );
 		if ( $featured <= 0 ) {
 			return $insertions;
 		}

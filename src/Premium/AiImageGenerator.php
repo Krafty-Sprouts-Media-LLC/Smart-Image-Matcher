@@ -805,7 +805,8 @@ class AiImageGenerator {
 			);
 			if ( ! empty( $existing[0] ) ) {
 				$attachment_id = (int) $existing[0];
-				if ( 'featured' === $heading_hash && ! has_post_thumbnail( $post_id ) ) {
+				// Saved, real featured image only: fallback plugins make has_post_thumbnail() always true.
+				if ( 'featured' === $heading_hash && ! \SmartImageMatcher\FeaturedImages\FeaturedImageService::hasActionableFeaturedImage( $post_id ) ) {
 					set_post_thumbnail( $post_id, $attachment_id );
 				}
 				self::clearFalPending( $post_id, $heading_hash );

@@ -394,7 +394,7 @@ class MissingImagesController extends Controller {
 		}
 
 		$exclude   = ( new InsertionService( new BlockBuilder() ) )->attachmentIdsInContent( $post_id );
-		$featured  = (int) get_post_thumbnail_id( $post_id );
+		$featured  = \SmartImageMatcher\FeaturedImages\FeaturedImageService::getStoredThumbnailId( $post_id );
 		$exclude[] = $featured;
 
 		$candidates = RelevanceGuard::filter(

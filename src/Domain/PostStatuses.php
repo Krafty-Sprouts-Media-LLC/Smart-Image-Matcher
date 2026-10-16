@@ -86,7 +86,8 @@ class PostStatuses {
 			)
 		);
 
-		return ! empty( $statuses ) ? $statuses : array( 'publish' );
+		// Never pick Published for the user: an empty choice means drafts only.
+		return ! empty( $statuses ) ? $statuses : array( 'draft' );
 	}
 
 	/**

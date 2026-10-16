@@ -319,6 +319,20 @@ button.sim-slot-thumb:focus {
 	font-weight: 400;
 }
 
+/* Featured rows: why it is in Review, on its own line under the filename. */
+.sim-slot-text:has(.sim-slot-reason) {
+	flex-wrap: wrap;
+	row-gap: 2px;
+}
+
+.sim-slot-reason {
+	flex: 1 0 100%;
+	color: #996800;
+	font-size: 12px;
+	font-weight: 400;
+	white-space: normal;
+}
+
 .sim-slot-row.is-rejected {
 	background: #fcf0f1;
 	box-shadow: inset 4px 0 0 #d63638;

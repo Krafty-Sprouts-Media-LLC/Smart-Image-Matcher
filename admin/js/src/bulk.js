@@ -301,7 +301,7 @@
 				<div class="sim-field sim-field-wide">
 					<span class="sim-label">Post Status</span>
 					<div class="sim-checkbox-grid">
-						<label><input type="checkbox" class="sim-post-status" value="publish" checked /> Published</label>
+						<label><input type="checkbox" class="sim-post-status" value="publish" /> Published</label>
 						<label><input type="checkbox" class="sim-post-status" value="draft" checked /> Draft</label>
 						<label><input type="checkbox" class="sim-post-status" value="pending" /> Pending</label>
 						<label><input type="checkbox" class="sim-post-status" value="future" /> Scheduled</label>
@@ -466,11 +466,16 @@
 		}
 		// Counts are per slot (featured image + each heading), not per article.
 		const generated = outcome( jobData, 'generated' );
+		const fill = ( jobData.config && jobData.config.fill ) || parseTotals( jobData ).config?.fill || 'both';
+		const missingLabel = {
+			featured: 'articles still without a featured image',
+			headings: 'headings still without an image',
+		}[ fill ] || 'featured images or headings still without an image';
 		return `
 			<div class="sim-metric-grid sim-metric-grid-four">
 				<div class="sim-card sim-metric"><span>Inserted</span><strong>${ outcome( jobData, 'inserted' ) }</strong><small>images added</small></div>
 				<div class="sim-card sim-metric"><span>Sent to Review</span><strong>${ outcome( jobData, 'review' ) }</strong><small>waiting for you</small></div>
-				<div class="sim-card sim-metric"><span>No good match</span><strong>${ outcome( jobData, 'skipped' ) }</strong><small>headings still without an image${ generated ? ` · ${ generated } generated` : '' }</small></div>
+				<div class="sim-card sim-metric"><span>No good match</span><strong>${ outcome( jobData, 'skipped' ) }</strong><small>${ missingLabel }${ generated ? ` · ${ generated } generated` : '' }</small></div>
 				<div class="sim-card sim-metric"><span>Already had an image</span><strong>${ outcome( jobData, 'has_image' ) }</strong><small>nothing to do</small></div>
 			</div>`;
 	}
@@ -495,7 +500,7 @@
 		if ( running ) {
 			actions = `<button type="button" class="button" id="sim-cancel-run">${ i18n.cancel }</button>`;
 		} else if ( status === 'completed' && reviewCount > 0 ) {
-			actions = `<button type="button" class="button button-primary" id="sim-goto-review">Review ${ reviewCount } articles</button>
+			actions = `<button type="button" class="button button-primary" id="sim-goto-review">Review ${ reviewCount } suggestion${ reviewCount === 1 ? '' : 's' }</button>
 				<button type="button" class="button" id="sim-run-again">Run again</button>`;
 		} else {
 			actions = `<button type="button" class="button button-primary" id="sim-run-again">Run again</button>`;
@@ -667,6 +672,9 @@
 				buildProgress( data );
 			}
 			const status = data.status || '';
+			// The Run tab pill must clear even when the user is on Review.
+			const pill = q( '#sim-run-pill' );
+			if ( pill ) pill.hidden = ! ( status === 'queued' || status === 'processing' );
 			if ( [ 'completed', 'failed', 'cancelled' ].includes( status ) ) {
 				window.clearInterval( pollTimer );
 				pollTimer = null;
@@ -769,9 +777,13 @@
 		const fileHtml = file
 			? `<span class="sim-slot-file" title="${ escHtml( file ) }">${ escHtml( file ) }</span>`
 			: '';
+		// Featured rows explain why they are here instead of assigned (only exact filename matches are).
+		const reasonHtml = heading.reason
+			? `<span class="sim-slot-reason">${ escHtml( heading.reason ) }</span>`
+			: '';
 		return `<div class="sim-slot-row${ cls }" data-match-id="${ heading.id }">
 			${ thumb }
-			<div class="sim-slot-text"><span class="sim-slot-heading">${ escHtml( slotLabel( heading ) ) }</span>${ fileHtml }</div>
+			<div class="sim-slot-text"><span class="sim-slot-heading">${ escHtml( slotLabel( heading ) ) }</span>${ fileHtml }${ reasonHtml }</div>
 			<div class="${ scoreClass( score ) }">${ score }%</div>
 			<div class="sim-slot-actions">
 				${ slotActionsHtml( heading.id, 'pending' ) }
@@ -1196,7 +1208,7 @@
 
 	function recoveryStatuses() {
 		const statuses = getCheckedValues( '.sim-post-status' );
-		return statuses.length ? statuses : [ 'publish' ];
+		return statuses.length ? statuses : [ 'draft' ];
 	}
 
 	function renderRecoveryPreview( result ) {
@@ -1288,7 +1300,7 @@
 		const statuses = qAll( '.sim-audit-status' ).filter( ( item ) => item.checked ).map( ( item ) => item.value );
 		return {
 			post_type: q( '#sim-audit-post-type' )?.value || 'post',
-			post_statuses: statuses.length ? statuses : [ 'publish', 'draft' ],
+			post_statuses: statuses.length ? statuses : [ 'draft' ],
 		};
 	}
 

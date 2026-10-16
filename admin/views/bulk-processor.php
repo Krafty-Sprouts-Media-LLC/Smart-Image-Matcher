@@ -71,7 +71,7 @@ $smart_image_matcher_post_type = isset( $_GET['sim_post_type'] ) ? sanitize_key(
 	<details class="sim-card sim-bulk-tools" id="sim-run-tools" <?php echo 'run' === $smart_image_matcher_tab ? '' : 'hidden'; ?>>
 		<summary><?php esc_html_e( 'Recover completed fal.ai images', 'smart-image-matcher' ); ?></summary>
 		<p class="description">
-			<?php esc_html_e( 'Find images that completed on fal.ai but never reached WordPress. Preview first, then recover confirmed matches. Uses the Post Status checkboxes on Run (Publish recommended).', 'smart-image-matcher' ); ?>
+			<?php esc_html_e( 'Find images that completed on fal.ai but never reached WordPress. Preview first, then recover confirmed matches. Uses the Post Status checkboxes on Run.', 'smart-image-matcher' ); ?>
 		</p>
 		<div class="sim-recovery-controls">
 			<div class="sim-field">
@@ -122,7 +122,7 @@ $smart_image_matcher_post_type = isset( $_GET['sim_post_type'] ) ? sanitize_key(
 			<div class="sim-field">
 				<span class="sim-label"><?php esc_html_e( 'Post status', 'smart-image-matcher' ); ?></span>
 				<div class="sim-checkbox-grid">
-					<label><input type="checkbox" class="sim-audit-status" value="publish" checked /> <?php esc_html_e( 'Published', 'smart-image-matcher' ); ?></label>
+					<label><input type="checkbox" class="sim-audit-status" value="publish" /> <?php esc_html_e( 'Published', 'smart-image-matcher' ); ?></label>
 					<label><input type="checkbox" class="sim-audit-status" value="draft" checked /> <?php esc_html_e( 'Draft', 'smart-image-matcher' ); ?></label>
 					<label><input type="checkbox" class="sim-audit-status" value="pending" /> <?php esc_html_e( 'Pending', 'smart-image-matcher' ); ?></label>
 					<label><input type="checkbox" class="sim-audit-status" value="private" /> <?php esc_html_e( 'Private', 'smart-image-matcher' ); ?></label>

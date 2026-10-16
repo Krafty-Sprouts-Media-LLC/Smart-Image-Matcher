@@ -62,7 +62,7 @@ class Settings {
 		'fiaa_cron_enabled'          => false,
 		'fiaa_cron_interval'         => 'daily',
 		'fiaa_cron_post_types'       => 'post',
-		'fiaa_cron_post_statuses'    => 'publish',
+		'fiaa_cron_post_statuses'    => 'draft',
 		'fiaa_cron_featured_filter'  => 'missing',
 		'fiaa_cron_overwrite'        => false,
 		'fiaa_cron_fill'             => 'both',

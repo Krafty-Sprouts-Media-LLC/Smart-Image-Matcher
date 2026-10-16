@@ -275,7 +275,7 @@ class ArticleProcessor {
 		$used_ids   = $this->insertion->attachmentIdsInContent( (int) $post->ID );
 
 		// Read after processFeatured(): an image assigned as featured in this run counts too.
-		$featured_id = (int) get_post_thumbnail_id( (int) $post->ID );
+		$featured_id = FeaturedImageService::getStoredThumbnailId( (int) $post->ID );
 		if ( $featured_id > 0 ) {
 			$used_ids[ $featured_id ] = $featured_id;
 		}

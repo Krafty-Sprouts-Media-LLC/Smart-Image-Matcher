@@ -217,8 +217,13 @@ if ( file_exists( $tests_dir . '/includes/functions.php' ) ) {
 		function clean_post_cache() {}
 		function rest_ensure_response( $data ) { return $data; }
 		function set_post_thumbnail() {}
-		function metadata_exists() { return false; }
-		function get_metadata_raw() { return null; }
+		function metadata_exists( $type = '', $id = 0, $key = '' ) {
+			return 'post' === $type && isset( $GLOBALS['sim_test_post_meta'][ (int) $id ][ $key ] );
+		}
+		function get_metadata_raw( $type = '', $id = 0, $key = '', $single = false ) {
+			unset( $single );
+			return 'post' === $type ? ( $GLOBALS['sim_test_post_meta'][ (int) $id ][ $key ] ?? null ) : null;
+		}
 		function register_rest_route() {}
 		// Action Scheduler stubs record their calls into globals so tests
 		// can assert on scheduling/cancellation behaviour without a real

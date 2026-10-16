@@ -429,7 +429,8 @@ class FiaaCron {
 		$allowed  = array( 'publish', 'draft', 'pending', 'future', 'private' );
 		$statuses = array_values( array_intersect( $statuses, $allowed ) );
 
-		return ! empty( $statuses ) ? $statuses : array( 'publish' );
+		// Never pick Published for the user: an empty setting means drafts only.
+		return ! empty( $statuses ) ? $statuses : array( 'draft' );
 	}
 
 	/**

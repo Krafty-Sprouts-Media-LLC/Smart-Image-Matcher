@@ -79,7 +79,7 @@ class Sanitizer {
 				? $raw['fiaa_cron_interval']
 				: 'daily',
 			'fiaa_cron_post_types'      => $this->postTypeList( $raw['fiaa_cron_post_types'] ?? 'post' ),
-			'fiaa_cron_post_statuses'   => $this->postStatusList( $raw['fiaa_cron_post_statuses'] ?? 'publish' ),
+			'fiaa_cron_post_statuses'   => $this->postStatusList( $raw['fiaa_cron_post_statuses'] ?? 'draft' ),
 			'fiaa_cron_featured_filter' => in_array( $raw['fiaa_cron_featured_filter'] ?? 'missing', array( 'any', 'missing', 'has' ), true )
 				? $raw['fiaa_cron_featured_filter']
 				: 'missing',
@@ -446,7 +446,7 @@ class Sanitizer {
 		} elseif ( is_string( $value ) ) {
 			$rawStatuses = explode( ',', wp_unslash( $value ) );
 		} else {
-			return 'publish';
+			return 'draft';
 		}
 
 		return PostStatuses::toCsv( $rawStatuses );

@@ -199,7 +199,7 @@
 		const statuses = qa( 'input[name="post_statuses[]"]:checked' ).map(
 			( input ) => input.value
 		);
-		return statuses.length ? statuses : [ 'publish' ];
+		return statuses.length ? statuses : [ 'draft' ];
 	}
 
 	function recoveryPrompt( value ) {
@@ -493,7 +493,7 @@
 
 		return {
 			post_type: postType ? postType.value : 'post',
-			post_statuses: statuses.length ? statuses : [ 'publish' ],
+			post_statuses: statuses.length ? statuses : [ 'draft' ],
 			post_ids: prefillPostIds.length ? prefillPostIds : [],
 			max_posts: maxPosts ? parseInt( maxPosts.value || 100, 10 ) : 100,
 			style: style ? style.value : 'photo',

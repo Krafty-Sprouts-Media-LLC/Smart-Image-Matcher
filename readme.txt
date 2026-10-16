@@ -4,7 +4,7 @@ Tags: images, media library, alt text, featured image, automation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 3.6.1
+Stable tag: 3.6.2
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -95,6 +95,12 @@ No AI data is sent automatically — only when you explicitly trigger AI matchin
 The plugin stores match results and job metadata in your own database only. Update checks may contact GitHub (see External services). No post content leaves your server unless you explicitly use AI features with a configured provider.
 
 == Changelog ==
+
+= 3.6.2 =
+* Fixed: featured-image suggestions never appeared in Review on sites with a fallback featured image (e.g. KSM Extensions). Review hid every featured suggestion because the fallback made every post look like it already had one. Review now uses the same rule as runs: a real, saved featured image. Suggestions created before this update show up again. AI-generated featured images are also set correctly on those sites.
+* Featured suggestions in Review now say why they were not assigned automatically, e.g. "Similar filename, not exact · shares: own, massachusetts · article has “hunt, property”, image has “butcher, animals”". Only exact or prefix filename matches are assigned automatically.
+* The "In progress" label on the Run tab clears when a run finishes, even if you are on Review. Run tiles say "articles still without a featured image" for featured-only runs, and the Review button counts suggestions.
+* Published posts are never selected for you. Bulk Processor (Run and Fix incorrect featured images) no longer pre-ticks Published, a run with no status ticked is refused instead of quietly using Published, and every empty-status fallback (including the scheduled run's default) is Draft. Tick Published yourself when you want it.
 
 = 3.6.1 =
 * New: "What to fill" on Bulk Processor → Process articles and on Settings → Scheduled Run. Choose featured image and headings (as before), featured image only (never adds images to the article body), or headings only.
