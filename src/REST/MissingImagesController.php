@@ -120,6 +120,20 @@ class MissingImagesController extends Controller {
 
 		register_rest_route(
 			self::NAMESPACE,
+			'/missing-images/ignore-article',
+			array(
+				'methods'             => \WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'ignoreArticle' ),
+				'permission_callback' => array( $this, 'canEditPost' ),
+				'args'                => array(
+					'post_id' => array( 'type' => 'integer', 'required' => true, 'sanitize_callback' => 'absint' ),
+					'ignored' => array( 'type' => 'boolean', 'default' => true ),
+				),
+			)
+		);
+
+		register_rest_route(
+			self::NAMESPACE,
 			'/missing-images/rescan',
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
@@ -438,6 +452,25 @@ class MissingImagesController extends Controller {
 		);
 
 		return rest_ensure_response( array( 'ok' => true ) );
+	}
+
+	/**
+	 * Ignore a whole article (or bring it back). Ignored articles leave this list,
+	 * Review and every run until un-ignored.
+	 *
+	 * @since 3.7.1
+	 * @param \WP_REST_Request $request Request.
+	 * @return \WP_REST_Response
+	 */
+	public function ignoreArticle( \WP_REST_Request $request ): \WP_REST_Response {
+		$post_id = (int) $request->get_param( 'post_id' );
+		$ignored = (bool) $request->get_param( 'ignored' );
+		\SmartImageMatcher\Domain\IgnoredArticles::set( $post_id, $ignored );
+		if ( ! $ignored ) {
+			JobRunner::makeMissingImagesIndex()->indexPost( $post_id );
+		}
+
+		return rest_ensure_response( array( 'post_id' => $post_id, 'ignored' => $ignored ) );
 	}
 
 	/**

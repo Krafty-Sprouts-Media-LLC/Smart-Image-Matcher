@@ -4,7 +4,7 @@ Tags: images, media library, alt text, featured image, automation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 3.7.0
+Stable tag: 3.7.1
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -95,6 +95,9 @@ No AI data is sent automatically — only when you explicitly trigger AI matchin
 The plugin stores match results and job metadata in your own database only. Update checks may contact GitHub (see External services). No post content leaves your server unless you explicitly use AI features with a configured provider.
 
 == Changelog ==
+
+= 3.7.1 =
+* New: "Ignore article" on the Missing Images page, with Undo. An ignored article leaves Missing Images and Review, and no run touches it until you un-ignore it (Undo, or Bulk Processor → Tools → Ignored articles).
 
 = 3.7.0 =
 * New Bulk Processor: Run, Review, Schedule and Tools tabs, with a strip at the top that says whether automatic runs are working.

@@ -136,6 +136,7 @@ class MissingImagesPage {
 					'noLibrary'       => __( 'No close library images. Find one with the search links, save it under the search phrase and upload it.', 'smart-image-matcher' ),
 					'inserted'        => __( 'Inserted under the heading', 'smart-image-matcher' ),
 					'hidden'          => __( 'Hidden from the list', 'smart-image-matcher' ),
+					'articleIgnored'  => __( 'Article ignored. No run will touch it until you un-ignore it.', 'smart-image-matcher' ),
 					'undo'            => __( 'Undo', 'smart-image-matcher' ),
 					'rescanStarted'   => __( 'Rescan started. The list refreshes as articles are checked.', 'smart-image-matcher' ),
 					'capped'          => __( 'Copied the first 2,000 articles. Narrow the filters to copy the rest.', 'smart-image-matcher' ),

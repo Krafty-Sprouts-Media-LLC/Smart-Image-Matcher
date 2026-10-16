@@ -175,6 +175,7 @@
 							<label class="sim-mi-toggle"><input type="checkbox" data-pick="${ item.id }"${ state.picked.has( item.id ) ? ' checked' : '' } />Select</label>
 							<button type="button" class="button button-primary button-small" data-copy-art="${ item.id }">Copy ${ heads.length } heading${ heads.length === 1 ? '' : 's' }</button>
 							${ item.edit_url ? `<a class="button button-small" href="${ esc( item.edit_url ) }">Edit article</a>` : '' }
+							<button type="button" class="button-link sim-mi-skip" data-ignore-art="${ item.id }" title="Hide this article here and in Review; no run will touch it until you un-ignore it">Ignore article</button>
 						</div>
 					</div>
 					${ open ? `<div class="sim-mi-heads">${ heads.map( ( h ) => `
@@ -405,6 +406,25 @@
 				}
 				render();
 				toast( t.inserted );
+			} catch ( err ) {
+				b.disabled = false;
+				toast( ( err && err.message ) || t.loadFailed );
+			}
+			return;
+		}
+		if ( ( b = e.target.closest( '[data-ignore-art]' ) ) ) {
+			const postId = Number( b.dataset.ignoreArt );
+			b.disabled = true;
+			try {
+				await api( { path: `${ BASE }/missing-images/ignore-article`, method: 'POST', data: { post_id: postId, ignored: true } } );
+				state.items = state.items.filter( ( i ) => i.id !== postId );
+				state.picked.delete( postId );
+				state.total = Math.max( 0, state.total - 1 );
+				render();
+				toast( t.articleIgnored || 'Article ignored. No run will touch it.', async () => {
+					await api( { path: `${ BASE }/missing-images/ignore-article`, method: 'POST', data: { post_id: postId, ignored: false } } );
+					load( true );
+				} );
 			} catch ( err ) {
 				b.disabled = false;
 				toast( ( err && err.message ) || t.loadFailed );

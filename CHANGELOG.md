@@ -7,6 +7,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.7.1] - 16/10/2026
+
+### Added
+
+- **Ignore article on Missing Images.** Each article row has "Ignore article" with Undo. New `POST /missing-images/ignore-article` (`MissingImagesController::ignoreArticle()`, free tier) uses `IgnoredArticles::set()`; un-ignoring re-indexes the post. Ignored articles stay out of Missing Images, Review and every run until un-ignored (Undo, or Bulk Processor → Tools → Ignored articles).
+
 ## [3.7.0] - 16/10/2026
 
 ### Added
