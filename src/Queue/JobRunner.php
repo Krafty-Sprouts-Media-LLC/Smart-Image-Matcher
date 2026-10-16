@@ -338,6 +338,7 @@ class JobRunner {
 			if ( ! empty( $config['overwrite_featured'] ) || ! empty( $config['overwrite'] ) ) {
 				$options['overwrite_featured'] = true;
 			}
+			$options['fill'] = ArticleProcessor::normalizeFill( $config['fill'] ?? null );
 
 			$counts = self::makeArticleProcessor()->process( $post_id, $options );
 		} finally {
@@ -901,7 +902,7 @@ class JobRunner {
 		$totals['total'] = isset( $totals['total'] ) ? (int) $totals['total'] : 0;
 		$totals['done']  = min( $totals['total'], ( isset( $totals['done'] ) ? (int) $totals['done'] : 0 ) + 1 );
 
-		foreach ( array( 'inserted', 'review', 'generated', 'skipped', 'errors' ) as $key ) {
+		foreach ( array( 'inserted', 'review', 'generated', 'skipped', 'has_image', 'errors' ) as $key ) {
 			$totals[ $key ] = ( isset( $totals[ $key ] ) ? (int) $totals[ $key ] : 0 ) + (int) ( $counts[ $key ] ?? 0 );
 		}
 

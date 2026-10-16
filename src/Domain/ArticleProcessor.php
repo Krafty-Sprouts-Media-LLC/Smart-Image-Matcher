@@ -131,6 +131,17 @@ class ArticleProcessor {
 	}
 
 	/**
+	 * What a run fills: both (default), featured (featured image only) or headings (article body only).
+	 *
+	 * @since 3.6.1
+	 * @param mixed $fill Raw value.
+	 * @return string both|featured|headings
+	 */
+	public static function normalizeFill( $fill ): string {
+		return in_array( $fill, array( 'featured', 'headings' ), true ) ? (string) $fill : 'both';
+	}
+
+	/**
 	 * Process one post: featured slot then headings.
 	 *
 	 * @since 3.3.0
@@ -138,15 +149,17 @@ class ArticleProcessor {
 	 * @param array<string, mixed> $options {
 	 *     @type bool     $overwrite_featured Replace an existing featured image.
 	 *     @type int|null $review_min         Optional raised review floor for this job.
+	 *     @type string   $fill               both (default) | featured | headings.
 	 * }
-	 * @return array{inserted:int,review:int,generated:int,skipped:int}
+	 * @return array{inserted:int,review:int,generated:int,skipped:int,has_image:int}
 	 */
 	public function process( int $post_id, array $options = array() ): array {
 		$counts = array(
 			'inserted'  => 0,
 			'review'    => 0,
 			'generated' => 0,
-			'skipped'   => 0,
+			'skipped'   => 0, // No good match.
+			'has_image' => 0, // Heading already had an image.
 		);
 
 		$post = get_post( $post_id );
@@ -167,8 +180,13 @@ class ArticleProcessor {
 		$overwrite    = ! empty( $options['overwrite_featured'] );
 		$can_generate = null !== $this->generation && $this->generation->isAvailable();
 
-		$this->processFeatured( $post, $counts, $auto, $review_min, $can_generate, $overwrite );
-		$this->processHeadings( $post, $counts, $auto, $review_min, $can_generate );
+		$fill = self::normalizeFill( $options['fill'] ?? null );
+		if ( 'headings' !== $fill ) {
+			$this->processFeatured( $post, $counts, $auto, $review_min, $can_generate, $overwrite );
+		}
+		if ( 'featured' !== $fill ) {
+			$this->processHeadings( $post, $counts, $auto, $review_min, $can_generate );
+		}
 
 		Logger::info(
 			'ArticleProcessor: finished',
@@ -271,7 +289,7 @@ class ArticleProcessor {
 
 			if ( $this->insertion->headingHasFollowingImage( (int) $post->ID, $hash ) ) {
 				$this->matches->clearPendingForHeading( (int) $post->ID, $hash );
-				++$counts['skipped'];
+				++$counts['has_image'];
 				continue;
 			}
 

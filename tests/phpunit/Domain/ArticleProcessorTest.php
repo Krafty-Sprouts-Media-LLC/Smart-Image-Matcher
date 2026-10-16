@@ -152,8 +152,58 @@ class ArticleProcessorTest extends TestCase {
 		$result = $processor->process( 10 );
 
 		$this->assertSame( 0, $result['inserted'] );
-		$this->assertGreaterThanOrEqual( 1, $result['skipped'] );
+		$this->assertSame( 1, $result['has_image'], 'A heading that already has an image is counted as has_image.' );
+		$this->assertSame( 0, $result['skipped'], 'Skipped now means "no good match" only.' );
 		$this->assertSame( array(), $generation->enqueued );
+	}
+
+	/**
+	 * fill=featured never looks at the article body.
+	 *
+	 * @return void
+	 */
+	public function test_fill_featured_only_leaves_headings_alone(): void {
+		$extractor = $this->createMock( HeadingExtractor::class );
+		$extractor->expects( $this->never() )->method( 'extract' );
+
+		$insertion = $this->createMock( InsertionService::class );
+		$insertion->expects( $this->never() )->method( 'bulkInsert' );
+
+		$featured = $this->createMock( FeaturedImageService::class );
+		$featured->expects( $this->once() )->method( 'needsFeaturedImage' )->willReturn( false );
+
+		$processor = new ArticleProcessor( $this->createMock( Matcher::class ), $this->createMock( ImageRepository::class ), $extractor, $insertion, $this->createMock( MatchRepository::class ), $featured, null, null, null );
+		$processor->process( 10, array( 'fill' => 'featured' ) );
+	}
+
+	/**
+	 * fill=headings never touches the featured image.
+	 *
+	 * @return void
+	 */
+	public function test_fill_headings_only_leaves_featured_alone(): void {
+		$featured = $this->createMock( FeaturedImageService::class );
+		$featured->expects( $this->never() )->method( 'needsFeaturedImage' );
+		$featured->expects( $this->never() )->method( 'scoreBestForPost' );
+
+		$extractor = $this->createMock( HeadingExtractor::class );
+		$extractor->expects( $this->once() )->method( 'extract' )->willReturn( array() );
+
+		$processor = new ArticleProcessor( $this->createMock( Matcher::class ), $this->createMock( ImageRepository::class ), $extractor, $this->createMock( InsertionService::class ), $this->createMock( MatchRepository::class ), $featured, null, null, null );
+		$processor->process( 10, array( 'fill' => 'headings' ) );
+	}
+
+	/**
+	 * ArticleProcessor::normalizeFill() accepts the three values and defaults to both.
+	 *
+	 * @return void
+	 */
+	public function test_fill_values_are_normalised(): void {
+		$this->assertSame( 'featured', ArticleProcessor::normalizeFill( 'featured' ) );
+		$this->assertSame( 'headings', ArticleProcessor::normalizeFill( 'headings' ) );
+		$this->assertSame( 'both', ArticleProcessor::normalizeFill( 'both' ) );
+		$this->assertSame( 'both', ArticleProcessor::normalizeFill( 'nonsense' ) );
+		$this->assertSame( 'both', ArticleProcessor::normalizeFill( null ) );
 	}
 
 	/**

@@ -65,6 +65,7 @@ class Settings {
 		'fiaa_cron_post_statuses'    => 'publish',
 		'fiaa_cron_featured_filter'  => 'missing',
 		'fiaa_cron_overwrite'        => false,
+		'fiaa_cron_fill'             => 'both',
 		// Manual Featured Image matcher (Featured Images admin page).
 		'fiaa_manual_post_type'       => 'post',
 		'fiaa_manual_post_statuses'     => 'publish,draft',
@@ -359,6 +360,7 @@ class Settings {
 		$this->addField( 'smart_image_matcher_fiaa_cron', 'fiaa_cron_post_types', __( 'Post Types (scheduled)', 'smart-image-matcher' ), 'renderFiaaCronPostTypes' );
 		$this->addField( 'smart_image_matcher_fiaa_cron', 'fiaa_cron_post_statuses', __( 'Post Statuses (scheduled)', 'smart-image-matcher' ), 'renderFiaaCronPostStatuses' );
 		$this->addField( 'smart_image_matcher_fiaa_cron', 'fiaa_cron_featured_filter', __( 'Featured Image Filter', 'smart-image-matcher' ), 'renderFiaaCronFeaturedFilter' );
+		$this->addField( 'smart_image_matcher_fiaa_cron', 'fiaa_cron_fill', __( 'What to fill', 'smart-image-matcher' ), 'renderFiaaCronFill' );
 		$this->addField( 'smart_image_matcher_fiaa_cron', 'fiaa_cron_overwrite', __( 'Overwrite Existing', 'smart-image-matcher' ), 'renderFiaaCronOverwrite' );
 
 		// ---- Developer section ----
@@ -487,31 +489,20 @@ class Settings {
 			return;
 		}
 
+		// The Featured Images page is gone (3.3); generation lives on Bulk Processor → Run.
 		$args = array(
-			'page'   => 'smart-image-matcher-featured-images',
-			'sim_ai' => '1',
+			'page'     => 'smart-image-matcher-bulk',
+			'sim_tab'  => 'run',
+			'sim_mode' => 'generate-featured',
 		);
 
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		if ( isset( $_GET['post_ids'] ) ) {
-			$args['post_ids'] = sanitize_text_field( wp_unslash( (string) $_GET['post_ids'] ) );
+			$args['sim_post_ids'] = sanitize_text_field( wp_unslash( (string) $_GET['post_ids'] ) );
 		}
 
 		wp_safe_redirect( add_query_arg( $args, admin_url( 'admin.php' ) ) );
 		exit;
-	}
-
-	/**
-	 * Render the Featured Images page (Match Runner + AI Generate).
-	 *
-	 * @since 3.0.0
-	 * @return void
-	 */
-	public function renderFeaturedImagesPage(): void {
-		if ( ! current_user_can( 'manage_options' ) ) {
-			wp_die( esc_html__( 'You do not have permission to access this page.', 'smart-image-matcher' ) );
-		}
-		require SMART_IMAGE_MATCHER_PLUGIN_DIR . 'admin/views/featured-images.php';
 	}
 
 	/**
@@ -1014,6 +1005,36 @@ class Settings {
 		}
 		echo '</select>';
 		echo '<p class="description">' . esc_html__( 'Use Missing for normal daily runs. Use Any only when you want the scheduler to inspect every post in the selected statuses.', 'smart-image-matcher' ) . '</p>';
+	}
+
+	/**
+	 * Render what the scheduled run fills: featured image, headings, or both.
+	 *
+	 * @since 3.6.1
+	 * @param array<string,string> $args Field args.
+	 * @return void
+	 */
+	public function renderFiaaCronFill( array $args ): void {
+		$key     = $args['key'];
+		$current = (string) self::get( $key );
+		$name    = self::OPTION . '[' . esc_attr( $key ) . ']';
+		$options = array(
+			'both'     => __( 'Featured image and headings', 'smart-image-matcher' ),
+			'featured' => __( 'Featured image only', 'smart-image-matcher' ),
+			'headings' => __( 'Headings only (article body)', 'smart-image-matcher' ),
+		);
+
+		echo '<select name="' . esc_attr( $name ) . '" id="smart_image_matcher_' . esc_attr( $key ) . '">';
+		foreach ( $options as $value => $label ) {
+			printf(
+				'<option value="%s"%s>%s</option>',
+				esc_attr( $value ),
+				selected( $current, $value, false ),
+				esc_html( $label )
+			);
+		}
+		echo '</select>';
+		echo '<p class="description">' . esc_html__( 'Featured image only never adds images to the article body.', 'smart-image-matcher' ) . '</p>';
 	}
 
 	/**

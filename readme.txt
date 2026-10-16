@@ -4,7 +4,7 @@ Tags: images, media library, alt text, featured image, automation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 3.6.0
+Stable tag: 3.6.1
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -95,6 +95,11 @@ No AI data is sent automatically — only when you explicitly trigger AI matchin
 The plugin stores match results and job metadata in your own database only. Update checks may contact GitHub (see External services). No post content leaves your server unless you explicitly use AI features with a configured provider.
 
 == Changelog ==
+
+= 3.6.1 =
+* New: "What to fill" on Bulk Processor → Process articles and on Settings → Scheduled Run. Choose featured image and headings (as before), featured image only (never adds images to the article body), or headings only.
+* Clearer run counts. "Skipped" counted every heading that already had an image, so a 752-article run could show thousands. Runs now show Inserted, Sent to Review, No good match, and Already had an image separately.
+* Old links to the removed Generate images page now open Bulk Processor → Generate featured images instead of an error. Leftover code from the removed Featured Images page is gone.
 
 = 3.6.0 =
 * New: Smart Image Matcher → Missing Images. Every heading that still has no image, grouped by article, with filters (numbered headings only, no images at all, status, post type, category) and search by title, heading or post ID.

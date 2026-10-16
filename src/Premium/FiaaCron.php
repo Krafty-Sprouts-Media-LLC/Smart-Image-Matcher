@@ -170,6 +170,7 @@ class FiaaCron {
 			'post_statuses'   => $postStatuses,
 			'featured_filter' => $featuredFilter,
 			'overwrite'       => $overwrite,
+			'fill'            => \SmartImageMatcher\Domain\ArticleProcessor::normalizeFill( Settings::get( 'fiaa_cron_fill' ) ),
 			'post_ids'        => $postIds,
 			'batch_size'      => self::BATCH_SIZE,
 			'interval'        => $this->getInterval(),

@@ -84,6 +84,7 @@ class Sanitizer {
 				? $raw['fiaa_cron_featured_filter']
 				: 'missing',
 			'fiaa_cron_overwrite'       => ! empty( $raw['fiaa_cron_overwrite'] ),
+			'fiaa_cron_fill'            => \SmartImageMatcher\Domain\ArticleProcessor::normalizeFill( $raw['fiaa_cron_fill'] ?? 'both' ),
 			'fiaa_manual_post_type'       => $current['fiaa_manual_post_type'],
 			'fiaa_manual_post_statuses'   => $current['fiaa_manual_post_statuses'],
 			'fiaa_manual_featured_filter' => $current['fiaa_manual_featured_filter'],

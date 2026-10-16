@@ -468,10 +468,7 @@ class Plugin {
 			);
 		}
 
-		if (
-			false !== strpos( $hook, 'smart-image-matcher-settings' )
-			|| false !== strpos( $hook, 'smart-image-matcher-featured-images' )
-		) {
+		if ( false !== strpos( $hook, 'smart-image-matcher-settings' ) ) {
 			wp_enqueue_script(
 				'smart-image-matcher-exclude-list',
 				SMART_IMAGE_MATCHER_PLUGIN_URL . 'admin/js/src/exclude-list.js',
@@ -550,99 +547,6 @@ class Plugin {
 							&& \SmartImageMatcher\AI\ProviderBridge::isImageGenerationAvailable(),
 					),
 					'aiImageStyle' => (string) Settings::get( 'ai_image_style' ),
-				)
-			);
-		}
-
-		// Featured Images screen — queued FIAA manual run monitor.
-		if ( false !== strpos( $hook, 'smart-image-matcher-featured-images' ) ) {
-			wp_enqueue_script(
-				'smart-image-matcher-featured-images',
-				SMART_IMAGE_MATCHER_PLUGIN_URL . 'admin/js/src/featured-images.js',
-				array( 'wp-api-fetch', 'smart-image-matcher-exclude-list' ),
-				SMART_IMAGE_MATCHER_VERSION,
-				true
-			);
-
-			wp_localize_script(
-				'smart-image-matcher-featured-images',
-				'smartImageMatcherFiaa',
-				array(
-					'nonce'              => wp_create_nonce( 'wp_rest' ),
-					'savedSettings'      => array(
-						'post_type'       => sanitize_key( (string) Settings::get( 'fiaa_manual_post_type' ) ),
-						'post_statuses'   => PostStatuses::sanitizeList( (string) Settings::get( 'fiaa_manual_post_statuses' ) ),
-						'featured_filter' => (string) Settings::get( 'fiaa_manual_featured_filter' ),
-						'max_posts'       => max( 1, min( 50000, (int) Settings::get( 'fiaa_manual_max_posts' ) ) ),
-						'overwrite'       => (bool) Settings::get( 'fiaa_manual_overwrite' ),
-					),
-					'excludedImageSlugs' => (string) Settings::get( 'fiaa_excluded_image_slugs' ),
-					'i18n'               => array(
-						'starting'         => __( 'Starting Match Runner...', 'smart-image-matcher' ),
-						'running'          => __( 'Running...', 'smart-image-matcher' ),
-						'queued'           => __( 'Queued', 'smart-image-matcher' ),
-						'processing'       => __( 'Processing', 'smart-image-matcher' ),
-						'completed'        => __( 'Run complete.', 'smart-image-matcher' ),
-						'cancelled'        => __( 'Run cancelled.', 'smart-image-matcher' ),
-						'failed'           => __( 'Run failed.', 'smart-image-matcher' ),
-						/* translators: 1: processed count, 2: total count, 3: matched count, 4: skipped count, 5: unmatched count */
-						'progress'         => __( 'Processed %1$d of %2$d posts. Matched: %3$d | Skipped: %4$d | Unmatched: %5$d', 'smart-image-matcher' ),
-						/* translators: 1: matched count, 2: skipped count, 3: unmatched count */
-						'summary'          => __( 'Matched: %1$d | Skipped: %2$d | Unmatched: %3$d', 'smart-image-matcher' ),
-						'stalled'          => __( 'The job is still queued. Action Scheduler has not picked it up yet.', 'smart-image-matcher' ),
-						'noApi'            => __( 'Match Runner controls could not load because wp.apiFetch is unavailable.', 'smart-image-matcher' ),
-						'saving'           => __( 'Saving run settings...', 'smart-image-matcher' ),
-						'saved'            => __( 'Run settings saved.', 'smart-image-matcher' ),
-						'saveFailed'       => __( 'Could not save run settings.', 'smart-image-matcher' ),
-						'noStatuses'       => __( 'Select at least one post status before running.', 'smart-image-matcher' ),
-						'exclusionsSaving' => __( 'Saving exclusions...', 'smart-image-matcher' ),
-						'exclusionsSaved'  => __( 'Excluded image filenames saved.', 'smart-image-matcher' ),
-						'exclusionsFailed' => __( 'Could not save excluded image filenames.', 'smart-image-matcher' ),
-						'auditScanning'    => __( 'Scanning featured images...', 'smart-image-matcher' ),
-						'auditScanFailed'  => __( 'Could not scan featured images.', 'smart-image-matcher' ),
-						/* translators: 1: unsafe count, 2: total assigned count, 3: safe count */
-						'auditScanSummary' => __( 'Found %1$d unsafe featured image(s) out of %2$d assigned posts (%3$d safe).', 'smart-image-matcher' ),
-						'auditNoneFound'   => __( 'No unsafe featured images were found.', 'smart-image-matcher' ),
-						/* translators: 1: preview row count, 2: total unsafe count */
-						'auditPreviewNote' => __( 'Showing the first %1$d of %2$d unsafe posts.', 'smart-image-matcher' ),
-						'auditStarting'    => __( 'Starting cleanup...', 'smart-image-matcher' ),
-						/* translators: 1: processed count, 2: total count, 3: cleared count, 4: skipped count, 5: error count */
-						'auditProgress'    => __( 'Processed %1$d of %2$d posts. Cleared: %3$d | Skipped: %4$d | Errors: %5$d', 'smart-image-matcher' ),
-						/* translators: 1: cleared count, 2: skipped count, 3: error count */
-						'auditSummary'     => __( 'Cleared: %1$d | Skipped: %2$d | Errors: %3$d', 'smart-image-matcher' ),
-						'auditCompleted'   => __( 'Cleanup complete.', 'smart-image-matcher' ),
-						'auditClearing'    => __( 'Clearing...', 'smart-image-matcher' ),
-					),
-				)
-			);
-
-			$prefill_ids = array();
-			if ( isset( $_GET['post_ids'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only prefill for localized config.
-				$raw_ids     = sanitize_text_field( wp_unslash( (string) $_GET['post_ids'] ) );
-				$prefill_ids = array_filter( array_map( 'absint', explode( ',', $raw_ids ) ) );
-			}
-
-			$focus_ai = isset( $_GET['sim_ai'] ) && '1' === sanitize_text_field( wp_unslash( (string) $_GET['sim_ai'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-
-			wp_enqueue_script(
-				'smart-image-matcher-generate-images',
-				SMART_IMAGE_MATCHER_PLUGIN_URL . 'admin/js/src/generate-images.js',
-				array( 'wp-api-fetch' ),
-				SMART_IMAGE_MATCHER_VERSION,
-				true
-			);
-
-			wp_localize_script(
-				'smart-image-matcher-generate-images',
-				'smartImageMatcherGenerateImages',
-				array(
-					'nonce'           => wp_create_nonce( 'wp_rest' ),
-					'prefillPostIds'  => $prefill_ids,
-					'focusAi'         => $focus_ai,
-					'generationReady' => (bool) Settings::get( 'ai_image_generation_enabled' )
-						&& \SmartImageMatcher\AI\ProviderBridge::isImageGenerationAvailable(),
-					'editPostUrl'     => admin_url( 'post.php?post=%d&action=edit' ),
-					'i18n'            => $this->featuredAiGenerateI18n(),
 				)
 			);
 		}
@@ -750,70 +654,6 @@ class Plugin {
 				)
 			);
 		}
-	}
-
-	/**
-	 * i18n strings for Featured Images AI Generate card.
-	 *
-	 * @since 3.2.3
-	 * @return array<string, string>
-	 */
-	private function featuredAiGenerateI18n(): array {
-		return array(
-			'scanning'                     => __( 'Scanning posts…', 'smart-image-matcher' ),
-			'scanFailed'                   => __( 'Could not scan posts.', 'smart-image-matcher' ),
-			'noStatuses'                   => __( 'Select at least one post status before scanning.', 'smart-image-matcher' ),
-			'noResults'                    => __( 'No posts need a featured image for the current filters.', 'smart-image-matcher' ),
-			'scanComplete'                 => __( 'Scan complete.', 'smart-image-matcher' ),
-			/* translators: %d: image count */
-			'confirmGenerate'              => __( 'Generate %d featured image(s)? Time varies by model — often a few minutes each.', 'smart-image-matcher' ),
-			'generating'                   => __( 'Queueing generation jobs…', 'smart-image-matcher' ),
-			'generateFailed'               => __( 'Could not queue generation jobs.', 'smart-image-matcher' ),
-			'generateComplete'             => __( 'All jobs finished.', 'smart-image-matcher' ),
-			/* translators: 1: completed count, 2: total count */
-			'progress'                     => __( 'Completed %1$d of %2$d', 'smart-image-matcher' ),
-			'noApi'                        => __( 'Generate Featured Images controls could not load because wp.apiFetch is unavailable.', 'smart-image-matcher' ),
-			'minute'                       => __( 'minute', 'smart-image-matcher' ),
-			'minutes'                      => __( 'minutes', 'smart-image-matcher' ),
-			'second'                       => __( 'second', 'smart-image-matcher' ),
-			'seconds'                      => __( 'seconds', 'smart-image-matcher' ),
-			'queued'                       => __( 'Queued', 'smart-image-matcher' ),
-			'processing'                   => __( 'Processing', 'smart-image-matcher' ),
-			'completed'                    => __( 'Completed', 'smart-image-matcher' ),
-			'failed'                       => __( 'Failed', 'smart-image-matcher' ),
-			'needsFeatured'                => __( 'Missing featured image', 'smart-image-matcher' ),
-			'alreadyHasFeatured'           => __( 'Already has featured image', 'smart-image-matcher' ),
-			'noThumbnailSupport'           => __( 'Post type does not support featured images', 'smart-image-matcher' ),
-			'alreadyGenerated'             => __( 'Already generated for this style', 'smart-image-matcher' ),
-			'rejected'                     => __( 'Previously rejected', 'smart-image-matcher' ),
-			'notFound'                     => __( 'Post not found', 'smart-image-matcher' ),
-			'noPermission'                 => __( 'No permission', 'smart-image-matcher' ),
-			'skippedOther'                 => __( 'Skipped', 'smart-image-matcher' ),
-			'estimateHint'                 => __( 'Usually a few minutes per image (varies by model and queue).', 'smart-image-matcher' ),
-			/* translators: %d: image count */
-			'imagesCount'                  => __( '%d to generate', 'smart-image-matcher' ),
-			'edit'                         => __( 'Edit', 'smart-image-matcher' ),
-			'recoveryPreviewing'           => __( 'Checking recent completed fal.ai images…', 'smart-image-matcher' ),
-			'recoveryPreviewFailed'        => __( 'Could not preview fal.ai recovery.', 'smart-image-matcher' ),
-			'recoveryCriticalError'        => __( 'WordPress hit a critical error while previewing recovery. Update AI Provider for fal.ai to 1.1.11+, then try again. If it still fails, check wp-content/debug.log.', 'smart-image-matcher' ),
-			/* translators: 1: matched count, 2: unmatched count */
-			'recoveryPreviewComplete'      => __( '%1$d safe match(es) found; %2$d will remain untouched.', 'smart-image-matcher' ),
-			'noRecoveryMatches'            => __( 'No safe matches were found. Nothing will be imported.', 'smart-image-matcher' ),
-			/* translators: %d: matched image count */
-			'confirmRecovery'              => __( 'Recover %d matched image(s) into WordPress? Unmatched images will not be imported.', 'smart-image-matcher' ),
-			'recoveryQueueing'             => __( 'Queueing matched images for background recovery…', 'smart-image-matcher' ),
-			'recoveryQueueFailed'          => __( 'Could not queue fal.ai recovery.', 'smart-image-matcher' ),
-			/* translators: %d: queued image count */
-			'recoveryQueued'               => __( '%d image(s) queued for recovery.', 'smart-image-matcher' ),
-			/* translators: 1: recovered count, 2: total count */
-			'recoveryProgress'             => __( 'Recovered %1$d of %2$d', 'smart-image-matcher' ),
-			'recoveryComplete'             => __( 'All matched images were recovered.', 'smart-image-matcher' ),
-			/* translators: %d: failed image count */
-			'recoveryCompleteWithFailures' => __( 'Recovery finished with %d failure(s).', 'smart-image-matcher' ),
-			'recoveryMatched'              => __( 'Safe match', 'smart-image-matcher' ),
-			'recoveryUnmatched'            => __( 'Not matched', 'smart-image-matcher' ),
-			'recovering'                   => __( 'Recovering', 'smart-image-matcher' ),
-		);
 	}
 
 	/**

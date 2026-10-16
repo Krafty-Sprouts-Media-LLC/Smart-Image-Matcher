@@ -163,6 +163,7 @@
 			maxPosts: q( '#sim-max-posts' )?.value || '5000',
 			mode: q( 'input[name="sim-run-mode"]:checked' )?.value || 'process',
 			overwrite: !! q( '#sim-overwrite-featured' )?.checked,
+			fill: q( '#sim-fill' )?.value || 'both',
 			style: q( '#sim-gen-style' )?.value || 'photo',
 		};
 	}
@@ -181,6 +182,7 @@
 			'#sim-featured-filter': selection.featuredFilter,
 			'#sim-content-filter': selection.contentFilter,
 			'#sim-max-posts': selection.maxPosts,
+			'#sim-fill': selection.fill,
 		};
 		Object.entries( setters ).forEach( ( [ selector, value ] ) => {
 			const el = q( selector );
@@ -337,6 +339,15 @@
 					<input type="number" id="sim-max-posts" value="5000" min="1" max="5000" step="50" />
 				</div>
 				<div class="sim-field sim-process-only">
+					<label for="sim-fill">What to fill</label>
+					<select id="sim-fill">
+						<option value="both">Featured image and headings</option>
+						<option value="featured">Featured image only</option>
+						<option value="headings">Headings only (article body)</option>
+					</select>
+					<p class="description">Featured image only never adds images to the article body.</p>
+				</div>
+				<div class="sim-field sim-process-only">
 					<label><input type="checkbox" id="sim-overwrite-featured" /> Replace existing featured images</label>
 					<p class="description">When processing articles, overwrite a featured image that is already set.</p>
 				</div>
@@ -453,12 +464,14 @@
 					<div class="sim-card sim-metric"><span>Skipped</span><strong>${ outcome( jobData, 'skipped' ) }</strong></div>
 				</div>`;
 		}
+		// Counts are per slot (featured image + each heading), not per article.
+		const generated = outcome( jobData, 'generated' );
 		return `
 			<div class="sim-metric-grid sim-metric-grid-four">
-				<div class="sim-card sim-metric"><span>Inserted</span><strong>${ outcome( jobData, 'inserted' ) }</strong></div>
-				<div class="sim-card sim-metric"><span>Review</span><strong>${ outcome( jobData, 'review' ) }</strong></div>
-				<div class="sim-card sim-metric"><span>Generated</span><strong>${ outcome( jobData, 'generated' ) }</strong></div>
-				<div class="sim-card sim-metric"><span>Skipped</span><strong>${ outcome( jobData, 'skipped' ) }</strong></div>
+				<div class="sim-card sim-metric"><span>Inserted</span><strong>${ outcome( jobData, 'inserted' ) }</strong><small>images added</small></div>
+				<div class="sim-card sim-metric"><span>Sent to Review</span><strong>${ outcome( jobData, 'review' ) }</strong><small>waiting for you</small></div>
+				<div class="sim-card sim-metric"><span>No good match</span><strong>${ outcome( jobData, 'skipped' ) }</strong><small>headings still without an image${ generated ? ` · ${ generated } generated` : '' }</small></div>
+				<div class="sim-card sim-metric"><span>Already had an image</span><strong>${ outcome( jobData, 'has_image' ) }</strong><small>nothing to do</small></div>
 			</div>`;
 	}
 
@@ -488,7 +501,9 @@
 			actions = `<button type="button" class="button button-primary" id="sim-run-again">Run again</button>`;
 		}
 		const doneCopy = status === 'completed' && reviewCount === 0 ? '<p class="description">Nothing landed in Review.</p>' : '';
-		const modeLabel = ( jobData.config && jobData.config.mode === 'generate-featured' ) ? 'Generate featured' : 'Process articles';
+		const fill = ( jobData.config && jobData.config.fill ) || parseTotals( jobData ).config?.fill || 'both';
+		const fillLabel = { featured: ' · featured image only', headings: ' · headings only' }[ fill ] || '';
+		const modeLabel = ( jobData.config && jobData.config.mode === 'generate-featured' ) ? 'Generate featured' : 'Process articles' + fillLabel;
 		const changeLabel = i18n.changeSelection || 'Change selection';
 		root.innerHTML = `
 			<div class="sim-card-head">
@@ -555,6 +570,7 @@
 			max_posts: parseInt( selection.maxPosts || '5000', 10 ),
 			mode,
 			overwrite: !! selection.overwrite,
+			fill: [ 'featured', 'headings' ].includes( selection.fill ) ? selection.fill : 'both',
 			style: selection.style === 'illustration' ? 'illustration' : 'photo',
 		};
 		if ( refs.ids.length ) body.post_ids = refs.ids;

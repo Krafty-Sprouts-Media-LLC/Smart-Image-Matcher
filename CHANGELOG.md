@@ -7,6 +7,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.6.1] - 16/10/2026
+
+### Added
+
+- **What to fill** for article runs: `both` (default, unchanged behaviour), `featured` (featured image only — `processHeadings()` never runs, so the body is never touched) or `headings`. `ArticleProcessor::normalizeFill()`; `fill` param on `POST /jobs`, stored in job config and passed by `JobRunner::runArticleProcessJob()`. New `fiaa_cron_fill` setting (Settings → Scheduled Run → What to fill) applied by `FiaaCron`. Run labels gain "· featured image only" / "· headings only".
+
+### Changed
+
+- Run counts: a heading that already has an image is now `has_image`, not `skipped`. `skipped` means no good match. Bulk progress tiles: Inserted · Sent to Review · No good match · Already had an image (Generated shown in the No good match tile when non-zero). Outcome line adds "Already had an image N".
+
+### Removed
+
+- Dead Featured Images page code (page removed in 3.3): `admin/views/featured-images.php`, `admin/views/partials/featured-ai-generate.php`, `admin/js/src/featured-images.js`, `Settings::renderFeaturedImagesPage()`, `Plugin::featuredAiGenerateI18n()` and its enqueue block.
+
+### Fixed
+
+- The legacy `smart-image-matcher-generate-images` redirect pointed at the removed Featured Images page; it now opens Bulk Processor → Run in Generate featured mode with `post_ids` prefilled.
+
 ## [3.6.0] - 16/10/2026
 
 ### Added

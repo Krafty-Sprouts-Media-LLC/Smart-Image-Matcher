@@ -22,6 +22,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+use SmartImageMatcher\Domain\ArticleProcessor;
 use SmartImageMatcher\FeaturedImages\FeaturedImageService;
 use SmartImageMatcher\Insertion\BlockBuilder;
 use SmartImageMatcher\Insertion\InsertionService;
@@ -73,6 +74,7 @@ class BulkController extends Controller {
 					'mode'       => array( 'type' => 'string',  'enum' => array( 'keyword', 'ai', 'process', 'generate-featured' ), 'default' => 'process' ),
 					'min_score'  => array( 'type' => 'integer', 'minimum' => 0, 'maximum' => 100, 'default' => 70, 'sanitize_callback' => 'absint' ),
 					'overwrite'  => array( 'type' => 'boolean', 'default' => false ),
+					'fill'       => array( 'type' => 'string',  'enum' => array( 'both', 'featured', 'headings' ), 'default' => 'both', 'sanitize_callback' => 'sanitize_key' ),
 					'style'      => array( 'type' => 'string',  'enum' => array( 'photo', 'illustration' ), 'default' => 'photo', 'sanitize_callback' => 'sanitize_key' ),
 					'dry_run'    => array( 'type' => 'boolean', 'default' => false ),
 				),
@@ -270,6 +272,7 @@ class BulkController extends Controller {
 			'filters'   => $filters,
 			'overwrite' => $overwrite,
 			'style'     => $style,
+			'fill'      => ArticleProcessor::normalizeFill( $request->get_param( 'fill' ) ),
 		);
 		$parentConfig             = $actionConfig;
 		$parentConfig['post_ids'] = $postIds;
@@ -1241,6 +1244,8 @@ class BulkController extends Controller {
 		$job['review']     = isset( $totals['review'] ) ? (int) $totals['review'] : 0;
 		$job['generated']  = isset( $totals['generated'] ) ? (int) $totals['generated'] : 0;
 		$job['skipped']    = isset( $totals['skipped'] ) ? (int) $totals['skipped'] : 0;
+		$job['has_image']  = isset( $totals['has_image'] ) ? (int) $totals['has_image'] : 0;
+		$job['fill']       = ArticleProcessor::normalizeFill( $config['fill'] ?? null );
 		$job['post_type']  = isset( $config['post_type'] ) ? (string) $config['post_type'] : '';
 		$job['config']     = $config;
 		$job['label']      = self::formatRunLabel( $job );
@@ -1329,12 +1334,17 @@ class BulkController extends Controller {
 			return sprintf( __( 'Generate featured %d articles', 'smart-image-matcher' ), $total );
 		}
 
+		$fill   = ArticleProcessor::normalizeFill( $config['fill'] ?? null );
+		$suffix = 'featured' === $fill
+			? __( ' · featured image only', 'smart-image-matcher' )
+			: ( 'headings' === $fill ? __( ' · headings only', 'smart-image-matcher' ) : '' );
+
 		if ( 'fiaa_scheduled' === $type || false !== strpos( (string) ( $job['job_id'] ?? '' ), '_fiaa_scheduled_' ) ) {
-			return __( 'Scheduled', 'smart-image-matcher' );
+			return __( 'Scheduled', 'smart-image-matcher' ) . $suffix;
 		}
 
 		/* translators: %d: article count */
-		return sprintf( __( 'Process %d articles', 'smart-image-matcher' ), $total );
+		return sprintf( __( 'Process %d articles', 'smart-image-matcher' ), $total ) . $suffix;
 	}
 
 	/**
@@ -1345,14 +1355,21 @@ class BulkController extends Controller {
 	 * @return string
 	 */
 	public static function formatRunOutcome( array $job ): string {
-		/* translators: 1: inserted, 2: review, 3: generated, 4: skipped */
-		return sprintf(
-			__( 'Inserted %1$d · Review %2$d · Generated %3$d · Skipped %4$d', 'smart-image-matcher' ),
+		$text = sprintf(
+			/* translators: 1: inserted, 2: review, 3: generated, 4: no good match */
+			__( 'Inserted %1$d · Review %2$d · Generated %3$d · No good match %4$d', 'smart-image-matcher' ),
 			isset( $job['inserted'] ) ? (int) $job['inserted'] : 0,
 			isset( $job['review'] ) ? (int) $job['review'] : 0,
 			isset( $job['generated'] ) ? (int) $job['generated'] : 0,
 			isset( $job['skipped'] ) ? (int) $job['skipped'] : 0
 		);
+
+		if ( ! empty( $job['has_image'] ) ) {
+			/* translators: %d: headings that already had an image */
+			$text .= sprintf( __( ' · Already had an image %d', 'smart-image-matcher' ), (int) $job['has_image'] );
+		}
+
+		return $text;
 	}
 
 	/**
