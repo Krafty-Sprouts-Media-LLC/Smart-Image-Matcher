@@ -35,6 +35,8 @@ if ( function_exists( 'as_unschedule_all_actions' ) ) {
 		'smart_image_matcher_queue_fiaa_run',
 		'smart_image_matcher_queue_fiaa_audit_clear',
 		'smart_image_matcher_fiaa_scheduled_run',
+		'smart_image_matcher_queue_pending_recheck',
+		'smart_image_matcher_queue_missing_scan',
 		// Legacy pre-rename hook names (sim_* -> smart_image_matcher_*).
 		// Orphaned actions under these names fail forever with "no
 		// callbacks registered" if left behind on uninstall.
@@ -75,6 +77,9 @@ $tables = array(
 foreach ( $tables as $table ) {
 	$wpdb->query( "DROP TABLE IF EXISTS {$table}" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 }
+
+// Missing Images index (post meta).
+$wpdb->query( "DELETE FROM {$wpdb->postmeta} WHERE meta_key LIKE '\\_smart\\_image\\_matcher\\_missing%'" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared
 
 // Delete all smart_image_matcher_* options and transients.
 $wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE 'smart_image_matcher_%'" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared

@@ -13,6 +13,7 @@ declare( strict_types=1 );
 namespace SmartImageMatcher;
 
 use SmartImageMatcher\Domain\ImageRepository;
+use SmartImageMatcher\Domain\MissingImagesIndex;
 use SmartImageMatcher\Domain\PendingRecheck;
 use SmartImageMatcher\Queue\Queue;
 
@@ -32,7 +33,7 @@ class Migrator {
 	 *
 	 * Bump this constant whenever a new migration is added.
 	 */
-	const SCHEMA_VERSION = 6;
+	const SCHEMA_VERSION = 7;
 
 	/**
 	 * Action Scheduler hook names used by prior versions of this plugin
@@ -89,6 +90,10 @@ class Migrator {
 			$this->migration6RecheckPendingRows();
 		}
 
+		if ( $installed < 7 ) {
+			MissingImagesIndex::armScan();
+		}
+
 		// Always ensure the inverted index table exists, even on sites that
 		// were activated before Migration 3 was introduced.
 		$this->ensureInvertedIndexExists();
@@ -98,6 +103,7 @@ class Migrator {
 		// hook rename) and re-enqueue it. Cheap no-op once fully indexed.
 		( new Queue() )->maybeResumeIndexBackfill();
 		( new Queue() )->maybeResumePendingRecheck();
+		( new Queue() )->maybeResumeMissingScan();
 
 		update_option( 'smart_image_matcher_db_version', self::SCHEMA_VERSION, false );
 	}
@@ -115,6 +121,7 @@ class Migrator {
 		$this->migration4ClearLegacyActionHooks();
 		$this->migration5ReindexStemmedTerms();
 		$this->migration6RecheckPendingRows();
+		MissingImagesIndex::armScan(); // Migration 7: build the Missing Images index.
 		update_option( 'smart_image_matcher_db_version', self::SCHEMA_VERSION, false );
 	}
 

@@ -4,7 +4,7 @@ Tags: images, media library, alt text, featured image, automation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 3.5.2
+Stable tag: 3.6.0
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -95,6 +95,12 @@ No AI data is sent automatically — only when you explicitly trigger AI matchin
 The plugin stores match results and job metadata in your own database only. Update checks may contact GitHub (see External services). No post content leaves your server unless you explicitly use AI features with a configured provider.
 
 == Changelog ==
+
+= 3.6.0 =
+* New: Smart Image Matcher → Missing Images. Every heading that still has no image, grouped by article, with filters (numbered headings only, no images at all, status, post type, category) and search by title, heading or post ID.
+* Copy one article, several selected articles, or everything the filters show, as search phrases (numbering removed, the article's state added), headings as written, or grouped by article.
+* Each heading has Google Images, Unsplash and Pexels search links, a library search with one-click insert, and "Not needed" to hide headings that never need an image.
+* The list is built in the background after updating and kept current whenever a post is saved.
 
 = 3.5.2 =
 * The featured image is no longer inserted into the article body. Matching skips it when choosing heading images, and insertion refuses it from every route (automatic runs, approving from Review, the post-editor matcher).

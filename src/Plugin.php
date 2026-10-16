@@ -400,6 +400,10 @@ class Plugin {
 		( new Premium\BulkProcessor() )->register();
 		( new Premium\ReviewQueue() )->register();
 
+		// Missing Images: page + index kept fresh on save (also fires after every SIM insert).
+		( new \SmartImageMatcher\Admin\MissingImagesPage() )->register();
+		add_action( 'save_post', array( JobRunner::makeMissingImagesIndex(), 'onSavePost' ), 20, 1 );
+
 		// Scheduled FIAA automation.
 		( new Premium\FiaaCron() )->register();
 
@@ -432,6 +436,7 @@ class Plugin {
 		$this->container->get( 'rest.insert' )->registerRoutes();
 		$this->container->get( 'rest.featured_image' )->registerRoutes();
 		$this->container->get( 'rest.image_gen' )->registerRoutes();
+		( new \SmartImageMatcher\REST\MissingImagesController() )->registerRoutes();
 
 		if ( Premium::has( 'rest_premium_endpoints' ) ) {
 			$this->container->get( 'rest.bulk' )->registerRoutes();

@@ -156,6 +156,17 @@ class RelevanceGuard {
 	}
 
 	/**
+	 * Place names (lowercase) mentioned in a piece of text.
+	 *
+	 * @since 3.6.0
+	 * @param string $text Any text.
+	 * @return string[]
+	 */
+	public static function placesIn( string $text ): array {
+		return self::extractPlaces( $text, self::placeTerms() );
+	}
+
+	/**
 	 * Place names found in text (lowercase, longest names consumed first).
 	 *
 	 * @param string   $text   Any text; dashes and underscores count as spaces.

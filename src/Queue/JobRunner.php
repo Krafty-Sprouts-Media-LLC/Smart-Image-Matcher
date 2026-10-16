@@ -22,6 +22,7 @@ use SmartImageMatcher\Domain\HeadingExtractor;
 use SmartImageMatcher\Domain\ImageRepository;
 use SmartImageMatcher\Domain\Matcher;
 use SmartImageMatcher\Domain\MatchRepository;
+use SmartImageMatcher\Domain\MissingImagesIndex;
 use SmartImageMatcher\Domain\PendingRecheck;
 use SmartImageMatcher\FeaturedImages\FeaturedImageService;
 use SmartImageMatcher\FeaturedImages\SlugMapBuilder;
@@ -181,6 +182,48 @@ class JobRunner {
 		if ( ! $result['done'] && function_exists( 'as_enqueue_async_action' ) ) {
 			as_enqueue_async_action( Queue::HOOK_PENDING_RECHECK, array(), Queue::GROUP );
 		}
+	}
+
+	/**
+	 * Index one batch of posts for the Missing Images page.
+	 *
+	 * Hooked to Queue::HOOK_MISSING_SCAN. Bounded batch + persisted cursor,
+	 * same pattern as runIndexBackfill().
+	 *
+	 * @since 3.6.0
+	 * @return void
+	 */
+	public static function runMissingScan(): void {
+		$state = get_option( MissingImagesIndex::SCAN_STATE_OPTION, array() );
+		if ( ! is_array( $state ) || empty( $state ) || ! empty( $state['done'] ) ) {
+			return;
+		}
+
+		$result = self::makeMissingImagesIndex()->scanBatch( (int) ( $state['after_id'] ?? 0 ), 100 );
+
+		update_option(
+			MissingImagesIndex::SCAN_STATE_OPTION,
+			array(
+				'after_id' => $result['next_after'],
+				'done'     => $result['done'],
+				'indexed'  => (int) ( $state['indexed'] ?? 0 ) + $result['indexed'],
+			),
+			false
+		);
+
+		if ( ! $result['done'] && function_exists( 'as_enqueue_async_action' ) ) {
+			as_enqueue_async_action( Queue::HOOK_MISSING_SCAN, array(), Queue::GROUP );
+		}
+	}
+
+	/**
+	 * Build the Missing Images index service.
+	 *
+	 * @since 3.6.0
+	 * @return MissingImagesIndex
+	 */
+	public static function makeMissingImagesIndex(): MissingImagesIndex {
+		return new MissingImagesIndex( new HeadingExtractor(), new InsertionService( new BlockBuilder() ), new Matcher() );
 	}
 
 	/**

@@ -7,6 +7,19 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.6.0] - 16/10/2026
+
+### Added
+
+- **Missing Images page** (`Admin\MissingImagesPage`, `admin/views/missing-images.php`, `admin/js/src/missing-images.js`, `admin/css/sim-missing.css`): headings with no image under them, grouped by article. Filters: numbered only, no images at all, status, post type, category, search (title / content / post ID), sort by most missing or newest. Copy formats: search phrases, headings as written, grouped by article — per article, for selected articles (kept across pages), or for everything matching (`/missing-images/all`, capped at 2,000 articles). Per heading: copy phrase or heading, Google Images / Unsplash / Pexels links, library search (RelevanceGuard-filtered, never the featured image or one already in the article) with insert via the existing `/posts/{id}/insert`, and "Not needed".
+- `Domain\MissingImagesIndex`: per-post index in post meta (`_smart_image_matcher_missing*`) using the same heading extraction, hierarchy filter and "already has an image" rule as article runs. Search phrase = heading without numbering, brackets or filename-unsafe characters, plus the article's US state when the heading has none. Updated on `save_post` (including after SIM inserts) and built for existing posts by a batched Action Scheduler scan (`smart_image_matcher_queue_missing_scan`, 100 posts per batch, resumable). DB version 7 starts the scan.
+- `REST\MissingImagesController`: `GET /missing-images`, `GET /missing-images/all`, `GET /missing-images/library`, `POST /missing-images/ignore`, `POST /missing-images/rescan`.
+- `RelevanceGuard::placesIn()`.
+
+### Fixed
+
+- `uninstall.php` now unschedules the review re-check job added in 3.4.9.
+
 ## [3.5.2] - 12/10/2026
 
 ### Fixed
