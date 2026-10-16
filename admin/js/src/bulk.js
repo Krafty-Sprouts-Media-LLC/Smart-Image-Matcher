@@ -70,6 +70,7 @@
 		countTimer: null,
 		countSeq: 0,
 		lastCount: null,
+		secsPerArticle: 0, // From the last finished run; 0 = unknown.
 	};
 
 	// ---------------------------------------------------------------------
@@ -240,7 +241,7 @@
 		const statuses = [
 			[ 'publish', __( 'Published', 'smart-image-matcher' ), false ],
 			[ 'draft', __( 'Draft', 'smart-image-matcher' ), true ],
-			[ 'future', __( 'Scheduled', 'smart-image-matcher' ), false ],
+			[ 'future', __( 'Scheduled', 'smart-image-matcher' ), true ],
 			[ 'pending', __( 'Pending', 'smart-image-matcher' ), false ],
 			[ 'private', __( 'Private', 'smart-image-matcher' ), false ],
 		].map( ( [ v, l, on ] ) => `<label class="sim-bp-chip"><input type="checkbox" class="sim-post-status" value="${ v }"${ on ? ' checked' : '' } />${ esc( l ) }</label>` ).join( '' );
@@ -300,7 +301,7 @@
 						</div>
 						<div class="sim-bp-field sim-bp-full">
 							<details class="sim-bp-more" id="sim-more-filters">
-								<summary>${ esc( __( 'More filters', 'smart-image-matcher' ) ) } <span class="sim-bp-active-filters" id="sim-active-filters"></span></summary>
+								<summary data-show="${ esc( __( 'Show', 'smart-image-matcher' ) ) }" data-hide="${ esc( __( 'Hide', 'smart-image-matcher' ) ) }">${ esc( __( 'More filters', 'smart-image-matcher' ) ) } <span class="sim-bp-active-filters" id="sim-active-filters"></span></summary>
 								<div class="sim-bp-more-inner sim-bp-fields">
 									<div class="sim-bp-field sim-bp-full">
 										<label class="sim-bp-label" for="sim-post-refs">${ esc( __( 'Only these articles', 'smart-image-matcher' ) ) }</label>
@@ -354,7 +355,7 @@
 					<div class="sim-bp-fields">
 						<div class="sim-bp-field sim-bp-full">
 							<span class="sim-bp-label" id="sim-lbl-fill">${ esc( __( 'What to fill', 'smart-image-matcher' ) ) }</span>
-							<div class="sim-bp-seg" role="radiogroup" aria-labelledby="sim-lbl-fill">
+							<div class="sim-bp-seg is-stack" role="radiogroup" aria-labelledby="sim-lbl-fill">
 								<label><input type="radio" name="sim-fill" value="both" checked />${ esc( __( 'Featured image and headings', 'smart-image-matcher' ) ) }</label>
 								<label><input type="radio" name="sim-fill" value="featured" />${ esc( __( 'Featured image only', 'smart-image-matcher' ) ) }</label>
 								<label><input type="radio" name="sim-fill" value="headings" />${ esc( __( 'Headings only', 'smart-image-matcher' ) ) }</label>
@@ -545,7 +546,10 @@
 		window.clearTimeout( state.countTimer );
 		const btn = q( '#sim-run-primary' );
 		if ( btn ) btn.disabled = true;
-		q( '#sim-sum-count' ).textContent = '…';
+		// Keep the last number (dimmed) while recounting, so it does not blink.
+		const big = q( '#sim-sum-count' );
+		big.classList.add( 'is-busy' );
+		if ( state.lastCount === null ) big.textContent = '…';
 		state.countTimer = window.setTimeout( refreshCount, 350 );
 	}
 
@@ -573,6 +577,7 @@
 		const isGen = runMode === 'generate-featured';
 		const sel = captureSelection();
 		state.lastCount = count;
+		q( '#sim-sum-count' ).classList.remove( 'is-busy' );
 
 		q( '#sim-sum-count' ).textContent = count === null ? '—' : String( count );
 		q( '#sim-sum-label' ).textContent = problem || ( isGen
@@ -602,6 +607,9 @@
 		} else {
 			rows.push( [ __( 'Featured image', 'smart-image-matcher' ), featLabel ] );
 			rows.push( [ __( 'Fills', 'smart-image-matcher' ), fillLabel ] );
+			if ( count && state.secsPerArticle ) {
+				rows.push( [ __( 'Estimated time', 'smart-image-matcher' ), '≈ ' + minutesLabel( Math.ceil( ( count * state.secsPerArticle ) / 60 ) ) ] );
+			}
 		}
 		q( '#sim-sum-kv' ).innerHTML = rows.map( ( [ k, v ] ) => `<div><span>${ esc( k ) }</span><strong>${ esc( v ) }</strong></div>` ).join( '' );
 
@@ -683,6 +691,19 @@
 		} );
 
 		syncRunUi();
+	}
+
+	// Seconds per article from the newest finished library run, for the Run estimate.
+	async function loadPace() {
+		try {
+			const res = await api( '/jobs' );
+			const stamp = ( v ) => ( v ? Date.parse( String( v ).replace( ' ', 'T' ) ) : NaN );
+			const job = ( res.jobs || [] ).find( ( j ) => j.status === 'completed' && jobConfig( j ).mode !== 'generate-featured' && num( j, 'done' ) > 0 && stamp( j.finished_at ) > stamp( j.started_at || j.created_at ) );
+			if ( job ) {
+				state.secsPerArticle = ( stamp( job.finished_at ) - stamp( job.started_at || job.created_at ) ) / 1000 / num( job, 'done' );
+				if ( state.lastCount !== null ) renderSummary( state.lastCount );
+			}
+		} catch ( e ) {}
 	}
 
 	function openGenerateModal( total ) {
@@ -895,7 +916,7 @@
 				<span id="sim-r-meta"></span>
 				<button type="button" class="button-link" id="sim-approve-above">${ esc( sprintf( __( 'Approve every suggestion ≥ %d%% (all articles)', 'smart-image-matcher' ), AUTO ) ) }</button>
 			</div>
-			<div class="sim-bp-bulkbar" id="sim-bulkbar">
+			<div class="sim-bp-bulkbar" id="sim-bulkbar" hidden>
 				<label class="sim-bp-inline"><input type="checkbox" id="sim-sel-all" /> <span id="sim-sel-count">${ esc( __( 'Select all on this page', 'smart-image-matcher' ) ) }</span></label>
 				<span class="sim-bp-grow"></span>
 				<button type="button" class="button" id="sim-b-approve" disabled>${ esc( sprintf( __( 'Approve ≥ %d%%', 'smart-image-matcher' ), AUTO ) ) }</button>
@@ -1030,7 +1051,7 @@
 		const tag = featured ? __( 'Featured', 'smart-image-matcher' ) : ( s.heading_tag || 'h2' ).toUpperCase();
 		const file = String( s.image_file || '' ).trim();
 		const head = featured
-			? `<span class="sim-s-lvl">${ esc( __( 'Featured image', 'smart-image-matcher' ) ) }</span>`
+			? esc( __( 'Featured image', 'smart-image-matcher' ) )
 			: `<span class="sim-s-lvl">${ esc( tag ) }</span>${ esc( s.heading_text || '' ) }`;
 
 		let why = '';
@@ -1063,7 +1084,7 @@
 		return `<div class="sim-sug is-${ st }" data-id="${ id }" tabindex="-1">
 			<button type="button" class="sim-thumb" data-act="open" aria-label="${ esc( __( 'View image', 'smart-image-matcher' ) ) }">${ thumb }<span class="sim-thumb-tag">${ esc( tag ) }</span></button>
 			<div class="sim-s-text">
-				<div class="sim-s-head">${ head }</div>
+				<div class="sim-s-head${ featured ? ' is-featured' : '' }">${ head }</div>
 				${ file ? `<div class="sim-s-file">${ esc( file ) }</div>` : '' }
 				<div class="sim-s-why">${ why }</div>
 			</div>
@@ -1123,11 +1144,12 @@
 		} else {
 			list.innerHTML = r.articles.map( articleHtml ).join( '' );
 		}
+		const hiddenByRules = r.articles.reduce( ( n, a ) => n + ( parseInt( a.filtered || 0, 10 ) || 0 ), 0 );
 		q( '#sim-r-meta' ).innerHTML = sprintf(
 			__( '%1$s suggestions in %2$s articles', 'smart-image-matcher' ),
 			`<strong>${ r.totalSuggestions }</strong>`,
 			`<strong>${ r.totalArticles }</strong>`
-		);
+		) + ( hiddenByRules ? ` · <span class="sim-bp-filtered" title="${ esc( __( 'Candidates dropped by the relevance rules (wrong place, no shared topic) on the last run.', 'smart-image-matcher' ) ) }">${ esc( sprintf( _n( '%d hidden by relevance rules on this page', '%d hidden by relevance rules on this page', hiddenByRules, 'smart-image-matcher' ), hiddenByRules ) ) }</span>` : '' );
 		syncBulkbar();
 		focusRow( r.focus, false );
 	}
@@ -1162,6 +1184,7 @@
 			q( s ).disabled = ! n;
 		} );
 		q( '#sim-bulkbar' ).classList.toggle( 'is-active', n > 0 );
+		q( '#sim-bulkbar' ).hidden = ! n;
 	}
 
 	function updateDock() {
@@ -1623,7 +1646,7 @@
 		const strip = q( '#sim-bp-health' );
 		const queue = h.queue || {};
 		strip.hidden = false;
-		strip.classList.remove( 'is-good', 'is-warn', 'is-bad' );
+		strip.classList.remove( 'is-pending', 'is-good', 'is-warn', 'is-bad' );
 		strip.classList.add( 'is-' + ( h.state || 'good' ) );
 		q( '#sim-bp-health-title' ).textContent = h.title || '';
 		const bits = [];
@@ -1968,6 +1991,7 @@
 	document.addEventListener( 'keydown', onKey );
 
 	buildRun();
+	loadPace();
 	bindModals();
 	bindTools();
 	restoreJob();

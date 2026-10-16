@@ -128,6 +128,8 @@ wp_localize_script(
 			<?php endif; ?>
 		</div>
 	</div>
+	<?php // Admin notices are moved here by WordPress instead of inside the header row. ?>
+	<hr class="wp-header-end" />
 
 	<div class="sim-dash-health is-<?php echo esc_attr( (string) $health['state'] ); ?>" role="status">
 		<span class="sim-dash-dot" aria-hidden="true"></span>

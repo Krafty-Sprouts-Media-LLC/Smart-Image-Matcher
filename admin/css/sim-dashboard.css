@@ -37,6 +37,8 @@
 .sim-dash *::after { box-sizing: border-box; }
 .sim-dash [hidden] { display: none !important; }
 .sim-dash .notice { margin: 0; }
+/* WordPress moves admin notices after this marker; it takes no grid row itself. */
+.sim-dash > .wp-header-end { display: none; }
 
 .sim-dash-head {
 	display: flex;
@@ -93,7 +95,7 @@
 .sim-dash-kpi:hover,
 .sim-dash-kpi:focus { border-color: var(--dash-accent); color: inherit; box-shadow: none; }
 .sim-dash-lbl { font-size: 12px; color: var(--dash-muted); display: flex; justify-content: space-between; gap: 8px; }
-.sim-dash-go { color: var(--dash-accent); }
+.sim-dash-go { color: var(--dash-accent); white-space: nowrap; }
 .sim-dash-num { font-size: 28px; line-height: 1.15; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--dash-ink); }
 .sim-dash-num small { font-size: 14px; font-weight: 400; color: var(--dash-muted); }
 .sim-dash-num-text { font-size: 22px; }
@@ -131,7 +133,9 @@
 .sim-dash-pad-b { padding-bottom: 10px; }
 .sim-dash-card-body { padding: 12px 16px 16px; }
 
-.sim-dash-seg { display: inline-flex; border: 1px solid var(--dash-line-2); border-radius: 4px; overflow: hidden; }
+/* More specific than .sim-dash-card-head > div, which would make it a one-column grid. */
+.sim-dash-card-head > .sim-dash-seg,
+.sim-dash-seg { display: inline-flex; flex: none; border: 1px solid var(--dash-line-2); border-radius: 4px; overflow: hidden; }
 .sim-dash-seg button { border: 0; border-right: 1px solid var(--dash-line-2); background: var(--dash-surface); padding: 3px 10px; cursor: pointer; font-size: 12px; }
 .sim-dash-seg button:last-child { border-right: 0; }
 .sim-dash-seg button[aria-pressed="true"] { background: var(--dash-accent-wash); color: var(--dash-accent-ink); font-weight: 600; box-shadow: inset 0 -2px 0 var(--dash-accent); }

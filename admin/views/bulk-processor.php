@@ -56,10 +56,12 @@ $smart_image_matcher_tabs = array(
 			<p class="description"><?php esc_html_e( 'Match library images to many articles at once, then decide the uncertain ones.', 'smart-image-matcher' ); ?></p>
 		</div>
 	</div>
+	<?php // Admin notices are moved here by WordPress instead of inside the header row. ?>
+	<hr class="wp-header-end" />
 
-	<div class="sim-bp-health" id="sim-bp-health" hidden>
+	<div class="sim-bp-health is-pending" id="sim-bp-health">
 		<span class="sim-bp-dot" aria-hidden="true"></span>
-		<strong id="sim-bp-health-title"></strong>
+		<strong id="sim-bp-health-title"><?php esc_html_e( 'Checking automatic runs…', 'smart-image-matcher' ); ?></strong>
 		<span class="sim-bp-health-meta" id="sim-bp-health-meta"></span>
 		<span class="sim-bp-grow"></span>
 		<button type="button" class="button button-small" data-goto-tab="schedule"><?php esc_html_e( 'See schedule', 'smart-image-matcher' ); ?></button>

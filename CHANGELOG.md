@@ -7,6 +7,21 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.7.2] - 16/10/2026
+
+### Fixed
+
+- Admin notices from other plugins landed inside the Dashboard and Bulk Processor header (WordPress inserts them after the first `h1`), splitting the title from its description. Both views now print `<hr class="wp-header-end">` after the header.
+- Dashboard: the 24 h / 48 h toggle stacked vertically (`.sim-dash-card-head > div` made it a one-column grid); KPI "Runs →" links no longer wrap.
+- Bulk Processor: mode-card descriptions floated away from their titles (`align-content: start`); "What to fill" wrapped onto a broken second row in a narrow card and now stacks (container query on `.sim-bp-card`); spacing around the summary button and the Loading text.
+- The health strip rendered only after `/schedule` returned and pushed the page down; it now shows "Checking automatic runs…" immediately.
+- The article count no longer blinks to "…" on every change; the last number stays dimmed until the new one arrives.
+- Schedule shows post type names ("Posts") instead of slugs.
+
+### Changed
+
+- Bulk Processor matches the approved demo more closely: the bulk bar appears only once an article is selected; Draft and Scheduled are pre-ticked (Published never is); More filters says Show / Hide; the summary rail shows an estimated time from the last finished run's pace; Review's summary line shows candidates hidden by relevance rules; featured suggestions are titled "Featured image" in normal text.
+
 ## [3.7.1] - 16/10/2026
 
 ### Added

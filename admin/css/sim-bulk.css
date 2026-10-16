@@ -77,6 +77,8 @@
 	flex: none;
 }
 
+.sim-bp-health.is-pending { border-left-color: var(--bp-line-2); }
+.sim-bp-health.is-pending .sim-bp-dot { background: var(--bp-line-2); }
 .sim-bp-health.is-warn { border-left-color: #dba617; }
 .sim-bp-health.is-warn .sim-bp-dot { background: #dba617; }
 .sim-bp-health.is-bad { border-left-color: var(--bp-bad); }
@@ -148,6 +150,7 @@
 /* ---------- Cards + sections ---------- */
 
 .sim-bp-card {
+	container-type: inline-size;
 	background: var(--bp-surface);
 	border: 1px solid var(--bp-line);
 	border-radius: var(--bp-radius);
@@ -205,9 +208,10 @@
 	margin-top: 14px;
 }
 
-.sim-bp-wide { width: 100%; margin-top: 14px; }
+.sim-bp .button.sim-bp-wide { width: 100%; margin: 16px 0 0; text-align: center; }
+.sim-bp-summary > .sim-bp-help:last-of-type { margin-top: 8px; }
 
-.sim-bp-loading { color: var(--bp-muted); padding: 12px 0; }
+.sim-bp-loading { color: var(--bp-muted); padding: 16px 14px; margin: 0; }
 
 .sim-bp .button.sim-bp-danger { color: var(--bp-bad); border-color: var(--bp-bad-line); }
 .sim-bp .button.sim-bp-danger:hover { color: var(--bp-bad); border-color: var(--bp-bad); background: var(--bp-bad-wash); }
@@ -245,6 +249,8 @@
 	position: relative;
 	display: grid;
 	gap: 4px;
+	/* Equal-height cards must not spread their lines apart. */
+	align-content: start;
 	cursor: pointer;
 	border: 1px solid var(--bp-line-2);
 	border-radius: var(--bp-radius);
@@ -342,6 +348,15 @@
 .sim-bp-seg label:last-child { border-right: 0; }
 .sim-bp-seg label:has(input:checked) { background: var(--bp-accent-wash); color: var(--bp-accent-ink); font-weight: 600; box-shadow: inset 0 -2px 0 var(--bp-accent); }
 .sim-bp-seg label:has(input:focus-visible) { outline: 2px solid var(--bp-accent); outline-offset: -2px; }
+.sim-bp-seg label { white-space: nowrap; }
+
+/* A narrow card stacks the options instead of wrapping them onto a broken second row. */
+@container (max-width: 520px) {
+	.sim-bp-seg.is-stack { display: grid; width: 100%; }
+	.sim-bp-seg.is-stack label { border-right: 0; border-bottom: 1px solid var(--bp-line-2); }
+	.sim-bp-seg.is-stack label:last-child { border-bottom: 0; }
+	.sim-bp-seg.is-stack label:has(input:checked) { box-shadow: inset 3px 0 0 var(--bp-accent); }
+}
 
 .sim-bp-more {
 	border: 1px solid var(--bp-line);
@@ -360,8 +375,8 @@
 }
 
 .sim-bp-more > summary::-webkit-details-marker { display: none; }
-.sim-bp-more > summary::after { content: "+"; color: var(--bp-accent); font-weight: 400; }
-.sim-bp-more[open] > summary::after { content: "−"; }
+.sim-bp-more > summary::after { content: attr(data-show); color: var(--bp-accent); font-weight: 400; }
+.sim-bp-more[open] > summary::after { content: attr(data-hide); }
 .sim-bp-more-inner { padding: 4px 12px 14px; }
 .sim-bp-active-filters { color: var(--bp-muted); font-weight: 400; margin-right: auto; }
 
@@ -450,6 +465,8 @@
 	font-weight: 600;
 	font-variant-numeric: tabular-nums;
 }
+
+.sim-bp-big.is-busy { opacity: 0.45; transition: opacity 0.15s; }
 
 .sim-bp-bands {
 	display: grid;
@@ -558,6 +575,7 @@
 	border-bottom: 1px solid var(--bp-line);
 }
 
+.sim-bp-filtered { color: var(--bp-warn); }
 .sim-bp-bulkbar.is-active { background: var(--bp-accent-wash); border-bottom-color: var(--bp-accent-line); }
 
 #sim-articles.is-busy { opacity: 0.6; pointer-events: none; }
@@ -685,6 +703,7 @@
 
 .sim-s-text { min-width: 0; display: grid; gap: 3px; }
 .sim-s-head { font-weight: 600; overflow-wrap: anywhere; }
+.sim-s-head.is-featured { color: var(--bp-ink); }
 .sim-s-lvl { font-family: var(--bp-mono); font-size: 11px; color: var(--bp-muted); font-weight: 400; margin-right: 6px; }
 .sim-s-file { font-family: var(--bp-mono); font-size: 12px; color: var(--bp-ink-2); overflow-wrap: anywhere; }
 

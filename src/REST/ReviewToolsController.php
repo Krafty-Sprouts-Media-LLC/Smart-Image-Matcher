@@ -317,6 +317,12 @@ class ReviewToolsController extends Controller {
 			$statuses[] = $obj ? (string) $obj->label : $status;
 		}
 
+		$types = array();
+		foreach ( array_filter( array_map( 'trim', explode( ',', (string) Settings::get( 'fiaa_cron_post_types' ) ) ) ) as $type ) {
+			$obj     = get_post_type_object( $type );
+			$types[] = $obj ? (string) $obj->labels->name : $type;
+		}
+
 		$health = QueueWatchdog::health();
 
 		return rest_ensure_response(
@@ -324,7 +330,7 @@ class ReviewToolsController extends Controller {
 				'settings'     => array(
 					'enabled'   => (bool) Settings::get( 'fiaa_cron_enabled' ),
 					'interval'  => $intervals[ (string) Settings::get( 'fiaa_cron_interval' ) ] ?? (string) Settings::get( 'fiaa_cron_interval' ),
-					'types'     => (string) Settings::get( 'fiaa_cron_post_types' ),
+					'types'     => implode( ', ', $types ),
 					'statuses'  => implode( ', ', $statuses ),
 					'featured'  => (string) Settings::get( 'fiaa_cron_featured_filter' ),
 					'fill'      => $fills[ ArticleProcessor::normalizeFill( Settings::get( 'fiaa_cron_fill' ) ) ],
