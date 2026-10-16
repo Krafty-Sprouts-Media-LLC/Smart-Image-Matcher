@@ -107,7 +107,7 @@ class BulkProcessor {
 		wp_enqueue_script(
 			'smart-image-matcher-bulk-js',
 			SMART_IMAGE_MATCHER_PLUGIN_URL . 'admin/js/src/bulk.js',
-			array( 'wp-api-fetch', 'smart-image-matcher-svg-icons' ),
+			array( 'wp-api-fetch', 'wp-i18n', 'smart-image-matcher-svg-icons' ),
 			file_exists( $jsPath ) ? (string) filemtime( $jsPath ) : SMART_IMAGE_MATCHER_VERSION,
 			true
 		);
@@ -127,34 +127,12 @@ class BulkProcessor {
 				'reviewThreshold'       => (int) Settings::get( 'confidence_threshold' ),
 				'generationAvailable'   => $generationOn,
 				'defaultStyle'          => (string) Settings::get( 'ai_image_style' ),
-				'i18n'                  => array(
-					'run'            => __( 'Run', 'smart-image-matcher' ),
-					'review'         => __( 'Review', 'smart-image-matcher' ),
-					'approve'        => __( 'Approve', 'smart-image-matcher' ),
-					'reject'         => __( 'Reject', 'smart-image-matcher' ),
-					'insertApproved' => __( 'Insert approved', 'smart-image-matcher' ),
-					'cancel'         => __( 'Cancel run', 'smart-image-matcher' ),
-					'noMatches'      => __( 'Nothing to review.', 'smart-image-matcher' ),
-					'allPending'     => __( 'All pending', 'smart-image-matcher' ),
-					'lastRun'        => __( 'Last run', 'smart-image-matcher' ),
-					'noMissingFeatured' => __( 'No posts in this selection are missing a featured image.', 'smart-image-matcher' ),
-					'changeSelection'   => __( 'Change selection', 'smart-image-matcher' ),
-					'confirmCancelRun'  => __( 'Cancel the current run so you can change the selection?', 'smart-image-matcher' ),
-					'confirmRecovery'   => __( 'Recover %d matched image(s) into WordPress? Unmatched images will not be imported.', 'smart-image-matcher' ),
-					'confirmAuditClear' => __( 'Remove unsafe featured images from the scanned posts? Exact and prefix matches are left alone.', 'smart-image-matcher' ),
-					'approveAll'        => __( 'Approve all', 'smart-image-matcher' ),
-					'approveAllPending' => __( 'Approve all pending', 'smart-image-matcher' ),
-					'confirmApproveAll' => __( 'Approve every pending slot in this Review filter? You still need to click Insert approved afterwards.', 'smart-image-matcher' ),
-					'showMoreHeadings'  => __( 'Show %d more headings', 'smart-image-matcher' ),
-					'viewImage'         => __( 'View image', 'smart-image-matcher' ),
-					'undo'              => __( 'Undo', 'smart-image-matcher' ),
-					'approved'          => __( 'Approved', 'smart-image-matcher' ),
-					'rejected'          => __( 'Rejected', 'smart-image-matcher' ),
-					'neverUse'          => __( 'Never use', 'smart-image-matcher' ),
-					'confirmNeverUse'   => __( 'Block %s from featured-image auto-assign? Other heading review slots keep this file. Existing featured assignments are flagged by Fix Incorrect Featured Images.', 'smart-image-matcher' ),
-				),
+				'settingsUrl'           => admin_url( 'admin.php?page=smart-image-matcher-settings' ),
 			)
 		);
+
+		// Strings live in bulk.js via wp.i18n (languages/*.json).
+		wp_set_script_translations( 'smart-image-matcher-bulk-js', 'smart-image-matcher', SMART_IMAGE_MATCHER_PLUGIN_DIR . 'languages' );
 	}
 
 	/**

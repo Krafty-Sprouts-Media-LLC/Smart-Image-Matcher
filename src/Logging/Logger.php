@@ -105,6 +105,33 @@ class Logger {
 	}
 
 	/**
+	 * Remove stored errors: one message group, or all of them when $message is null.
+	 *
+	 * @since 3.7.0
+	 * @param string|null $message Exact message to remove, or null for all.
+	 * @return int Entries removed.
+	 */
+	public static function removeErrors( ?string $message ): int {
+		$runtime = get_option( \SmartImageMatcher\Settings\Settings::RUNTIME_OPTION, array() );
+		$runtime = is_array( $runtime ) ? $runtime : array();
+		$errors  = isset( $runtime['recent_errors'] ) && is_array( $runtime['recent_errors'] ) ? $runtime['recent_errors'] : array();
+
+		$kept = null === $message ? array() : array_values(
+			array_filter(
+				$errors,
+				static function ( $row ) use ( $message ) {
+					return ! is_array( $row ) || (string) ( $row['message'] ?? '' ) !== $message;
+				}
+			)
+		);
+
+		$runtime['recent_errors'] = $kept;
+		update_option( \SmartImageMatcher\Settings\Settings::RUNTIME_OPTION, $runtime, false );
+
+		return count( $errors ) - count( $kept );
+	}
+
+	/**
 	 * Whether debug logging is currently active.
 	 *
 	 * @since 3.0.0
@@ -154,7 +181,7 @@ class Logger {
 	}
 
 	/**
-	 * Keep the last 20 errors in the runtime option (autoload=no).
+	 * Keep the last 50 errors in the runtime option (autoload=no).
 	 *
 	 * @since 3.4.5
 	 * @param string               $message Message.
@@ -182,7 +209,7 @@ class Logger {
 			)
 		);
 
-		$runtime['recent_errors'] = array_slice( $errors, 0, 20 );
+		$runtime['recent_errors'] = array_slice( $errors, 0, 50 );
 		update_option( \SmartImageMatcher\Settings\Settings::RUNTIME_OPTION, $runtime, false );
 	}
 

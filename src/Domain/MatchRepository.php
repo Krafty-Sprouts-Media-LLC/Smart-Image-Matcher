@@ -193,6 +193,75 @@ class MatchRepository {
 	}
 
 	/**
+	 * Images the user rejected for one heading (or "featured") of one post.
+	 *
+	 * Runs never suggest these again for that slot ("remembered Reject").
+	 *
+	 * @since 3.7.0
+	 * @param int    $postId      Post ID.
+	 * @param string $headingHash Heading hash, or "featured".
+	 * @return int[]
+	 */
+	public function rejectedImageIds( int $postId, string $headingHash ): array {
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		$ids = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT DISTINCT image_id FROM {$wpdb->prefix}smart_image_matcher_matches WHERE post_id = %d AND heading_hash = %s AND status = %s",
+				$postId,
+				$headingHash,
+				'rejected'
+			)
+		);
+
+		return array_values( array_filter( array_map( 'intval', is_array( $ids ) ? $ids : array() ) ) );
+	}
+
+	/**
+	 * Reject every pending suggestion for one post.
+	 *
+	 * @since 3.7.0
+	 * @param int $postId Post ID.
+	 * @return int Rows rejected.
+	 */
+	public function rejectPendingForPost( int $postId ): int {
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		$n = $wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$wpdb->prefix}smart_image_matcher_matches SET status = %s WHERE post_id = %d AND status = %s",
+				'rejected',
+				$postId,
+				'pending'
+			)
+		);
+
+		return is_int( $n ) ? $n : 0;
+	}
+
+	/**
+	 * Delete every pending suggestion for one post (article ignored).
+	 *
+	 * @since 3.7.0
+	 * @param int $postId Post ID.
+	 * @return void
+	 */
+	public function clearPendingForPost( int $postId ): void {
+		global $wpdb;
+
+		$wpdb->delete( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$wpdb->prefix . 'smart_image_matcher_matches',
+			array(
+				'post_id' => $postId,
+				'status'  => 'pending',
+			),
+			array( '%d', '%s' )
+		);
+	}
+
+	/**
 	 * Mark a match row as rejected.
 	 *
 	 * @since 3.0.0

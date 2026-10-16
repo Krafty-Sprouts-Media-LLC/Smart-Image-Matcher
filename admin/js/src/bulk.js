@@ -1,1480 +1,1978 @@
 /**
- * bulk.js — Bulk Processor SPA (Premium).
+ * bulk.js — Bulk Processor (Premium): Run | Review | Schedule | Tools.
  *
- * Persistent Run | Review. Process articles or generate featured images.
- * Review is grouped by article. Run identity is a human label, never a job hash.
+ * Run: mode → which articles → options, with a live count in the summary rail.
+ * Review: one row per article; decide suggestions with ✓ / ✕ (remembered for
+ * that heading only). Blocking an image site-wide sits behind ⋯ and an
+ * explained confirmation — it has no keyboard shortcut.
+ * Schedule: automatic-run settings, open runs (close a stuck one), every tick.
  *
  * @package SmartImageMatcher
- * @since   3.0.0
+ * @since   3.0.0 (rewritten 3.7.0)
  */
 
 ( function () {
 	'use strict';
 
-	const config = window.smartImageMatcherBulk || {};
-	const nonce = config.nonce || '';
-	const postTypes = config.postTypes && Object.keys( config.postTypes ).length
-		? config.postTypes
-		: { post: 'Posts', page: 'Pages' };
-	const autoInsert = parseInt( config.autoInsertThreshold || '90', 10 );
-	const generationAvailable = !! config.generationAvailable;
-	const i18n = Object.assign( {
-		run: 'Run',
-		review: 'Review',
-		approve: 'Approve',
-		reject: 'Reject',
-		undo: 'Undo',
-		approved: 'Approved',
-		rejected: 'Rejected',
-		neverUse: 'Never use',
-		confirmNeverUse: 'Block %s from all future matching (featured and in-article)? Open review slots that use this file will be rejected.',
-		insertApproved: 'Insert approved',
-		cancel: 'Cancel run',
-		noMatches: 'Nothing to review.',
-		allPending: 'All pending',
-		lastRun: 'Last run',
-	}, config.i18n || {} );
-	const apiFetch = window.wp && window.wp.apiFetch;
-	const samplePostRefs = config.samplePostRefs || '123, 456, sample-post-slug';
 	const app = document.getElementById( 'sim-bulk-app' );
-
-	if ( apiFetch && apiFetch.createNonceMiddleware && nonce ) {
-		apiFetch.use( apiFetch.createNonceMiddleware( nonce ) );
+	if ( ! app ) {
+		return;
 	}
 
-	let currentTab = ( app && app.dataset.simTab === 'review' ) ? 'review' : 'run';
-	let reviewRun = ( app && app.dataset.simRun === 'last' ) ? 'last' : 'all';
-	let reviewSlot = 'all';
-	let reviewPage = 1;
-	let currentJob = null;
-	let pollTimer = null;
-	let reviewCache = [];
-	let reviewModalPostId = 0;
-	let reviewModalIndex = 0;
-	const updatingMatches = new Set();
-	const slotPreviewLimit = 10;
-	const storageKey = 'smartImageMatcherBulkCurrentJobId';
-	const cancelledStorageKey = 'smartImageMatcherBulkCancelledJobIds';
-	const segmentsKey = 'smartImageMatcherBulkSelectionSegments';
+	const config = window.smartImageMatcherBulk || {};
+	const apiFetch = window.wp && window.wp.apiFetch;
+	const wpI18n = ( window.wp && window.wp.i18n ) || {};
+	const __ = wpI18n.__ || ( ( s ) => s );
+	const _n = wpI18n._n || ( ( one, many, n ) => ( n === 1 ? one : many ) );
+	const sprintf = wpI18n.sprintf || ( ( s, ...a ) => {
+		let i = 0;
+		return String( s ).replace( /%(\d+\$)?[sd]/g, () => String( a[ i++ ] ) );
+	} );
 
-	function q( selector, root ) {
-		return ( root || document ).querySelector( selector );
+	const API = '/smart-image-matcher/v1';
+	const postTypes = config.postTypes && Object.keys( config.postTypes ).length ? config.postTypes : { post: 'Posts', page: 'Pages' };
+	const AUTO = parseInt( config.autoInsertThreshold || '90', 10 );
+	const REVIEW_MIN = parseInt( config.reviewThreshold || '70', 10 );
+	const MID = Math.min( 80, AUTO );
+	const generationAvailable = !! config.generationAvailable;
+	const PER_PAGE = 20;
+
+	const KEY_JOB = 'smartImageMatcherBulkCurrentJobId';
+	const KEY_CANCELLED = 'smartImageMatcherBulkCancelledJobIds';
+	const KEY_SEGMENTS = 'smartImageMatcherBulkSelectionSegments';
+
+	if ( apiFetch && apiFetch.createNonceMiddleware && config.nonce ) {
+		apiFetch.use( apiFetch.createNonceMiddleware( config.nonce ) );
 	}
 
-	function qAll( selector, root ) {
-		return Array.from( ( root || document ).querySelectorAll( selector ) );
+	const state = {
+		tab: app.dataset.simTab || 'run',
+		job: null,
+		pollTimer: null,
+		pace: null, // { t, done } first sample of the current poll session.
+		review: {
+			search: '',
+			slot: 'all',
+			band: 'all',
+			run: app.dataset.simRun === 'last' ? 'last' : 'all',
+			page: 1,
+			articles: [],
+			totalArticles: 0,
+			totalSuggestions: 0,
+			open: new Set(),
+			selected: new Set(),
+			decided: new Map(), // match id → approved | rejected
+			focus: -1,
+			loadedOnce: false,
+		},
+		tallies: { approved: 0, rejected: 0 },
+		modal: { postId: 0, index: 0 },
+		countTimer: null,
+		countSeq: 0,
+		lastCount: null,
+	};
+
+	// ---------------------------------------------------------------------
+	// Helpers
+	// ---------------------------------------------------------------------
+
+	function q( sel, root ) {
+		return ( root || document ).querySelector( sel );
 	}
 
-	function escHtml( str ) {
-		const d = document.createElement( 'div' );
-		d.textContent = str == null ? '' : String( str );
-		return d.innerHTML;
+	function qAll( sel, root ) {
+		return Array.from( ( root || document ).querySelectorAll( sel ) );
 	}
 
-	function parseTotals( jobData ) {
-		if ( jobData && typeof jobData.totals === 'string' && jobData.totals ) {
+	// Safe in text and in quoted attributes (titles and filenames can contain quotes).
+	function esc( value ) {
+		return String( value == null ? '' : value )
+			.replace( /&/g, '&amp;' )
+			.replace( /</g, '&lt;' )
+			.replace( />/g, '&gt;' )
+			.replace( /"/g, '&quot;' )
+			.replace( /'/g, '&#39;' );
+	}
+
+	function api( path, method, data ) {
+		const opts = { path: API + path, method: method || 'GET' };
+		if ( data !== undefined ) {
+			opts.data = data;
+		}
+		return apiFetch( opts );
+	}
+
+	function store( key, value ) {
+		try {
+			if ( value === null ) {
+				window.localStorage.removeItem( key );
+			} else {
+				window.localStorage.setItem( key, typeof value === 'string' ? value : JSON.stringify( value ) );
+			}
+		} catch ( e ) {}
+	}
+
+	function read( key, fallback ) {
+		try {
+			const raw = window.localStorage.getItem( key );
+			if ( raw === null ) return fallback;
 			try {
-				const totals = JSON.parse( jobData.totals );
-				return totals && typeof totals === 'object' ? totals : {};
-			} catch ( err ) {
+				return JSON.parse( raw );
+			} catch ( e ) {
+				return raw;
+			}
+		} catch ( e ) {
+			return fallback;
+		}
+	}
+
+	function parseTotals( job ) {
+		if ( job && typeof job.totals === 'string' && job.totals ) {
+			try {
+				const t = JSON.parse( job.totals );
+				return t && typeof t === 'object' ? t : {};
+			} catch ( e ) {
 				return {};
 			}
 		}
-		return ( jobData && jobData.totals && typeof jobData.totals === 'object' ) ? jobData.totals : {};
+		return job && job.totals && typeof job.totals === 'object' ? job.totals : {};
 	}
 
-	function getJobTotal( jobData ) {
-		const totals = parseTotals( jobData );
-		return parseInt( jobData.total || totals.total || 0, 10 );
+	function num( job, key ) {
+		const t = parseTotals( job );
+		return parseInt( ( job && job[ key ] ) || t[ key ] || 0, 10 );
 	}
 
-	function getJobDone( jobData ) {
-		const totals = parseTotals( jobData );
-		return parseInt( jobData.done || totals.done || 0, 10 );
+	function jobConfig( job ) {
+		return ( job && job.config ) || parseTotals( job ).config || {};
 	}
 
-	function outcome( jobData, key ) {
-		const totals = parseTotals( jobData );
-		return parseInt( jobData[ key ] || totals[ key ] || 0, 10 );
+	function isRunning( job ) {
+		return !! job && ( job.status === 'queued' || job.status === 'processing' );
 	}
 
-	function rememberJob( jobId ) {
-		try { window.localStorage.setItem( storageKey, jobId ); } catch ( err ) {}
+	function errMsg( err, fallback ) {
+		return ( err && err.message ) ? err.message : fallback;
 	}
 
-	function forgetJob() {
-		try { window.localStorage.removeItem( storageKey ); } catch ( err ) {}
+	function minutesLabel( mins ) {
+		if ( mins < 1 ) return __( 'under a minute', 'smart-image-matcher' );
+		if ( mins < 60 ) return sprintf( _n( '%d min', '%d min', mins, 'smart-image-matcher' ), mins );
+		const h = Math.floor( mins / 60 );
+		const m = mins % 60;
+		return m ? sprintf( __( '%1$d h %2$d min', 'smart-image-matcher' ), h, m ) : sprintf( _n( '%d hour', '%d hours', h, 'smart-image-matcher' ), h );
 	}
 
-	function readCancelledJobs() {
-		try {
-			const ids = JSON.parse( window.localStorage.getItem( cancelledStorageKey ) || '[]' );
-			return Array.isArray( ids ) ? ids : [];
-		} catch ( err ) {
-			return [];
+	function timeLabel( unix ) {
+		if ( ! unix ) return '—';
+		const d = new Date( unix * 1000 );
+		const today = new Date();
+		const sameDay = d.toDateString() === today.toDateString();
+		const time = d.toLocaleTimeString( [], { hour: '2-digit', minute: '2-digit' } );
+		return sameDay ? time : d.toLocaleDateString( [], { day: 'numeric', month: 'short' } ) + ' ' + time;
+	}
+
+	// ---------------------------------------------------------------------
+	// Toast
+	// ---------------------------------------------------------------------
+
+	let toastTimer = null;
+
+	function toast( message, undo ) {
+		const el = q( '#sim-bp-toast' );
+		if ( ! el ) return;
+		const span = el.querySelector( 'span' );
+		const btn = el.querySelector( 'button' );
+		span.textContent = message;
+		btn.hidden = ! undo;
+		btn.onclick = undo ? () => {
+			el.hidden = true;
+			undo();
+		} : null;
+		el.hidden = false;
+		window.clearTimeout( toastTimer );
+		toastTimer = window.setTimeout( () => {
+			el.hidden = true;
+		}, undo ? 8000 : 4000 );
+	}
+
+	// ---------------------------------------------------------------------
+	// Tabs
+	// ---------------------------------------------------------------------
+
+	function setTab( tab ) {
+		state.tab = [ 'run', 'review', 'schedule', 'tools' ].includes( tab ) ? tab : 'run';
+		qAll( '.sim-bp-tab' ).forEach( ( el ) => {
+			const on = el.dataset.tab === state.tab;
+			el.classList.toggle( 'is-on', on );
+			el.setAttribute( 'aria-selected', on ? 'true' : 'false' );
+		} );
+		qAll( '.sim-bulk-panel' ).forEach( ( el ) => {
+			el.hidden = el.dataset.panel !== state.tab;
+		} );
+		const params = new URLSearchParams( window.location.search );
+		params.set( 'page', 'smart-image-matcher-bulk' );
+		params.set( 'sim_tab', state.tab );
+		if ( state.tab === 'review' ) {
+			params.set( 'sim_run', state.review.run );
+		} else {
+			params.delete( 'sim_run' );
+		}
+		window.history.replaceState( {}, '', window.location.pathname + '?' + params.toString() );
+
+		q( '#sim-bp-dock' ).hidden = state.tab !== 'review';
+		if ( state.tab === 'review' ) {
+			loadReview();
+		} else if ( state.tab === 'schedule' ) {
+			loadSchedule();
+		} else if ( state.tab === 'tools' ) {
+			loadBlocked();
+			loadIgnored();
 		}
 	}
 
-	function rememberCancelledJob( jobId ) {
-		if ( ! jobId ) return;
-		const ids = readCancelledJobs().filter( ( id ) => id !== jobId );
-		ids.unshift( jobId );
-		try { window.localStorage.setItem( cancelledStorageKey, JSON.stringify( ids.slice( 0, 20 ) ) ); } catch ( err ) {}
+	// ---------------------------------------------------------------------
+	// Run tab
+	// ---------------------------------------------------------------------
+
+	function runHtml() {
+		const typeOptions = Object.entries( postTypes ).map( ( [ slug, label ] ) => `<option value="${ esc( slug ) }">${ esc( label ) }</option>` ).join( '' );
+		const statuses = [
+			[ 'publish', __( 'Published', 'smart-image-matcher' ), false ],
+			[ 'draft', __( 'Draft', 'smart-image-matcher' ), true ],
+			[ 'future', __( 'Scheduled', 'smart-image-matcher' ), false ],
+			[ 'pending', __( 'Pending', 'smart-image-matcher' ), false ],
+			[ 'private', __( 'Private', 'smart-image-matcher' ), false ],
+		].map( ( [ v, l, on ] ) => `<label class="sim-bp-chip"><input type="checkbox" class="sim-post-status" value="${ v }"${ on ? ' checked' : '' } />${ esc( l ) }</label>` ).join( '' );
+
+		return `
+		<div class="sim-bp-run-grid">
+			<form class="sim-bp-card" id="sim-run-form" autocomplete="off">
+				<div class="sim-bp-section">
+					<div class="sim-bp-section-head"><h2><span class="sim-bp-step">${ esc( __( 'Step 1', 'smart-image-matcher' ) ) }</span>${ esc( __( 'What should happen?', 'smart-image-matcher' ) ) }</h2></div>
+					<div class="sim-bp-modes" role="radiogroup" aria-label="${ esc( __( 'Mode', 'smart-image-matcher' ) ) }">
+						<label class="sim-bp-mode">
+							<input type="radio" name="sim-run-mode" value="process" checked />
+							<strong>${ esc( __( 'Match from the library', 'smart-image-matcher' ) ) }</strong>
+							<span>${ esc( __( 'Insert strong matches, send uncertain ones to Review.', 'smart-image-matcher' ) ) }</span>
+						</label>
+						<label class="sim-bp-mode${ generationAvailable ? '' : ' is-disabled' }">
+							<input type="radio" name="sim-run-mode" value="generate-featured"${ generationAvailable ? '' : ' disabled' } />
+							<strong>${ esc( __( 'Generate featured images', 'smart-image-matcher' ) ) }</strong>
+							<span>${ esc( __( 'Create a new featured image for posts that have none. Headings are not touched.', 'smart-image-matcher' ) ) }</span>
+							${ generationAvailable
+								? `<span class="sim-bp-req">${ esc( __( 'Uses paid image credits · you confirm the count first', 'smart-image-matcher' ) ) }</span>`
+								: `<span class="sim-bp-req">${ esc( __( 'Turn on image generation in Settings and connect an image provider.', 'smart-image-matcher' ) ) }</span>` }
+						</label>
+					</div>
+				</div>
+
+				<div class="sim-bp-section">
+					<div class="sim-bp-section-head">
+						<h2><span class="sim-bp-step">${ esc( __( 'Step 2', 'smart-image-matcher' ) ) }</span>${ esc( __( 'Which articles?', 'smart-image-matcher' ) ) }</h2>
+						<div class="sim-bp-inline">
+							<label class="screen-reader-text" for="sim-saved-segment">${ esc( __( 'Saved selection', 'smart-image-matcher' ) ) }</label>
+							<select id="sim-saved-segment"></select>
+							<button type="button" class="button button-link" id="sim-save-segment">${ esc( __( 'Save current', 'smart-image-matcher' ) ) }</button>
+							<button type="button" class="button button-link sim-bp-danger-link" id="sim-delete-segment" hidden>${ esc( __( 'Delete', 'smart-image-matcher' ) ) }</button>
+						</div>
+					</div>
+					<div class="sim-bp-fields">
+						<div class="sim-bp-field">
+							<span class="sim-bp-label" id="sim-lbl-status">${ esc( __( 'Post status', 'smart-image-matcher' ) ) }</span>
+							<div class="sim-bp-chips" role="group" aria-labelledby="sim-lbl-status">${ statuses }</div>
+						</div>
+						<div class="sim-bp-field">
+							<span class="sim-bp-label" id="sim-lbl-feat">${ esc( __( 'Featured image', 'smart-image-matcher' ) ) }</span>
+							<div class="sim-bp-seg" role="radiogroup" aria-labelledby="sim-lbl-feat">
+								<label><input type="radio" name="sim-featured-filter" value="any" checked />${ esc( __( 'Any', 'smart-image-matcher' ) ) }</label>
+								<label><input type="radio" name="sim-featured-filter" value="missing" />${ esc( __( 'Missing', 'smart-image-matcher' ) ) }</label>
+								<label><input type="radio" name="sim-featured-filter" value="has" />${ esc( __( 'Has one', 'smart-image-matcher' ) ) }</label>
+							</div>
+						</div>
+						<div class="sim-bp-field">
+							<label class="sim-bp-label" for="sim-post-type">${ esc( __( 'Post type', 'smart-image-matcher' ) ) }</label>
+							<select id="sim-post-type">${ typeOptions }</select>
+						</div>
+						<div class="sim-bp-field">
+							<label class="sim-bp-label" for="sim-post-search">${ esc( __( 'Title, content or slug contains', 'smart-image-matcher' ) ) }</label>
+							<input type="search" id="sim-post-search" placeholder="${ esc( __( 'e.g. hobby farm', 'smart-image-matcher' ) ) }" />
+						</div>
+						<div class="sim-bp-field sim-bp-full">
+							<details class="sim-bp-more" id="sim-more-filters">
+								<summary>${ esc( __( 'More filters', 'smart-image-matcher' ) ) } <span class="sim-bp-active-filters" id="sim-active-filters"></span></summary>
+								<div class="sim-bp-more-inner sim-bp-fields">
+									<div class="sim-bp-field sim-bp-full">
+										<label class="sim-bp-label" for="sim-post-refs">${ esc( __( 'Only these articles', 'smart-image-matcher' ) ) }</label>
+										<textarea id="sim-post-refs" rows="3" placeholder="${ esc( config.samplePostRefs || '123, 456, sample-post-slug' ) }"></textarea>
+										<span class="sim-bp-help">${ esc( __( 'IDs or slugs, comma or line separated. Post type and status still apply.', 'smart-image-matcher' ) ) }</span>
+									</div>
+									<div class="sim-bp-field">
+										<label class="sim-bp-label" for="sim-taxonomy-filters">${ esc( __( 'Category or tag', 'smart-image-matcher' ) ) }</label>
+										<input type="text" id="sim-taxonomy-filters" placeholder="category:poultry; post_tag:avian-flu" />
+									</div>
+									<div class="sim-bp-field">
+										<label class="sim-bp-label" for="sim-content-filter">${ esc( __( 'Content', 'smart-image-matcher' ) ) }</label>
+										<select id="sim-content-filter">
+											<option value="any">${ esc( __( 'Any', 'smart-image-matcher' ) ) }</option>
+											<option value="has_headings">${ esc( __( 'Has headings', 'smart-image-matcher' ) ) }</option>
+											<option value="no_images">${ esc( __( 'No images in the content', 'smart-image-matcher' ) ) }</option>
+											<option value="not_processed">${ esc( __( 'Never processed by this plugin', 'smart-image-matcher' ) ) }</option>
+										</select>
+									</div>
+									<div class="sim-bp-field">
+										<span class="sim-bp-label">${ esc( __( 'Published between', 'smart-image-matcher' ) ) }</span>
+										<div class="sim-bp-inline">
+											<input type="date" id="sim-date-after" aria-label="${ esc( __( 'Published after', 'smart-image-matcher' ) ) }" />
+											<span class="sim-bp-help">${ esc( __( 'to', 'smart-image-matcher' ) ) }</span>
+											<input type="date" id="sim-date-before" aria-label="${ esc( __( 'Published before', 'smart-image-matcher' ) ) }" />
+										</div>
+									</div>
+									<div class="sim-bp-field">
+										<span class="sim-bp-label">${ esc( __( 'Modified between', 'smart-image-matcher' ) ) }</span>
+										<div class="sim-bp-inline">
+											<input type="date" id="sim-modified-after" aria-label="${ esc( __( 'Modified after', 'smart-image-matcher' ) ) }" />
+											<span class="sim-bp-help">${ esc( __( 'to', 'smart-image-matcher' ) ) }</span>
+											<input type="date" id="sim-modified-before" aria-label="${ esc( __( 'Modified before', 'smart-image-matcher' ) ) }" />
+										</div>
+									</div>
+									<div class="sim-bp-field">
+										<label class="sim-bp-label" for="sim-max-posts">${ esc( __( 'Stop after', 'smart-image-matcher' ) ) }</label>
+										<div class="sim-bp-inline">
+											<input type="number" id="sim-max-posts" min="1" max="5000" placeholder="${ esc( __( 'No limit', 'smart-image-matcher' ) ) }" class="sim-bp-narrow" />
+											<span class="sim-bp-help">${ esc( __( 'articles', 'smart-image-matcher' ) ) }</span>
+										</div>
+									</div>
+								</div>
+							</details>
+						</div>
+					</div>
+				</div>
+
+				<div class="sim-bp-section" id="sim-opts-process">
+					<div class="sim-bp-section-head"><h2><span class="sim-bp-step">${ esc( __( 'Step 3', 'smart-image-matcher' ) ) }</span>${ esc( __( 'Match options', 'smart-image-matcher' ) ) }</h2></div>
+					<div class="sim-bp-fields">
+						<div class="sim-bp-field sim-bp-full">
+							<span class="sim-bp-label" id="sim-lbl-fill">${ esc( __( 'What to fill', 'smart-image-matcher' ) ) }</span>
+							<div class="sim-bp-seg" role="radiogroup" aria-labelledby="sim-lbl-fill">
+								<label><input type="radio" name="sim-fill" value="both" checked />${ esc( __( 'Featured image and headings', 'smart-image-matcher' ) ) }</label>
+								<label><input type="radio" name="sim-fill" value="featured" />${ esc( __( 'Featured image only', 'smart-image-matcher' ) ) }</label>
+								<label><input type="radio" name="sim-fill" value="headings" />${ esc( __( 'Headings only', 'smart-image-matcher' ) ) }</label>
+							</div>
+							<span class="sim-bp-help">${ esc( __( 'Featured image only never adds images to the article body.', 'smart-image-matcher' ) ) }</span>
+						</div>
+						<div class="sim-bp-field sim-bp-full" id="sim-overwrite-row">
+							<div class="sim-bp-toggle-row">
+								<label class="sim-bp-switch"><input type="checkbox" id="sim-overwrite-featured" /><span></span></label>
+								<div>
+									<label class="sim-bp-label" for="sim-overwrite-featured">${ esc( __( 'Replace featured images that are already set', 'smart-image-matcher' ) ) }</label>
+									<div class="sim-bp-help">${ esc( __( 'Only exact and prefix filename matches are ever assigned automatically; anything weaker goes to Review.', 'smart-image-matcher' ) ) }</div>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<div class="sim-bp-section" id="sim-opts-generate" hidden>
+					<div class="sim-bp-section-head"><h2><span class="sim-bp-step">${ esc( __( 'Step 3', 'smart-image-matcher' ) ) }</span>${ esc( __( 'Image options', 'smart-image-matcher' ) ) }</h2></div>
+					<div class="sim-bp-field">
+						<span class="sim-bp-label" id="sim-lbl-style">${ esc( __( 'Image style', 'smart-image-matcher' ) ) }</span>
+						<div class="sim-bp-styles" role="radiogroup" aria-labelledby="sim-lbl-style">
+							<label class="sim-bp-style"><input type="radio" name="sim-gen-style" value="photo" checked /><i class="is-photo"></i><b>${ esc( __( 'Photo', 'smart-image-matcher' ) ) }</b></label>
+							<label class="sim-bp-style"><input type="radio" name="sim-gen-style" value="illustration" /><i class="is-illustration"></i><b>${ esc( __( 'Illustration', 'smart-image-matcher' ) ) }</b></label>
+						</div>
+					</div>
+					<p class="sim-bp-notice is-warn">${ esc( __( 'Each image uses your image provider’s credits and appears on the post when it finishes. You can cancel while it runs.', 'smart-image-matcher' ) ) }</p>
+				</div>
+			</form>
+
+			<aside class="sim-bp-rail">
+				<div class="sim-bp-card sim-bp-section sim-bp-summary" id="sim-summary">
+					<div class="sim-bp-big" id="sim-sum-count">…</div>
+					<div class="sim-bp-help" id="sim-sum-label">${ esc( __( 'counting articles…', 'smart-image-matcher' ) ) }</div>
+					<div class="sim-bp-bands" id="sim-sum-bands"></div>
+					<div class="sim-bp-kv" id="sim-sum-kv"></div>
+					<button type="button" class="button button-primary button-hero sim-bp-wide" id="sim-run-primary" disabled>${ esc( __( 'Match articles', 'smart-image-matcher' ) ) }</button>
+					<p class="sim-bp-help">${ esc( __( 'Runs in the background. You can leave this page.', 'smart-image-matcher' ) ) }</p>
+					<div id="sim-run-notice"></div>
+				</div>
+				<div class="sim-bp-card sim-bp-section" id="sim-progress" hidden></div>
+			</aside>
+		</div>`;
 	}
 
-	function getCheckedValues( selector ) {
-		return qAll( selector ).filter( ( item ) => item.checked ).map( ( item ) => item.value ).filter( Boolean );
+	function mode() {
+		return q( 'input[name="sim-run-mode"]:checked' )?.value || 'process';
+	}
+
+	function radioValue( name, fallback ) {
+		return q( `input[name="${ name }"]:checked` )?.value || fallback;
+	}
+
+	function setRadio( name, value ) {
+		const el = q( `input[name="${ name }"][value="${ value }"]` );
+		if ( el && ! el.disabled ) el.checked = true;
+	}
+
+	function statuses() {
+		return qAll( '.sim-post-status' ).filter( ( el ) => el.checked ).map( ( el ) => el.value );
 	}
 
 	function splitRefs( value ) {
-		const refs = ( value || '' ).split( /[\s,]+/ ).map( ( item ) => item.trim() ).filter( Boolean );
+		const refs = String( value || '' ).split( /[\s,]+/ ).map( ( s ) => s.trim() ).filter( Boolean );
 		return {
-			ids: refs.filter( ( item ) => /^\d+$/.test( item ) ).map( ( item ) => parseInt( item, 10 ) ),
-			slugs: refs.filter( ( item ) => ! /^\d+$/.test( item ) ),
+			ids: refs.filter( ( s ) => /^\d+$/.test( s ) ).map( ( s ) => parseInt( s, 10 ) ),
+			slugs: refs.filter( ( s ) => ! /^\d+$/.test( s ) ),
 		};
 	}
 
-	function readSegments() {
-		try {
-			const parsed = JSON.parse( window.localStorage.getItem( segmentsKey ) || '{}' );
-			return parsed && typeof parsed === 'object' ? parsed : {};
-		} catch ( err ) {
-			return {};
-		}
-	}
-
-	function writeSegments( segments ) {
-		try { window.localStorage.setItem( segmentsKey, JSON.stringify( segments ) ); } catch ( err ) {}
+	function val( sel ) {
+		return q( sel )?.value || '';
 	}
 
 	function captureSelection() {
 		return {
-			postType: q( '#sim-post-type' )?.value || 'post',
-			postRefs: q( '#sim-post-refs' )?.value || '',
-			statuses: getCheckedValues( '.sim-post-status' ),
-			search: q( '#sim-post-search' )?.value || '',
-			taxonomyFilters: q( '#sim-taxonomy-filters' )?.value || '',
-			dateAfter: q( '#sim-date-after' )?.value || '',
-			dateBefore: q( '#sim-date-before' )?.value || '',
-			modifiedAfter: q( '#sim-modified-after' )?.value || '',
-			modifiedBefore: q( '#sim-modified-before' )?.value || '',
-			featuredFilter: q( '#sim-featured-filter' )?.value || 'any',
-			contentFilter: q( '#sim-content-filter' )?.value || 'any',
-			maxPosts: q( '#sim-max-posts' )?.value || '5000',
-			mode: q( 'input[name="sim-run-mode"]:checked' )?.value || 'process',
+			postType: val( '#sim-post-type' ) || 'post',
+			postRefs: val( '#sim-post-refs' ),
+			statuses: statuses(),
+			search: val( '#sim-post-search' ),
+			taxonomyFilters: val( '#sim-taxonomy-filters' ),
+			dateAfter: val( '#sim-date-after' ),
+			dateBefore: val( '#sim-date-before' ),
+			modifiedAfter: val( '#sim-modified-after' ),
+			modifiedBefore: val( '#sim-modified-before' ),
+			featuredFilter: radioValue( 'sim-featured-filter', 'any' ),
+			contentFilter: val( '#sim-content-filter' ) || 'any',
+			maxPosts: val( '#sim-max-posts' ),
+			mode: mode(),
 			overwrite: !! q( '#sim-overwrite-featured' )?.checked,
-			fill: q( '#sim-fill' )?.value || 'both',
-			style: q( '#sim-gen-style' )?.value || 'photo',
+			fill: radioValue( 'sim-fill', 'both' ),
+			style: radioValue( 'sim-gen-style', 'photo' ),
 		};
 	}
 
-	function applySelection( selection ) {
-		if ( ! selection || typeof selection !== 'object' ) return;
-		const setters = {
-			'#sim-post-type': selection.postType,
-			'#sim-post-refs': selection.postRefs,
-			'#sim-post-search': selection.search,
-			'#sim-taxonomy-filters': selection.taxonomyFilters,
-			'#sim-date-after': selection.dateAfter,
-			'#sim-date-before': selection.dateBefore,
-			'#sim-modified-after': selection.modifiedAfter,
-			'#sim-modified-before': selection.modifiedBefore,
-			'#sim-featured-filter': selection.featuredFilter,
-			'#sim-content-filter': selection.contentFilter,
-			'#sim-max-posts': selection.maxPosts,
-			'#sim-fill': selection.fill,
+	function applySelection( sel ) {
+		if ( ! sel || typeof sel !== 'object' ) return;
+		const fields = {
+			'#sim-post-type': sel.postType,
+			'#sim-post-refs': sel.postRefs,
+			'#sim-post-search': sel.search,
+			'#sim-taxonomy-filters': sel.taxonomyFilters,
+			'#sim-date-after': sel.dateAfter,
+			'#sim-date-before': sel.dateBefore,
+			'#sim-modified-after': sel.modifiedAfter,
+			'#sim-modified-before': sel.modifiedBefore,
+			'#sim-content-filter': sel.contentFilter,
+			'#sim-max-posts': sel.maxPosts === '5000' ? '' : sel.maxPosts,
 		};
-		Object.entries( setters ).forEach( ( [ selector, value ] ) => {
-			const el = q( selector );
-			if ( el && value !== undefined ) el.value = value;
+		Object.entries( fields ).forEach( ( [ s, v ] ) => {
+			const el = q( s );
+			if ( el && v !== undefined ) el.value = v;
 		} );
-		const statuses = Array.isArray( selection.statuses ) ? selection.statuses : [];
-		qAll( '.sim-post-status' ).forEach( ( item ) => {
-			item.checked = statuses.includes( item.value );
+		const list = Array.isArray( sel.statuses ) ? sel.statuses : [];
+		qAll( '.sim-post-status' ).forEach( ( el ) => {
+			el.checked = list.includes( el.value );
 		} );
-		if ( selection.mode ) {
-			const radio = q( 'input[name="sim-run-mode"][value="' + selection.mode + '"]' );
-			if ( radio ) radio.checked = true;
-		}
-		const overwrite = q( '#sim-overwrite-featured' );
-		if ( overwrite ) overwrite.checked = !! selection.overwrite;
-		if ( selection.style ) {
-			const style = q( '#sim-gen-style' );
-			if ( style ) style.value = selection.style;
-		}
-		syncModeUi();
+		if ( sel.featuredFilter ) setRadio( 'sim-featured-filter', sel.featuredFilter );
+		if ( sel.fill ) setRadio( 'sim-fill', sel.fill );
+		if ( sel.style ) setRadio( 'sim-gen-style', sel.style );
+		if ( sel.mode ) setRadio( 'sim-run-mode', sel.mode );
+		const ow = q( '#sim-overwrite-featured' );
+		if ( ow ) ow.checked = !! sel.overwrite;
+		syncRunUi();
 	}
 
-	function populateSegments() {
+	function populateSegments( selected ) {
 		const select = q( '#sim-saved-segment' );
 		if ( ! select ) return;
-		const segments = readSegments();
-		select.innerHTML = '<option value="">Saved selections…</option>';
-		Object.keys( segments ).sort().forEach( ( name ) => {
-			select.insertAdjacentHTML( 'beforeend', `<option value="${ escHtml( name ) }">${ escHtml( name ) }</option>` );
-		} );
+		const segments = read( KEY_SEGMENTS, {} ) || {};
+		select.innerHTML = `<option value="">${ esc( __( 'Saved selections…', 'smart-image-matcher' ) ) }</option>` +
+			Object.keys( segments ).sort().map( ( name ) => `<option value="${ esc( name ) }">${ esc( name ) }</option>` ).join( '' );
+		select.value = selected || '';
+		q( '#sim-delete-segment' ).hidden = ! select.value;
 	}
 
-	function saveCurrentSegment() {
-		const name = window.prompt( 'Save this selection as:' );
-		if ( ! name ) return;
-		const segments = readSegments();
-		segments[ name.trim() ] = captureSelection();
-		writeSegments( segments );
-		populateSegments();
-	}
-
-	function setTab( tab, extra ) {
-		currentTab = tab === 'review' ? 'review' : 'run';
-		qAll( '.sim-tab' ).forEach( ( el ) => {
-			el.classList.toggle( 'is-on', el.dataset.tab === currentTab );
-		} );
-		qAll( '.sim-bulk-panel' ).forEach( ( el ) => {
-			el.hidden = el.dataset.panel !== currentTab;
-		} );
-		const params = new URLSearchParams( window.location.search );
-		params.set( 'page', 'smart-image-matcher-bulk' );
-		params.set( 'sim_tab', currentTab );
-		if ( currentTab === 'review' && ( extra === 'last' || reviewRun === 'last' ) ) {
-			params.set( 'sim_run', 'last' );
-			reviewRun = 'last';
-		} else if ( currentTab === 'review' ) {
-			params.set( 'sim_run', reviewRun );
-		} else {
-			params.delete( 'sim_run' );
-		}
-		const url = window.location.pathname + '?' + params.toString();
-		window.history.replaceState( {}, '', url );
-		if ( currentTab === 'review' ) {
-			buildReview();
-		} else if ( currentJob ) {
-			buildProgress( currentJob );
-		}
-		syncToolsVisibility();
-	}
-
-	function filtersHtml() {
-		let typeOptions = '';
-		Object.entries( postTypes ).forEach( ( [ slug, label ] ) => {
-			typeOptions += '<option value="' + escHtml( slug ) + '">' + escHtml( label ) + '</option>';
-		} );
-		const genDisabled = generationAvailable ? '' : ' disabled';
-		const genNote = generationAvailable
-			? 'Posts with no real featured image. Does not scan headings. Requires a confirm.'
-			: 'Turn on on-demand generation in Settings and connect a provider.';
-		return `
-			<div class="sim-mode-cards">
-				<label class="sim-mode-card is-on">
-					<input type="radio" name="sim-run-mode" value="process" checked />
-					<strong>Process articles</strong>
-					<span>Insert strong library matches. Send the middle band to Review. Generate only if on-demand generation is on and the library would skip.</span>
-				</label>
-				<label class="sim-mode-card${ generationAvailable ? '' : ' is-disabled' }">
-					<input type="radio" name="sim-run-mode" value="generate-featured"${ genDisabled } />
-					<strong>Generate missing featured images</strong>
-					<span>${ escHtml( genNote ) }</span>
-				</label>
-			</div>
-			<div class="sim-saved-segment-row">
-				<select id="sim-saved-segment"></select>
-				<button type="button" class="button" id="sim-load-segment">Load</button>
-				<button type="button" class="button" id="sim-save-segment">Save Current</button>
-			</div>
-			<div class="sim-form-grid sim-bulk-form-grid">
-				<div class="sim-field">
-					<label for="sim-post-type">Post Type</label>
-					<select id="sim-post-type">${ typeOptions }</select>
-				</div>
-				<div class="sim-field">
-					<label for="sim-featured-filter">Featured Image</label>
-					<select id="sim-featured-filter">
-						<option value="any">Any</option>
-						<option value="missing">Missing featured image</option>
-						<option value="has">Has featured image</option>
-					</select>
-				</div>
-				<div class="sim-field sim-field-wide">
-					<label for="sim-post-refs">Specific Posts</label>
-					<textarea id="sim-post-refs" rows="3" placeholder="Leave blank for filtered results, or paste IDs/slugs"></textarea>
-					<p class="description">Supports manual imports like <code>${ escHtml( samplePostRefs ) }</code>.</p>
-				</div>
-				<div class="sim-field sim-field-wide">
-					<span class="sim-label">Post Status</span>
-					<div class="sim-checkbox-grid">
-						<label><input type="checkbox" class="sim-post-status" value="publish" /> Published</label>
-						<label><input type="checkbox" class="sim-post-status" value="draft" checked /> Draft</label>
-						<label><input type="checkbox" class="sim-post-status" value="pending" /> Pending</label>
-						<label><input type="checkbox" class="sim-post-status" value="future" /> Scheduled</label>
-						<label><input type="checkbox" class="sim-post-status" value="private" /> Private</label>
-					</div>
-				</div>
-				<div class="sim-field">
-					<label for="sim-post-search">Search</label>
-					<input type="search" id="sim-post-search" placeholder="Title, content, excerpt, or slug contains…" />
-				</div>
-				<div class="sim-field">
-					<label for="sim-content-filter">Content Filter</label>
-					<select id="sim-content-filter">
-						<option value="any">Any</option>
-						<option value="has_headings">Has headings</option>
-						<option value="no_images">No images in content</option>
-						<option value="not_processed">Not processed by SIM</option>
-					</select>
-				</div>
-				<div class="sim-field sim-field-wide">
-					<label for="sim-taxonomy-filters">Taxonomy Filters</label>
-					<textarea id="sim-taxonomy-filters" rows="2" placeholder="category:poultry,biosecurity; post_tag:avian-flu"></textarea>
-				</div>
-				<div class="sim-field sim-field-wide">
-					<span class="sim-label">Date Filters</span>
-					<div class="sim-date-grid">
-						<label>Published after <input type="date" id="sim-date-after" /></label>
-						<label>Published before <input type="date" id="sim-date-before" /></label>
-						<label>Modified after <input type="date" id="sim-modified-after" /></label>
-						<label>Modified before <input type="date" id="sim-modified-before" /></label>
-					</div>
-				</div>
-				<div class="sim-field">
-					<label for="sim-max-posts">Limit</label>
-					<input type="number" id="sim-max-posts" value="5000" min="1" max="5000" step="50" />
-				</div>
-				<div class="sim-field sim-process-only">
-					<label for="sim-fill">What to fill</label>
-					<select id="sim-fill">
-						<option value="both">Featured image and headings</option>
-						<option value="featured">Featured image only</option>
-						<option value="headings">Headings only (article body)</option>
-					</select>
-					<p class="description">Featured image only never adds images to the article body.</p>
-				</div>
-				<div class="sim-field sim-process-only">
-					<label><input type="checkbox" id="sim-overwrite-featured" /> Replace existing featured images</label>
-					<p class="description">When processing articles, overwrite a featured image that is already set.</p>
-				</div>
-				<div class="sim-field sim-generate-only" hidden>
-					<label for="sim-gen-style">Image style</label>
-					<select id="sim-gen-style">
-						<option value="photo">Photo</option>
-						<option value="illustration">Illustration</option>
-					</select>
-				</div>
-			</div>`;
-	}
-
-	function bindIdleEvents( root ) {
-		populateSegments();
-		qAll( 'input[name="sim-run-mode"]', root ).forEach( ( radio ) => {
-			radio.addEventListener( 'change', () => {
-				qAll( '.sim-mode-card', root ).forEach( ( card ) => card.classList.remove( 'is-on' ) );
-				radio.closest( '.sim-mode-card' )?.classList.add( 'is-on' );
-				syncModeUi();
-			} );
-		} );
-		q( '#sim-save-segment', root )?.addEventListener( 'click', saveCurrentSegment );
-		q( '#sim-load-segment', root )?.addEventListener( 'click', () => {
-			const name = q( '#sim-saved-segment' )?.value || '';
-			const segments = readSegments();
-			if ( name && segments[ name ] ) applySelection( segments[ name ] );
-		} );
-		q( '#sim-run-primary', root )?.addEventListener( 'click', onPrimaryClick );
-		applyUrlPrefill();
-		syncModeUi();
-	}
-
-	function syncModeUi() {
-		const mode = q( 'input[name="sim-run-mode"]:checked' )?.value || 'process';
-		const isGen = mode === 'generate-featured';
-		qAll( '.sim-mode-card' ).forEach( ( card ) => {
-			const radio = card.querySelector( 'input[name="sim-run-mode"]' );
-			card.classList.toggle( 'is-on', !! radio && radio.checked );
-		} );
-		qAll( '.sim-process-only' ).forEach( ( el ) => { el.hidden = isGen; } );
-		qAll( '.sim-generate-only' ).forEach( ( el ) => { el.hidden = ! isGen; } );
-		const btn = q( '#sim-run-primary' );
-		if ( btn ) {
-			btn.textContent = isGen ? 'Generate featured…' : 'Process articles';
-		}
-		const help = q( '#sim-run-help' );
-		if ( help ) {
-			help.textContent = isGen
-				? 'Only posts missing a real featured image are queued. You will confirm the count before anything is generated.'
-				: 'Matches at or above the auto-insert threshold are written into the post. You will only review the middle band.';
-		}
-	}
-
-	function applyUrlPrefill() {
-		if ( ! app ) return;
-		const mode = app.dataset.simMode || '';
-		const ids = app.dataset.simPostIds || '';
-		const postType = app.dataset.simPostType || '';
-		if ( mode ) {
-			const radio = q( 'input[name="sim-run-mode"][value="' + mode + '"]' );
-			if ( radio && ! radio.disabled ) radio.checked = true;
-		}
-		if ( postType ) {
-			const select = q( '#sim-post-type' );
-			if ( select ) select.value = postType;
-		}
-		if ( ids ) {
-			const refs = q( '#sim-post-refs' );
-			if ( refs && ! refs.value ) refs.value = ids.replace( /,/g, ', ' );
-		}
-		const style = q( '#sim-gen-style' );
-		if ( style && config.defaultStyle ) {
-			style.value = config.defaultStyle === 'illustration' ? 'illustration' : 'photo';
-		}
-		app.dataset.simMode = '';
-		app.dataset.simPostIds = '';
-	}
-
-	function buildIdle() {
-		const root = q( '.sim-bulk-panel[data-panel="run"]' );
-		if ( ! root ) return;
-		root.innerHTML = `
-			<div class="sim-card-head">
-				<div>
-					<h2>Run</h2>
-					<p class="description">Choose a mode, filter posts, then process. Content can change during this run.</p>
-				</div>
-			</div>
-			${ filtersHtml() }
-			<div class="sim-step-actions">
-				<button type="button" class="button button-primary" id="sim-run-primary">Process articles</button>
-			</div>
-			<p class="description" id="sim-run-help">Matches at or above the auto-insert threshold are written into the post. You will only review the middle band.</p>
-			<div id="sim-run-notice"></div>`;
-		bindIdleEvents( root );
-		syncToolsVisibility();
-	}
-
-	function showRunNotice( message, type ) {
-		const box = q( '#sim-run-notice' );
-		if ( ! box ) return;
-		box.innerHTML = `<div class="notice notice-${ type || 'info' } inline"><p>${ escHtml( message ) }</p></div>`;
-	}
-
-	function tilesHtml( jobData ) {
-		const isGen = ( jobData.config && jobData.config.mode === 'generate-featured' ) || parseTotals( jobData ).config?.mode === 'generate-featured';
-		if ( isGen ) {
-			return `
-				<div class="sim-metric-grid sim-metric-grid-four">
-					<div class="sim-card sim-metric"><span>Queued</span><strong>${ getJobTotal( jobData ) }</strong></div>
-					<div class="sim-card sim-metric"><span>Done</span><strong>${ getJobDone( jobData ) }</strong></div>
-					<div class="sim-card sim-metric"><span>Generated</span><strong>${ outcome( jobData, 'generated' ) }</strong></div>
-					<div class="sim-card sim-metric"><span>Skipped</span><strong>${ outcome( jobData, 'skipped' ) }</strong></div>
-				</div>`;
-		}
-		// Counts are per slot (featured image + each heading), not per article.
-		const generated = outcome( jobData, 'generated' );
-		const fill = ( jobData.config && jobData.config.fill ) || parseTotals( jobData ).config?.fill || 'both';
-		const missingLabel = {
-			featured: 'articles still without a featured image',
-			headings: 'headings still without an image',
-		}[ fill ] || 'featured images or headings still without an image';
-		return `
-			<div class="sim-metric-grid sim-metric-grid-four">
-				<div class="sim-card sim-metric"><span>Inserted</span><strong>${ outcome( jobData, 'inserted' ) }</strong><small>images added</small></div>
-				<div class="sim-card sim-metric"><span>Sent to Review</span><strong>${ outcome( jobData, 'review' ) }</strong><small>waiting for you</small></div>
-				<div class="sim-card sim-metric"><span>No good match</span><strong>${ outcome( jobData, 'skipped' ) }</strong><small>${ missingLabel }${ generated ? ` · ${ generated } generated` : '' }</small></div>
-				<div class="sim-card sim-metric"><span>Already had an image</span><strong>${ outcome( jobData, 'has_image' ) }</strong><small>nothing to do</small></div>
-			</div>`;
-	}
-
-	function statusClass( status ) {
-		if ( status === 'completed' ) return 'sim-status-good';
-		if ( status === 'failed' || status === 'cancelled' ) return 'sim-status-warn';
-		return 'sim-status-info';
-	}
-
-	function buildProgress( jobData ) {
-		const root = q( '.sim-bulk-panel[data-panel="run"]' );
-		if ( ! root ) return;
-		const total = getJobTotal( jobData );
-		const done = getJobDone( jobData );
-		const pct = total > 0 ? Math.min( 100, Math.round( ( done / total ) * 100 ) ) : 0;
-		const status = jobData.status || 'queued';
-		const label = jobData.label || '';
-		const running = status === 'queued' || status === 'processing';
-		const reviewCount = outcome( jobData, 'review' );
-		let actions = '';
-		if ( running ) {
-			actions = `<button type="button" class="button" id="sim-cancel-run">${ i18n.cancel }</button>`;
-		} else if ( status === 'completed' && reviewCount > 0 ) {
-			actions = `<button type="button" class="button button-primary" id="sim-goto-review">Review ${ reviewCount } suggestion${ reviewCount === 1 ? '' : 's' }</button>
-				<button type="button" class="button" id="sim-run-again">Run again</button>`;
-		} else {
-			actions = `<button type="button" class="button button-primary" id="sim-run-again">Run again</button>`;
-		}
-		const doneCopy = status === 'completed' && reviewCount === 0 ? '<p class="description">Nothing landed in Review.</p>' : '';
-		const fill = ( jobData.config && jobData.config.fill ) || parseTotals( jobData ).config?.fill || 'both';
-		const fillLabel = { featured: ' · featured image only', headings: ' · headings only' }[ fill ] || '';
-		const modeLabel = ( jobData.config && jobData.config.mode === 'generate-featured' ) ? 'Generate featured' : 'Process articles' + fillLabel;
-		const changeLabel = i18n.changeSelection || 'Change selection';
-		root.innerHTML = `
-			<div class="sim-card-head">
-				<div>
-					<h2>Run</h2>
-					<p class="description">${ escHtml( label ) }</p>
-				</div>
-				<span class="sim-status ${ statusClass( status ) }">${ escHtml( status.charAt( 0 ).toUpperCase() + status.slice( 1 ) ) }</span>
-			</div>
-			<div class="sim-run-summary">
-				<span>Posts · ${ total } selected · ${ escHtml( modeLabel ) }</span>
-				<button type="button" class="button-link" id="sim-change-selection">${ escHtml( changeLabel ) }</button>
-			</div>
-			<p class="description">Processing ${ done } of ${ total } articles</p>
-			<div class="sim-progress-bar"><div class="sim-progress-fill" style="width:${ pct }%"></div></div>
-			${ tilesHtml( jobData ) }
-			${ doneCopy }
-			<div class="sim-step-actions">${ actions }</div>`;
-		q( '#sim-cancel-run', root )?.addEventListener( 'click', () => cancelJob( jobData.job_id ) );
-		q( '#sim-goto-review', root )?.addEventListener( 'click', () => {
-			reviewRun = 'last';
-			setTab( 'review', 'last' );
-		} );
-		q( '#sim-run-again', root )?.addEventListener( 'click', () => {
-			forgetJob();
-			currentJob = null;
-			buildIdle();
-			syncToolsVisibility();
-		} );
-		q( '#sim-change-selection', root )?.addEventListener( 'click', () => onChangeSelection( jobData ) );
-		const pill = q( '#sim-run-pill' );
-		if ( pill ) pill.hidden = ! running;
-		syncToolsVisibility();
-	}
-
-	async function onChangeSelection( jobData ) {
-		const running = jobData && ( jobData.status === 'queued' || jobData.status === 'processing' );
-		if ( running ) {
-			if ( ! window.confirm( i18n.confirmCancelRun || 'Cancel the current run so you can change the selection?' ) ) {
-				return;
-			}
-			await cancelJob( jobData.job_id );
-		}
-		forgetJob();
-		currentJob = null;
-		buildIdle();
-		syncToolsVisibility();
-	}
-
-	function jobBody( mode ) {
-		const selection = captureSelection();
-		const refs = splitRefs( selection.postRefs );
+	function jobBody( runMode ) {
+		const sel = captureSelection();
+		const refs = splitRefs( sel.postRefs );
+		const max = parseInt( sel.maxPosts, 10 );
 		const body = {
-			post_type: selection.postType,
-			post_statuses: selection.statuses,
-			search: selection.search,
-			taxonomy_filters: selection.taxonomyFilters,
-			date_after: selection.dateAfter,
-			date_before: selection.dateBefore,
-			modified_after: selection.modifiedAfter,
-			modified_before: selection.modifiedBefore,
-			featured_filter: selection.featuredFilter,
-			content_filter: selection.contentFilter,
-			max_posts: parseInt( selection.maxPosts || '5000', 10 ),
-			mode,
-			overwrite: !! selection.overwrite,
-			fill: [ 'featured', 'headings' ].includes( selection.fill ) ? selection.fill : 'both',
-			style: selection.style === 'illustration' ? 'illustration' : 'photo',
+			post_type: sel.postType,
+			post_statuses: sel.statuses,
+			search: sel.search,
+			taxonomy_filters: sel.taxonomyFilters,
+			date_after: sel.dateAfter,
+			date_before: sel.dateBefore,
+			modified_after: sel.modifiedAfter,
+			modified_before: sel.modifiedBefore,
+			// Generating already targets only posts without a featured image.
+			featured_filter: runMode === 'generate-featured' ? 'any' : sel.featuredFilter,
+			content_filter: sel.contentFilter,
+			max_posts: max > 0 ? Math.min( 5000, max ) : 5000,
+			mode: runMode,
+			overwrite: sel.overwrite,
+			fill: [ 'featured', 'headings' ].includes( sel.fill ) ? sel.fill : 'both',
+			style: sel.style === 'illustration' ? 'illustration' : 'photo',
 		};
 		if ( refs.ids.length ) body.post_ids = refs.ids;
 		if ( refs.slugs.length ) body.post_slugs = refs.slugs;
 		return body;
 	}
 
-	async function onPrimaryClick() {
-		const mode = q( 'input[name="sim-run-mode"]:checked' )?.value || 'process';
-		if ( mode === 'generate-featured' ) {
-			await prepareGenerateConfirm();
-			return;
-		}
-		await startJob( 'process' );
+	function syncRunUi() {
+		const isGen = mode() === 'generate-featured';
+		q( '#sim-opts-process' ).hidden = isGen;
+		q( '#sim-opts-generate' ).hidden = ! isGen;
+		q( '#sim-overwrite-row' ).hidden = radioValue( 'sim-fill', 'both' ) === 'headings';
+
+		// Generating only ever targets posts without a featured image.
+		const featuredSeg = q( 'input[name="sim-featured-filter"]' )?.closest( '.sim-bp-field' );
+		if ( featuredSeg ) featuredSeg.hidden = isGen;
+
+		const active = [];
+		if ( val( '#sim-post-refs' ).trim() ) active.push( __( 'specific articles', 'smart-image-matcher' ) );
+		if ( val( '#sim-taxonomy-filters' ).trim() ) active.push( __( 'taxonomy', 'smart-image-matcher' ) );
+		if ( val( '#sim-content-filter' ) && val( '#sim-content-filter' ) !== 'any' ) active.push( __( 'content', 'smart-image-matcher' ) );
+		if ( val( '#sim-date-after' ) || val( '#sim-date-before' ) || val( '#sim-modified-after' ) || val( '#sim-modified-before' ) ) active.push( __( 'dates', 'smart-image-matcher' ) );
+		if ( val( '#sim-max-posts' ) ) active.push( sprintf( __( 'stop after %s', 'smart-image-matcher' ), val( '#sim-max-posts' ) ) );
+		const label = q( '#sim-active-filters' );
+		if ( label ) label.textContent = active.length ? '· ' + active.join( ', ' ) : '';
+
+		scheduleCount();
 	}
 
-	async function prepareGenerateConfirm() {
-		if ( ! apiFetch ) {
-			showRunNotice( 'wp.apiFetch is unavailable.', 'error' );
+	function scheduleCount() {
+		window.clearTimeout( state.countTimer );
+		const btn = q( '#sim-run-primary' );
+		if ( btn ) btn.disabled = true;
+		q( '#sim-sum-count' ).textContent = '…';
+		state.countTimer = window.setTimeout( refreshCount, 350 );
+	}
+
+	async function refreshCount() {
+		const seq = ++state.countSeq;
+		const runMode = mode();
+		const notice = q( '#sim-run-notice' );
+		if ( notice ) notice.innerHTML = '';
+		if ( ! statuses().length ) {
+			renderSummary( null, __( 'Tick at least one post status.', 'smart-image-matcher' ) );
 			return;
 		}
 		try {
-			const data = await apiFetch( {
-				path: '/smart-image-matcher/v1/jobs',
-				method: 'POST',
-				data: Object.assign( {}, jobBody( 'generate-featured' ), { dry_run: true } ),
-			} );
-			const total = parseInt( data.total || 0, 10 );
-			if ( total < 1 ) {
-				showRunNotice( i18n.noMissingFeatured || 'No posts in this selection are missing a featured image.', 'warning' );
-				return;
-			}
-			openGenerateModal( total );
+			const data = await api( '/jobs', 'POST', Object.assign( jobBody( runMode ), { dry_run: true } ) );
+			if ( seq !== state.countSeq ) return;
+			renderSummary( parseInt( data.total || 0, 10 ) );
 		} catch ( err ) {
-			const msg = ( err && err.message ) ? err.message : 'Could not count posts.';
-			showRunNotice( msg, 'error' );
+			if ( seq !== state.countSeq ) return;
+			renderSummary( null, errMsg( err, __( 'Could not count articles.', 'smart-image-matcher' ) ) );
 		}
+	}
+
+	function renderSummary( count, problem ) {
+		const runMode = mode();
+		const isGen = runMode === 'generate-featured';
+		const sel = captureSelection();
+		state.lastCount = count;
+
+		q( '#sim-sum-count' ).textContent = count === null ? '—' : String( count );
+		q( '#sim-sum-label' ).textContent = problem || ( isGen
+			? _n( 'post without a featured image', 'posts without a featured image', count || 0, 'smart-image-matcher' )
+			: _n( 'article matches', 'articles match', count || 0, 'smart-image-matcher' ) );
+
+		const bands = q( '#sim-sum-bands' );
+		if ( isGen ) {
+			bands.innerHTML = `<div class="sim-bp-band is-ins"><b>1</b><span>${ esc( __( 'new featured image per post', 'smart-image-matcher' ) ) }</span></div>`;
+		} else {
+			const featuredNote = sel.fill === 'headings' ? '' : `<p class="sim-bp-help">${ esc( __( 'Featured images: only an exact or prefix filename match is assigned automatically.', 'smart-image-matcher' ) ) }</p>`;
+			bands.innerHTML = `
+				<div class="sim-bp-band is-ins"><b>≥ ${ AUTO }%</b><span>${ esc( __( 'Inserted automatically', 'smart-image-matcher' ) ) }</span></div>
+				<div class="sim-bp-band is-rev"><b>${ REVIEW_MIN }–${ AUTO - 1 }%</b><span>${ esc( __( 'Sent to Review for your decision', 'smart-image-matcher' ) ) }</span></div>
+				<div class="sim-bp-band is-skp"><b>&lt; ${ REVIEW_MIN }%</b><span>${ esc( __( 'Left alone', 'smart-image-matcher' ) ) }</span></div>
+				${ featuredNote }`;
+		}
+
+		const statusLabels = qAll( '.sim-post-status' ).filter( ( el ) => el.checked ).map( ( el ) => el.parentElement.textContent.trim() );
+		const featLabel = { any: __( 'Any', 'smart-image-matcher' ), missing: __( 'Missing', 'smart-image-matcher' ), has: __( 'Has one', 'smart-image-matcher' ) }[ sel.featuredFilter ];
+		const fillLabel = { both: __( 'Featured image and headings', 'smart-image-matcher' ), featured: __( 'Featured image only', 'smart-image-matcher' ), headings: __( 'Headings only', 'smart-image-matcher' ) }[ sel.fill ];
+		const rows = [
+			[ __( 'Statuses', 'smart-image-matcher' ), statusLabels.join( ', ' ) || '—' ],
+		];
+		if ( isGen ) {
+			rows.push( [ __( 'Style', 'smart-image-matcher' ), sel.style === 'illustration' ? __( 'Illustration', 'smart-image-matcher' ) : __( 'Photo', 'smart-image-matcher' ) ] );
+		} else {
+			rows.push( [ __( 'Featured image', 'smart-image-matcher' ), featLabel ] );
+			rows.push( [ __( 'Fills', 'smart-image-matcher' ), fillLabel ] );
+		}
+		q( '#sim-sum-kv' ).innerHTML = rows.map( ( [ k, v ] ) => `<div><span>${ esc( k ) }</span><strong>${ esc( v ) }</strong></div>` ).join( '' );
+
+		const btn = q( '#sim-run-primary' );
+		btn.disabled = ! count;
+		btn.textContent = isGen
+			? sprintf( _n( 'Generate %d featured image…', 'Generate %d featured images…', count || 0, 'smart-image-matcher' ), count || 0 )
+			: sprintf( _n( 'Match %d article', 'Match %d articles', count || 0, 'smart-image-matcher' ), count || 0 );
+	}
+
+	function runNotice( message, type ) {
+		const box = q( '#sim-run-notice' );
+		if ( box ) box.innerHTML = `<div class="notice notice-${ type || 'info' } inline"><p>${ esc( message ) }</p></div>`;
+	}
+
+	function buildRun() {
+		const root = q( '.sim-bulk-panel[data-panel="run"]' );
+		root.innerHTML = runHtml();
+		populateSegments();
+
+		const style = config.defaultStyle === 'illustration' ? 'illustration' : 'photo';
+		setRadio( 'sim-gen-style', style );
+
+		// Prefill from links (Generate bulk action, Missing Images page).
+		if ( app.dataset.simMode ) setRadio( 'sim-run-mode', app.dataset.simMode );
+		if ( app.dataset.simPostType && postTypes[ app.dataset.simPostType ] ) q( '#sim-post-type' ).value = app.dataset.simPostType;
+		if ( app.dataset.simPostIds ) {
+			q( '#sim-post-refs' ).value = app.dataset.simPostIds.replace( /,/g, ', ' );
+			q( '#sim-more-filters' ).open = true;
+		}
+		app.dataset.simMode = '';
+		app.dataset.simPostIds = '';
+
+		const form = q( '#sim-run-form' );
+		form.addEventListener( 'submit', ( e ) => e.preventDefault() );
+		form.addEventListener( 'change', syncRunUi );
+		form.addEventListener( 'input', ( e ) => {
+			if ( e.target.matches( 'input[type="search"], input[type="text"], textarea, input[type="number"]' ) ) syncRunUi();
+		} );
+
+		q( '#sim-saved-segment' ).addEventListener( 'change', ( e ) => {
+			e.stopPropagation();
+			const name = e.target.value;
+			const segments = read( KEY_SEGMENTS, {} ) || {};
+			q( '#sim-delete-segment' ).hidden = ! name;
+			if ( name && segments[ name ] ) applySelection( segments[ name ] );
+		} );
+		q( '#sim-save-segment' ).addEventListener( 'click', () => {
+			const name = ( window.prompt( __( 'Save this selection as:', 'smart-image-matcher' ) ) || '' ).trim();
+			if ( ! name ) return;
+			const segments = read( KEY_SEGMENTS, {} ) || {};
+			segments[ name ] = captureSelection();
+			store( KEY_SEGMENTS, segments );
+			populateSegments( name );
+			toast( sprintf( __( 'Saved “%s”.', 'smart-image-matcher' ), name ) );
+		} );
+		q( '#sim-delete-segment' ).addEventListener( 'click', () => {
+			const name = q( '#sim-saved-segment' ).value;
+			if ( ! name ) return;
+			const segments = read( KEY_SEGMENTS, {} ) || {};
+			const removed = segments[ name ];
+			delete segments[ name ];
+			store( KEY_SEGMENTS, segments );
+			populateSegments();
+			toast( sprintf( __( 'Deleted “%s”.', 'smart-image-matcher' ), name ), () => {
+				const again = read( KEY_SEGMENTS, {} ) || {};
+				again[ name ] = removed;
+				store( KEY_SEGMENTS, again );
+				populateSegments( name );
+			} );
+		} );
+
+		q( '#sim-run-primary' ).addEventListener( 'click', () => {
+			if ( mode() === 'generate-featured' ) {
+				openGenerateModal( state.lastCount || 0 );
+			} else {
+				startJob( 'process' );
+			}
+		} );
+
+		syncRunUi();
 	}
 
 	function openGenerateModal( total ) {
-		const modal = q( '#sim-gen-modal' );
-		if ( ! modal ) return;
 		const n = parseInt( total || 0, 10 );
-		const body = q( '#sim-gen-modal-body' );
-		if ( body ) {
-			body.innerHTML = `This will queue <strong>${ n }</strong> featured image(s) for posts with no real featured image.`;
-		}
-		const confirm = q( '#sim-gen-confirm' );
-		if ( confirm ) confirm.textContent = 'Generate ' + n + ' featured images';
-		modal.hidden = false;
-	}
-
-	function closeGenerateModal() {
-		const modal = q( '#sim-gen-modal' );
-		if ( modal ) modal.hidden = true;
-	}
-
-	async function startJob( mode ) {
-		if ( ! apiFetch ) {
-			showRunNotice( 'wp.apiFetch is unavailable.', 'error' );
+		if ( n < 1 ) {
+			runNotice( __( 'No posts in this selection are missing a featured image.', 'smart-image-matcher' ), 'warning' );
 			return;
 		}
+		q( '#sim-gen-modal-body' ).textContent = sprintf( _n( 'This queues %d featured image for a post with no real featured image.', 'This queues %d featured images for posts with no real featured image.', n, 'smart-image-matcher' ), n );
+		q( '#sim-gen-confirm' ).textContent = sprintf( _n( 'Generate %d featured image', 'Generate %d featured images', n, 'smart-image-matcher' ), n );
+		q( '#sim-gen-modal' ).hidden = false;
+		q( '#sim-gen-confirm' ).focus();
+	}
+
+	async function startJob( runMode ) {
+		const btn = q( '#sim-run-primary' );
+		if ( btn ) btn.disabled = true;
 		try {
-			const data = await apiFetch( {
-				path: '/smart-image-matcher/v1/jobs',
-				method: 'POST',
-				data: jobBody( mode ),
-			} );
-			currentJob = data;
-			rememberJob( data.job_id );
-			buildProgress( data );
+			const data = await api( '/jobs', 'POST', jobBody( runMode ) );
+			state.job = data;
+			store( KEY_JOB, data.job_id );
+			state.pace = null;
+			renderProgress( data );
 			startPolling( data.job_id );
 		} catch ( err ) {
-			const msg = ( err && err.message ) ? err.message : 'Could not start the run.';
-			showRunNotice( msg, 'error' );
+			runNotice( errMsg( err, __( 'Could not start the run.', 'smart-image-matcher' ) ), 'error' );
+			if ( btn ) btn.disabled = false;
 		}
 	}
 
 	function startPolling( jobId ) {
-		if ( pollTimer ) window.clearInterval( pollTimer );
-		pollTimer = window.setInterval( () => pollJob( jobId ), 2000 );
+		window.clearInterval( state.pollTimer );
+		state.pollTimer = window.setInterval( () => pollJob( jobId ), 3000 );
 		pollJob( jobId );
 	}
 
 	async function pollJob( jobId ) {
-		if ( ! apiFetch ) return;
 		try {
-			const data = await apiFetch( {
-				path: '/smart-image-matcher/v1/jobs/' + encodeURIComponent( jobId ),
-				method: 'GET',
-			} );
-			currentJob = data;
-			if ( currentTab === 'run' ) {
-				buildProgress( data );
-			}
-			const status = data.status || '';
-			// The Run tab pill must clear even when the user is on Review.
-			const pill = q( '#sim-run-pill' );
-			if ( pill ) pill.hidden = ! ( status === 'queued' || status === 'processing' );
-			if ( [ 'completed', 'failed', 'cancelled' ].includes( status ) ) {
-				window.clearInterval( pollTimer );
-				pollTimer = null;
-				if ( status !== 'cancelled' ) {
-					forgetJob();
-				}
+			const data = await api( '/jobs/' + encodeURIComponent( jobId ) );
+			state.job = data;
+			const done = num( data, 'done' );
+			if ( ! state.pace ) state.pace = { t: Date.now(), done };
+			renderProgress( data );
+			if ( [ 'completed', 'failed', 'cancelled' ].includes( data.status ) ) {
+				window.clearInterval( state.pollTimer );
+				state.pollTimer = null;
+				store( KEY_JOB, null );
+				refreshReviewCount();
 			}
 		} catch ( err ) {
-			window.clearInterval( pollTimer );
-			pollTimer = null;
+			window.clearInterval( state.pollTimer );
+			state.pollTimer = null;
 		}
+	}
+
+	function etaText( job ) {
+		const total = num( job, 'total' );
+		const done = num( job, 'done' );
+		if ( ! state.pace || done <= state.pace.done ) return __( 'Working…', 'smart-image-matcher' );
+		const perMs = ( Date.now() - state.pace.t ) / ( done - state.pace.done );
+		const mins = Math.round( ( ( total - done ) * perMs ) / 60000 );
+		return sprintf( __( 'About %s left', 'smart-image-matcher' ), minutesLabel( mins ) );
+	}
+
+	function renderProgress( job ) {
+		const box = q( '#sim-progress' );
+		const summary = q( '#sim-summary' );
+		if ( ! box || ! summary ) return;
+
+		const running = isRunning( job );
+		const total = num( job, 'total' );
+		const done = num( job, 'done' );
+		const pct = total > 0 ? Math.min( 100, Math.round( ( done / total ) * 100 ) ) : 0;
+		const cfg = jobConfig( job );
+		const isGen = cfg.mode === 'generate-featured';
+		const review = num( job, 'review' );
+		const errors = num( job, 'errors' );
+		const fill = cfg.fill || 'both';
+
+		const tiles = isGen
+			? [
+				[ num( job, 'generated' ), __( 'Generated', 'smart-image-matcher' ) ],
+				[ num( job, 'skipped' ), __( 'Skipped', 'smart-image-matcher' ) ],
+				[ errors, __( 'Errors', 'smart-image-matcher' ) ],
+				[ Math.max( 0, total - done ), __( 'Waiting', 'smart-image-matcher' ) ],
+			]
+			: [
+				[ num( job, 'inserted' ), __( 'Inserted', 'smart-image-matcher' ) ],
+				[ review, __( 'To review', 'smart-image-matcher' ) ],
+				[ num( job, 'skipped' ), __( 'No good match', 'smart-image-matcher' ) ],
+				[ num( job, 'has_image' ), __( 'Had an image', 'smart-image-matcher' ) ],
+			];
+
+		const fillNote = { featured: __( 'featured image only', 'smart-image-matcher' ), headings: __( 'headings only', 'smart-image-matcher' ) }[ fill ];
+		const statusText = {
+			queued: __( 'Queued', 'smart-image-matcher' ),
+			processing: __( 'Running', 'smart-image-matcher' ),
+			completed: __( 'Finished', 'smart-image-matcher' ),
+			failed: __( 'Stopped', 'smart-image-matcher' ),
+			cancelled: __( 'Cancelled', 'smart-image-matcher' ),
+		}[ job.status ] || job.status;
+
+		let actions = '';
+		if ( running ) {
+			actions = `<button type="button" class="button sim-bp-danger" id="sim-cancel-run">${ esc( __( 'Cancel run', 'smart-image-matcher' ) ) }</button>
+				<button type="button" class="button" data-goto-tab="review">${ esc( __( 'Open Review', 'smart-image-matcher' ) ) }</button>`;
+		} else {
+			if ( review > 0 ) {
+				actions += `<button type="button" class="button button-primary" id="sim-goto-review-last">${ esc( sprintf( _n( 'Review %d suggestion', 'Review %d suggestions', review, 'smart-image-matcher' ), review ) ) }</button>`;
+			}
+			actions += `<button type="button" class="button${ review > 0 ? '' : ' button-primary' }" id="sim-run-again">${ esc( __( 'New run', 'smart-image-matcher' ) ) }</button>`;
+		}
+
+		const error = job.error_message ? `<p class="sim-bp-notice is-warn">${ esc( job.error_message ) }</p>` : '';
+		const slotNote = isGen ? '' : `<p class="sim-bp-help">${ esc( __( 'Counts are per slot: the featured image and each heading count once.', 'smart-image-matcher' ) ) }</p>`;
+
+		box.innerHTML = `
+			<div class="sim-bp-section-head sim-bp-tight"><h2>${ esc( statusText ) }</h2><span class="sim-bp-help">${ esc( sprintf( __( '%1$d / %2$d articles', 'smart-image-matcher' ), done, total ) ) }</span></div>
+			<p class="sim-bp-help">${ esc( job.label || '' ) }${ fillNote ? ' · ' + esc( fillNote ) : '' }</p>
+			<div class="sim-bp-track" role="progressbar" aria-valuemin="0" aria-valuemax="${ total }" aria-valuenow="${ done }"><div style="width:${ pct }%"></div></div>
+			<div class="sim-bp-help">${ esc( running ? etaText( job ) : ( errors ? sprintf( _n( '%d article failed.', '%d articles failed.', errors, 'smart-image-matcher' ), errors ) : '' ) ) }</div>
+			<div class="sim-bp-tally">${ tiles.map( ( [ n, l ] ) => `<div><b>${ n }</b><span>${ esc( l ) }</span></div>` ).join( '' ) }</div>
+			${ slotNote }
+			${ error }
+			<div class="sim-bp-actions">${ actions }</div>`;
+
+		box.hidden = false;
+		summary.hidden = true;
+		q( '#sim-run-pill' ).hidden = ! running;
+
+		q( '#sim-cancel-run', box )?.addEventListener( 'click', () => cancelJob( job.job_id ) );
+		q( '#sim-goto-review-last', box )?.addEventListener( 'click', () => {
+			state.review.run = 'last';
+			state.review.page = 1;
+			setTab( 'review' );
+		} );
+		q( '#sim-run-again', box )?.addEventListener( 'click', () => {
+			store( KEY_JOB, null );
+			state.job = null;
+			box.hidden = true;
+			summary.hidden = false;
+			scheduleCount();
+		} );
 	}
 
 	async function cancelJob( jobId ) {
-		if ( ! jobId || ! apiFetch ) return;
-		rememberCancelledJob( jobId );
+		if ( ! jobId ) return;
+		if ( ! window.confirm( __( 'Cancel this run? Articles already processed keep their images.', 'smart-image-matcher' ) ) ) return;
+		const ids = ( read( KEY_CANCELLED, [] ) || [] ).filter( ( id ) => id !== jobId );
+		ids.unshift( jobId );
+		store( KEY_CANCELLED, ids.slice( 0, 20 ) );
 		try {
-			await apiFetch( {
-				path: '/smart-image-matcher/v1/jobs/' + encodeURIComponent( jobId ) + '/cancel',
-				method: 'POST',
-			} );
-		} catch ( err ) {}
-		forgetJob();
-		window.clearInterval( pollTimer );
-		pollTimer = null;
-		currentJob = Object.assign( {}, currentJob || {}, { status: 'cancelled' } );
-		buildProgress( currentJob );
+			await api( '/jobs/' + encodeURIComponent( jobId ) + '/cancel', 'POST' );
+		} catch ( e ) {}
+		window.clearInterval( state.pollTimer );
+		state.pollTimer = null;
+		store( KEY_JOB, null );
+		state.job = Object.assign( {}, state.job || {}, { status: 'cancelled' } );
+		renderProgress( state.job );
 	}
 
-	function slotLabel( heading ) {
-		const tag = ( heading.heading_tag || '' ).toLowerCase();
-		const hash = heading.heading_hash || '';
-		if ( tag === 'featured' || hash === 'featured' ) {
-			return 'Featured image';
+	async function restoreJob() {
+		const jobId = read( KEY_JOB, null );
+		if ( ! jobId || ( read( KEY_CANCELLED, [] ) || [] ).includes( jobId ) ) {
+			store( KEY_JOB, null );
+			return;
 		}
-		const level = ( tag || 'h2' ).toUpperCase();
-		return level + ' ' + ( heading.heading_text || '' );
+		try {
+			const data = await api( '/jobs/' + encodeURIComponent( jobId ) );
+			state.job = data;
+			renderProgress( data );
+			if ( isRunning( data ) ) startPolling( jobId );
+		} catch ( e ) {
+			store( KEY_JOB, null );
+		}
 	}
 
-	function scoreClass( score ) {
-		if ( score >= autoInsert ) return 'sim-confidence-high';
-		if ( score >= ( parseInt( config.reviewThreshold || '70', 10 ) ) ) return 'sim-confidence-medium';
-		return 'sim-confidence-low';
-	}
+	// ---------------------------------------------------------------------
+	// Review tab
+	// ---------------------------------------------------------------------
 
-	function buildReview() {
-		const root = q( '.sim-bulk-panel[data-panel="review"]' );
-		if ( ! root ) return;
-		root.innerHTML = `
-			<div class="sim-review-toolbar">
-				<div class="sim-review-filters">
-					<span class="sim-label">Slot</span>
-					<button type="button" class="button sim-slot-btn${ reviewSlot === 'all' ? ' button-primary' : '' }" data-slot="all">All</button>
-					<button type="button" class="button sim-slot-btn${ reviewSlot === 'heading' ? ' button-primary' : '' }" data-slot="heading">Headings</button>
-					<button type="button" class="button sim-slot-btn${ reviewSlot === 'featured' ? ' button-primary' : '' }" data-slot="featured">Featured</button>
-					<span class="sim-label">Source</span>
-					<button type="button" class="button sim-run-btn${ reviewRun === 'all' ? ' button-primary' : '' }" data-run="all">${ escHtml( i18n.allPending ) }</button>
-					<button type="button" class="button sim-run-btn${ reviewRun === 'last' ? ' button-primary' : '' }" data-run="last">${ escHtml( i18n.lastRun ) }</button>
-				</div>
-				<div class="sim-review-actions">
-					<button type="button" class="button" id="sim-approve-all-pending">${ escHtml( i18n.approveAllPending || 'Approve all pending' ) }</button>
-					<button type="button" class="button" id="sim-approve-above">Approve all ≥ ${ autoInsert }%</button>
-					<button type="button" class="button button-primary" id="sim-insert-approved">${ escHtml( i18n.insertApproved ) }</button>
-				</div>
+	function reviewShellHtml() {
+		const r = state.review;
+		const opt = ( v, l, cur ) => `<option value="${ v }"${ v === cur ? ' selected' : '' }>${ esc( l ) }</option>`;
+		return `
+		<div class="sim-bp-card">
+			<div class="sim-bp-toolbar">
+				<label class="screen-reader-text" for="sim-r-search">${ esc( __( 'Search', 'smart-image-matcher' ) ) }</label>
+				<input type="search" class="sim-bp-search" id="sim-r-search" value="${ esc( r.search ) }" placeholder="${ esc( __( 'Search article, heading or post ID…', 'smart-image-matcher' ) ) }" />
+				<label class="screen-reader-text" for="sim-r-slot">${ esc( __( 'Slot', 'smart-image-matcher' ) ) }</label>
+				<select id="sim-r-slot">
+					${ opt( 'all', __( 'Headings + featured', 'smart-image-matcher' ), r.slot ) }
+					${ opt( 'heading', __( 'Headings only', 'smart-image-matcher' ), r.slot ) }
+					${ opt( 'featured', __( 'Featured only', 'smart-image-matcher' ), r.slot ) }
+				</select>
+				<label class="screen-reader-text" for="sim-r-band">${ esc( __( 'Score', 'smart-image-matcher' ) ) }</label>
+				<select id="sim-r-band">
+					${ opt( 'all', __( 'Any score', 'smart-image-matcher' ), r.band ) }
+					${ opt( 'hi', sprintf( __( '%d%% and up', 'smart-image-matcher' ), AUTO ), r.band ) }
+					${ opt( 'mid', sprintf( __( '%1$d–%2$d%%', 'smart-image-matcher' ), MID, AUTO - 1 ), r.band ) }
+					${ opt( 'lo', sprintf( __( 'Below %d%%', 'smart-image-matcher' ), MID ), r.band ) }
+				</select>
+				<label class="screen-reader-text" for="sim-r-run">${ esc( __( 'Source', 'smart-image-matcher' ) ) }</label>
+				<select id="sim-r-run">
+					${ opt( 'all', __( 'All runs', 'smart-image-matcher' ), r.run ) }
+					${ opt( 'last', __( 'Last run only', 'smart-image-matcher' ), r.run ) }
+				</select>
 			</div>
-			<div id="sim-review-list"><p>Loading…</p></div>
-			<div id="sim-review-pagination"></div>`;
-		qAll( '.sim-slot-btn', root ).forEach( ( btn ) => {
-			btn.addEventListener( 'click', () => {
-				reviewSlot = btn.dataset.slot || 'all';
-				reviewPage = 1;
-				buildReview();
-			} );
-		} );
-		qAll( '.sim-run-btn', root ).forEach( ( btn ) => {
-			btn.addEventListener( 'click', () => {
-				reviewRun = btn.dataset.run === 'last' ? 'last' : 'all';
-				reviewPage = 1;
-				setTab( 'review' );
-			} );
-		} );
-		q( '#sim-approve-above', root )?.addEventListener( 'click', approveAbove );
-		q( '#sim-approve-all-pending', root )?.addEventListener( 'click', approveAllPending );
-		q( '#sim-insert-approved', root )?.addEventListener( 'click', insertApproved );
-		loadReview();
-	}
-
-	function imageFileLabel( heading ) {
-		return String( heading && heading.image_file ? heading.image_file : '' ).trim();
-	}
-
-	function slotRowHtml( heading, extraClass ) {
-		const score = parseInt( heading.confidence_score || 0, 10 );
-		const cls = extraClass ? ' ' + extraClass : '';
-		const file = imageFileLabel( heading );
-		const thumbTitle = file || ( i18n.viewImage || 'View image' );
-		const thumb = heading.image_url
-			? `<button type="button" class="sim-slot-thumb sim-slot-open" data-match="${ heading.id }" title="${ escHtml( thumbTitle ) }"><img src="${ escHtml( heading.image_url ) }" alt="" width="72" height="54" /></button>`
-			: '<span class="sim-no-thumb">—</span>';
-		const fileHtml = file
-			? `<span class="sim-slot-file" title="${ escHtml( file ) }">${ escHtml( file ) }</span>`
-			: '';
-		// Featured rows explain why they are here instead of assigned (only exact filename matches are).
-		const reasonHtml = heading.reason
-			? `<span class="sim-slot-reason">${ escHtml( heading.reason ) }</span>`
-			: '';
-		return `<div class="sim-slot-row${ cls }" data-match-id="${ heading.id }">
-			${ thumb }
-			<div class="sim-slot-text"><span class="sim-slot-heading">${ escHtml( slotLabel( heading ) ) }</span>${ fileHtml }${ reasonHtml }</div>
-			<div class="${ scoreClass( score ) }">${ score }%</div>
-			<div class="sim-slot-actions">
-				${ slotActionsHtml( heading.id, 'pending' ) }
+			<div class="sim-bp-review-meta">
+				<span id="sim-r-meta"></span>
+				<button type="button" class="button-link" id="sim-approve-above">${ esc( sprintf( __( 'Approve every suggestion ≥ %d%% (all articles)', 'smart-image-matcher' ), AUTO ) ) }</button>
 			</div>
+			<div class="sim-bp-bulkbar" id="sim-bulkbar">
+				<label class="sim-bp-inline"><input type="checkbox" id="sim-sel-all" /> <span id="sim-sel-count">${ esc( __( 'Select all on this page', 'smart-image-matcher' ) ) }</span></label>
+				<span class="sim-bp-grow"></span>
+				<button type="button" class="button" id="sim-b-approve" disabled>${ esc( sprintf( __( 'Approve ≥ %d%%', 'smart-image-matcher' ), AUTO ) ) }</button>
+				<button type="button" class="button sim-bp-danger" id="sim-b-reject" disabled>${ esc( __( 'Reject all', 'smart-image-matcher' ) ) }</button>
+				<button type="button" class="button" id="sim-b-ignore" disabled>${ esc( __( 'Ignore articles', 'smart-image-matcher' ) ) }</button>
+			</div>
+			<div id="sim-articles"><p class="sim-bp-loading">${ esc( __( 'Loading…', 'smart-image-matcher' ) ) }</p></div>
+			<div class="sim-bp-pager" id="sim-pager"></div>
 		</div>`;
 	}
 
-	function slotActionsHtml( matchId, status ) {
-		if ( status === 'approved' ) {
-			return `<span class="sim-slot-state sim-slot-state-approved">${ escHtml( i18n.approved || 'Approved' ) }</span>
-				<button type="button" class="button button-small sim-undo-btn" data-match="${ matchId }">${ escHtml( i18n.undo || 'Undo' ) }</button>
-				<button type="button" class="button-link sim-never-btn" data-match="${ matchId }">${ escHtml( i18n.neverUse || 'Never use' ) }</button>`;
-		}
-		if ( status === 'rejected' ) {
-			return `<span class="sim-slot-state sim-slot-state-rejected">${ escHtml( i18n.rejected || 'Rejected' ) }</span>
-				<button type="button" class="button button-small sim-undo-btn" data-match="${ matchId }">${ escHtml( i18n.undo || 'Undo' ) }</button>
-				<button type="button" class="button-link sim-never-btn" data-match="${ matchId }">${ escHtml( i18n.neverUse || 'Never use' ) }</button>`;
-		}
-		return `<button type="button" class="button button-small sim-approve-btn" data-match="${ matchId }">${ escHtml( i18n.approve ) }</button>
-			<button type="button" class="button button-small sim-reject-btn" data-match="${ matchId }">${ escHtml( i18n.reject ) }</button>
-			<button type="button" class="button-link sim-never-btn" data-match="${ matchId }">${ escHtml( i18n.neverUse || 'Never use' ) }</button>`;
-	}
+	function buildReviewShell() {
+		const root = q( '.sim-bulk-panel[data-panel="review"]' );
+		root.innerHTML = reviewShellHtml();
 
-	function applySlotState( row, status ) {
-		if ( ! row ) return;
-		row.classList.toggle( 'is-approved', status === 'approved' );
-		row.classList.toggle( 'is-rejected', status === 'rejected' );
-		row.classList.remove( 'is-saving' );
-		qAll( 'button', row ).forEach( ( btn ) => { btn.disabled = false; } );
-		const actions = row.querySelector( '.sim-slot-actions' );
-		const matchId = parseInt( row.dataset.matchId, 10 );
-		if ( actions && matchId ) {
-			actions.innerHTML = slotActionsHtml( matchId, status );
-			bindSlotActions( actions );
-		}
-	}
-
-	function bindSlotActions( root ) {
-		qAll( '.sim-approve-btn', root ).forEach( ( btn ) => {
-			btn.addEventListener( 'click', () => updateMatch( parseInt( btn.dataset.match, 10 ), 'approved' ) );
+		let searchTimer = null;
+		q( '#sim-r-search' ).addEventListener( 'input', ( e ) => {
+			window.clearTimeout( searchTimer );
+			searchTimer = window.setTimeout( () => {
+				state.review.search = e.target.value.trim();
+				state.review.page = 1;
+				fetchReview();
+			}, 350 );
 		} );
-		qAll( '.sim-reject-btn', root ).forEach( ( btn ) => {
-			btn.addEventListener( 'click', () => updateMatch( parseInt( btn.dataset.match, 10 ), 'rejected' ) );
-		} );
-		qAll( '.sim-undo-btn', root ).forEach( ( btn ) => {
-			btn.addEventListener( 'click', () => updateMatch( parseInt( btn.dataset.match, 10 ), 'pending' ) );
-		} );
-		qAll( '.sim-never-btn', root ).forEach( ( btn ) => {
-			btn.addEventListener( 'click', () => excludeImage( parseInt( btn.dataset.match, 10 ) ) );
-		} );
-	}
-
-	function bindReviewList( wrap ) {
-		bindSlotActions( wrap );
-		qAll( '.sim-slot-open', wrap ).forEach( ( btn ) => {
-			btn.addEventListener( 'click', () => openReviewModal( parseInt( btn.dataset.match, 10 ) ) );
-		} );
-		qAll( '.sim-approve-article', wrap ).forEach( ( btn ) => {
-			btn.addEventListener( 'click', () => approveArticle( parseInt( btn.dataset.post, 10 ) ) );
-		} );
-		qAll( '.sim-show-more', wrap ).forEach( ( btn ) => {
-			btn.addEventListener( 'click', () => {
-				const card = btn.closest( '.sim-article' );
-				if ( card ) card.classList.add( 'is-expanded' );
-				btn.hidden = true;
+		[ [ '#sim-r-slot', 'slot' ], [ '#sim-r-band', 'band' ], [ '#sim-r-run', 'run' ] ].forEach( ( [ sel, key ] ) => {
+			q( sel ).addEventListener( 'change', ( e ) => {
+				state.review[ key ] = e.target.value;
+				state.review.page = 1;
+				if ( key === 'run' ) setTab( 'review' );
+				else fetchReview();
 			} );
 		} );
+		q( '#sim-approve-above' ).addEventListener( 'click', approveAboveAll );
+		q( '#sim-sel-all' ).addEventListener( 'change', ( e ) => {
+			state.review.articles.forEach( ( a ) => {
+				if ( e.target.checked ) state.review.selected.add( a.post_id );
+				else state.review.selected.delete( a.post_id );
+			} );
+			renderArticles();
+		} );
+		q( '#sim-b-approve' ).addEventListener( 'click', () => bulkDecide( 'approve' ) );
+		q( '#sim-b-reject' ).addEventListener( 'click', () => bulkDecide( 'reject' ) );
+		q( '#sim-b-ignore' ).addEventListener( 'click', bulkIgnore );
+
+		const list = q( '#sim-articles' );
+		list.addEventListener( 'click', onArticlesClick );
+		list.addEventListener( 'change', ( e ) => {
+			if ( e.target.matches( '.sim-a-check' ) ) {
+				const id = parseInt( e.target.value, 10 );
+				if ( e.target.checked ) state.review.selected.add( id );
+				else state.review.selected.delete( id );
+				syncBulkbar();
+			}
+		} );
+		state.review.loadedOnce = true;
 	}
 
-	async function loadReview() {
-		const wrap = q( '#sim-review-list' );
-		if ( ! wrap || ! apiFetch ) return;
+	function loadReview() {
+		if ( ! state.review.loadedOnce ) buildReviewShell();
+		else q( '#sim-r-run' ).value = state.review.run;
+		fetchReview();
+	}
+
+	async function fetchReview() {
+		const r = state.review;
+		const list = q( '#sim-articles' );
+		const params = new URLSearchParams( {
+			page: String( r.page ),
+			per_page: String( PER_PAGE ),
+			slot: r.slot,
+			run: r.run,
+			band: r.band,
+			search: r.search,
+		} );
+		list.classList.add( 'is-busy' );
 		try {
-			const data = await apiFetch( {
-				path: `/smart-image-matcher/v1/review?page=${ reviewPage }&per_page=20&slot=${ encodeURIComponent( reviewSlot ) }&run=${ encodeURIComponent( reviewRun ) }`,
-				method: 'GET',
-			} );
-			const articles = data.articles || [];
-			reviewCache = articles;
-			if ( ! articles.length ) {
-				if ( reviewRun === 'last' ) {
-					wrap.innerHTML = `<div class="sim-empty"><p>This run has no review items.</p><p class="description"><button type="button" class="button" id="sim-switch-all-pending">Show all pending</button></p></div>`;
-					q( '#sim-switch-all-pending', wrap )?.addEventListener( 'click', () => {
-						reviewRun = 'all';
-						setTab( 'review' );
-					} );
-				} else {
-					wrap.innerHTML = `<div class="sim-empty"><p>${ escHtml( i18n.noMatches ) }</p><p class="description">Strong matches already inserted. Cron leftovers appear here when they need a human.</p><p><button type="button" class="button button-primary" id="sim-empty-to-run">Process articles</button></p></div>`;
-					q( '#sim-empty-to-run', wrap )?.addEventListener( 'click', () => setTab( 'run' ) );
-				}
-				q( '#sim-review-pagination' ).innerHTML = '';
-				return;
+			const data = await api( '/review?' + params.toString() );
+			r.articles = Array.isArray( data.articles ) ? data.articles : [];
+			r.totalArticles = parseInt( data.total_articles || 0, 10 );
+			r.totalSuggestions = parseInt( data.total_suggestions || 0, 10 );
+			state.tallies.approved = parseInt( data.approved_waiting || 0, 10 );
+			r.selected = new Set( [ ...r.selected ].filter( ( id ) => r.articles.some( ( a ) => a.post_id === id ) ) );
+			r.decided = new Map();
+			r.focus = -1;
+			if ( r.articles.length && ! r.articles.some( ( a ) => r.open.has( a.post_id ) ) ) {
+				r.open.add( r.articles[ 0 ].post_id );
 			}
-			let html = '';
-			articles.forEach( ( article ) => {
-				const headings = article.headings || [];
-				const extra = Math.max( 0, headings.length - slotPreviewLimit );
-				html += `<article class="sim-article" data-post-id="${ article.post_id }">
-					<div class="sim-article-head">
-						<h3><a href="${ escHtml( article.edit_url || '#' ) }" target="_blank" rel="noopener">${ escHtml( article.post_title || ( '#' + article.post_id ) ) }</a> <code>${ article.post_id }</code></h3>
-						<div class="sim-article-head-actions">
-							<span>${ headings.length } to review</span>
-							<button type="button" class="button button-small sim-approve-article" data-post="${ article.post_id }">${ escHtml( i18n.approveAll || 'Approve all' ) }</button>
-						</div>
-					</div>`;
-				headings.forEach( ( heading, index ) => {
-					html += slotRowHtml( heading, index >= slotPreviewLimit ? 'sim-slot-collapsed' : '' );
-				} );
-				if ( extra > 0 ) {
-					html += `<p class="sim-slot-more-wrap"><button type="button" class="button-link sim-show-more">${ escHtml( sprintf( i18n.showMoreHeadings || 'Show %d more headings', extra ) ) }</button></p>`;
-				}
-				html += '</article>';
-			} );
-			wrap.innerHTML = html;
-			bindReviewList( wrap );
-			const total = parseInt( data.total_articles || 0, 10 );
-			const pages = Math.ceil( total / 20 );
-			const pager = q( '#sim-review-pagination' );
-			if ( pages > 1 ) {
-				pager.innerHTML = `<button type="button" class="button" id="sim-rev-prev"${ reviewPage <= 1 ? ' disabled' : '' }>Previous</button>
-					<span>Page ${ reviewPage } of ${ pages }</span>
-					<button type="button" class="button" id="sim-rev-next"${ reviewPage >= pages ? ' disabled' : '' }>Next</button>`;
-				q( '#sim-rev-prev' )?.addEventListener( 'click', () => { reviewPage -= 1; loadReview(); } );
-				q( '#sim-rev-next' )?.addEventListener( 'click', () => { reviewPage += 1; loadReview(); } );
-			} else {
-				pager.innerHTML = '';
-			}
+			renderArticles();
+			renderPager();
+			updateDock();
+			if ( r.run === 'all' && r.slot === 'all' && r.band === 'all' && ! r.search ) setReviewCount( r.totalArticles );
 		} catch ( err ) {
-			wrap.innerHTML = `<p class="notice notice-error inline">${ escHtml( err.message || 'Could not load review.' ) }</p>`;
-		}
-	}
-
-	function setReviewDecisionBusy( matchId, busy ) {
-		const row = q( `.sim-slot-row[data-match-id="${ matchId }"]` );
-		if ( row ) {
-			row.classList.toggle( 'is-saving', busy );
-			qAll( 'button', row ).forEach( ( btn ) => { btn.disabled = busy; } );
-		}
-		const heading = currentReviewHeading();
-		const modal = q( '#sim-review-modal' );
-		if ( ! modal || modal.hidden || ! heading || parseInt( heading.id, 10 ) !== matchId ) {
-			return;
-		}
-		[ '#sim-review-modal-approve', '#sim-review-modal-reject', '#sim-review-modal-undo', '#sim-review-modal-never' ].forEach( ( sel ) => {
-			const btn = q( sel );
-			if ( btn ) btn.disabled = busy;
-		} );
-	}
-
-	async function updateMatch( matchId, status ) {
-		if ( ! apiFetch || updatingMatches.has( matchId ) ) return;
-		updatingMatches.add( matchId );
-		setReviewDecisionBusy( matchId, true );
-		try {
-			await apiFetch( {
-				path: '/smart-image-matcher/v1/matches/' + matchId,
-				method: 'POST',
-				data: { status },
-			} );
-			applySlotState( q( `.sim-slot-row[data-match-id="${ matchId }"]` ), status );
-			const modal = q( '#sim-review-modal' );
-			if ( modal && ! modal.hidden && currentReviewHeading() && parseInt( currentReviewHeading().id, 10 ) === matchId ) {
-				renderReviewModal();
-			}
-		} catch ( err ) {
-			setReviewDecisionBusy( matchId, false );
-			window.alert( err.message || 'Could not update match.' );
+			list.innerHTML = `<div class="notice notice-error inline"><p>${ esc( errMsg( err, __( 'Could not load Review.', 'smart-image-matcher' ) ) ) }</p></div>`;
 		} finally {
-			updatingMatches.delete( matchId );
+			list.classList.remove( 'is-busy' );
 		}
 	}
 
-	async function excludeImage( matchId ) {
-		if ( ! apiFetch || ! matchId ) return;
-		const found = findReviewSlot( matchId );
-		const heading = found ? ( found.article.headings || [] )[ found.index ] : null;
-		const file = imageFileLabel( heading );
-		const label = file || ( i18n.neverUse || 'this image' );
-		const template = i18n.confirmNeverUse || 'Block %s from all future matching (featured and in-article)? Open review slots that use this file will be rejected.';
-		if ( ! window.confirm( sprintf( template, label ) ) ) {
-			return;
-		}
-		setReviewDecisionBusy( matchId, true );
+	function setReviewCount( n ) {
+		const el = q( '#sim-review-count' );
+		if ( ! el ) return;
+		el.textContent = String( n );
+		el.hidden = ! n;
+	}
+
+	async function refreshReviewCount() {
 		try {
-			await apiFetch( {
-				path: '/smart-image-matcher/v1/review/exclude-image',
-				method: 'POST',
-				data: { match_id: matchId },
-			} );
-			closeReviewModal();
-			loadReview();
-		} catch ( err ) {
-			setReviewDecisionBusy( matchId, false );
-			window.alert( err.message || 'Could not exclude image.' );
-		}
+			const data = await api( '/review?per_page=1&page=1' );
+			setReviewCount( parseInt( data.total_articles || 0, 10 ) );
+		} catch ( e ) {}
 	}
 
-	async function approveArticle( postId ) {
-		if ( ! apiFetch || ! postId ) return;
-		try {
-			await apiFetch( {
-				path: '/smart-image-matcher/v1/review/approve-article',
-				method: 'POST',
-				data: { post_id: postId, run: reviewRun },
-			} );
-			closeReviewModal();
-			loadReview();
-		} catch ( err ) {
-			window.alert( err.message || 'Could not approve article.' );
-		}
+	function isFeatured( s ) {
+		return s.heading_hash === 'featured' || ( s.heading_tag || '' ).toLowerCase() === 'featured';
 	}
 
-	async function approveAllPending() {
-		if ( ! apiFetch ) return;
-		if ( ! window.confirm( i18n.confirmApproveAll || 'Approve every pending slot in this Review filter?' ) ) {
-			return;
-		}
-		try {
-			await apiFetch( {
-				path: '/smart-image-matcher/v1/review/approve-all',
-				method: 'POST',
-				data: { run: reviewRun },
-			} );
-			loadReview();
-		} catch ( err ) {
-			window.alert( err.message || 'Could not approve matches.' );
-		}
+	function scoreBand( score ) {
+		if ( score >= AUTO ) return 'hi';
+		if ( score >= MID ) return 'mid';
+		return 'lo';
 	}
 
-	function findReviewSlot( matchId ) {
-		for ( let a = 0; a < reviewCache.length; a++ ) {
-			const headings = reviewCache[ a ].headings || [];
-			for ( let i = 0; i < headings.length; i++ ) {
-				if ( parseInt( headings[ i ].id, 10 ) === matchId ) {
-					return { article: reviewCache[ a ], index: i };
-				}
+	function sugStatus( id ) {
+		return state.review.decided.get( id ) || 'pending';
+	}
+
+	function suggestionHtml( s ) {
+		const id = parseInt( s.id, 10 );
+		const score = parseInt( s.confidence_score || 0, 10 );
+		const st = sugStatus( id );
+		const featured = isFeatured( s );
+		const tag = featured ? __( 'Featured', 'smart-image-matcher' ) : ( s.heading_tag || 'h2' ).toUpperCase();
+		const file = String( s.image_file || '' ).trim();
+		const head = featured
+			? `<span class="sim-s-lvl">${ esc( __( 'Featured image', 'smart-image-matcher' ) ) }</span>`
+			: `<span class="sim-s-lvl">${ esc( tag ) }</span>${ esc( s.heading_text || '' ) }`;
+
+		let why = '';
+		if ( featured ) {
+			why = s.reason ? `<span class="sim-s-reason">${ esc( s.reason ) }</span>` : '';
+		} else {
+			const shared = Array.isArray( s.shared ) ? s.shared : [];
+			if ( shared.length ) {
+				why = `<span>${ esc( __( 'Shared words:', 'smart-image-matcher' ) ) }</span>` + shared.map( ( w ) => `<span class="sim-word${ s.thin ? ' is-thin' : '' }">${ esc( w ) }</span>` ).join( '' );
+				if ( s.thin ) why += `<span class="sim-s-thin">${ esc( __( 'only one word in common — check it', 'smart-image-matcher' ) ) }</span>`;
+			} else {
+				why = `<span class="sim-s-thin">${ esc( __( 'No shared topic words — matched on wording alone', 'smart-image-matcher' ) ) }</span>`;
 			}
+		}
+
+		const thumb = s.image_url
+			? `<img src="${ esc( s.image_url ) }" alt="" loading="lazy" />`
+			: '';
+
+		let btns;
+		if ( st === 'pending' ) {
+			btns = `<button type="button" class="sim-icon-btn is-ok" data-act="approve" title="${ esc( __( 'Approve (A)', 'smart-image-matcher' ) ) }" aria-label="${ esc( __( 'Approve', 'smart-image-matcher' ) ) }">✓</button>
+				<button type="button" class="sim-icon-btn is-no" data-act="reject" title="${ esc( __( 'Reject for this heading only (R)', 'smart-image-matcher' ) ) }" aria-label="${ esc( __( 'Reject for this heading', 'smart-image-matcher' ) ) }">✕</button>
+				<button type="button" class="sim-icon-btn is-more" data-act="more" aria-expanded="false" title="${ esc( __( 'More', 'smart-image-matcher' ) ) }" aria-label="${ esc( __( 'More actions', 'smart-image-matcher' ) ) }">⋯</button>`;
+		} else {
+			const label = st === 'approved' ? __( 'Approved', 'smart-image-matcher' ) : __( 'Rejected here', 'smart-image-matcher' );
+			btns = `<span class="sim-state-lbl">${ esc( label ) }</span><button type="button" class="button button-small" data-act="undo">${ esc( __( 'Undo', 'smart-image-matcher' ) ) }</button>`;
+		}
+
+		return `<div class="sim-sug is-${ st }" data-id="${ id }" tabindex="-1">
+			<button type="button" class="sim-thumb" data-act="open" aria-label="${ esc( __( 'View image', 'smart-image-matcher' ) ) }">${ thumb }<span class="sim-thumb-tag">${ esc( tag ) }</span></button>
+			<div class="sim-s-text">
+				<div class="sim-s-head">${ head }</div>
+				${ file ? `<div class="sim-s-file">${ esc( file ) }</div>` : '' }
+				<div class="sim-s-why">${ why }</div>
+			</div>
+			<div class="sim-s-side">
+				<span class="sim-score is-${ scoreBand( score ) }">${ score }%</span>
+				<div class="sim-s-btns">${ btns }</div>
+			</div>
+			<div class="sim-block-slot"></div>
+		</div>`;
+	}
+
+	function articleHtml( a ) {
+		const r = state.review;
+		const id = parseInt( a.post_id, 10 );
+		const rows = Array.isArray( a.headings ) ? a.headings : [];
+		const open = r.open.has( id );
+		const pending = rows.filter( ( s ) => sugStatus( parseInt( s.id, 10 ) ) === 'pending' );
+		const hi = pending.filter( ( s ) => parseInt( s.confidence_score, 10 ) >= AUTO ).length;
+		const counts = { hi: 0, mid: 0, lo: 0 };
+		rows.forEach( ( s ) => counts[ scoreBand( parseInt( s.confidence_score || 0, 10 ) ) ]++ );
+		const pct = ( n ) => ( rows.length ? ( n / rows.length ) * 100 : 0 ).toFixed( 1 );
+		const filtered = parseInt( a.filtered || 0, 10 );
+
+		return `<div class="sim-article${ open ? ' is-open' : '' }" data-post="${ id }">
+			<div class="sim-a-row">
+				<input type="checkbox" class="sim-a-check" value="${ id }"${ r.selected.has( id ) ? ' checked' : '' } aria-label="${ esc( sprintf( __( 'Select %s', 'smart-image-matcher' ), a.post_title || '#' + id ) ) }" />
+				<div class="sim-a-main">
+					<button type="button" class="sim-a-title" data-act="toggle" aria-expanded="${ open ? 'true' : 'false' }"><span class="sim-caret" aria-hidden="true">▶</span><span class="sim-a-t">${ esc( a.post_title || '#' + id ) }</span></button>
+					<div class="sim-a-sub">
+						<span>#${ id }${ a.status ? ' · ' + esc( a.status ) : '' }</span>
+						<span>${ esc( sprintf( _n( '%d suggestion', '%d suggestions', pending.length, 'smart-image-matcher' ), pending.length ) ) }</span>
+						<span class="sim-dist" title="${ esc( sprintf( __( '%1$d high · %2$d middle · %3$d low', 'smart-image-matcher' ), counts.hi, counts.mid, counts.lo ) ) }"><i class="is-g" style="width:${ pct( counts.hi ) }%"></i><i class="is-b" style="width:${ pct( counts.mid ) }%"></i><i class="is-w" style="width:${ pct( counts.lo ) }%"></i></span>
+						${ filtered ? `<span class="sim-a-filtered" title="${ esc( __( 'Candidates dropped by the relevance rules (wrong place, no shared topic) on the last run.', 'smart-image-matcher' ) ) }">${ esc( sprintf( _n( '%d hidden by rules', '%d hidden by rules', filtered, 'smart-image-matcher' ), filtered ) ) }</span>` : '' }
+						${ a.edit_url ? `<a href="${ esc( a.edit_url ) }" target="_blank" rel="noopener">${ esc( __( 'Edit', 'smart-image-matcher' ) ) }</a>` : '' }
+					</div>
+				</div>
+				<div class="sim-a-actions">
+					<button type="button" class="button button-small" data-act="approve-hi"${ hi ? '' : ' disabled' }>${ esc( sprintf( __( 'Approve ≥ %1$d%% (%2$d)', 'smart-image-matcher' ), AUTO, hi ) ) }</button>
+					<button type="button" class="button button-small sim-bp-danger" data-act="reject-all"${ pending.length ? '' : ' disabled' }>${ esc( __( 'Reject all', 'smart-image-matcher' ) ) }</button>
+					<button type="button" class="button button-small" data-act="ignore" title="${ esc( __( 'No run will touch this article again until you un-ignore it in Tools.', 'smart-image-matcher' ) ) }">${ esc( __( 'Ignore article', 'smart-image-matcher' ) ) }</button>
+				</div>
+			</div>
+			${ open ? `<div class="sim-sugs">${ rows.map( suggestionHtml ).join( '' ) }</div>` : '' }
+		</div>`;
+	}
+
+	function renderArticles() {
+		const r = state.review;
+		const list = q( '#sim-articles' );
+		if ( ! r.articles.length ) {
+			const filtered = r.search || r.slot !== 'all' || r.band !== 'all';
+			list.innerHTML = `<div class="sim-bp-empty">
+				<strong>${ esc( filtered ? __( 'Nothing matches these filters.', 'smart-image-matcher' ) : ( r.run === 'last' ? __( 'The last run sent nothing to Review.', 'smart-image-matcher' ) : __( 'Nothing to review.', 'smart-image-matcher' ) ) ) }</strong>
+				<span>${ esc( __( 'Strong matches are inserted automatically. Uncertain ones wait here for you.', 'smart-image-matcher' ) ) }</span>
+				${ r.run === 'last' ? `<button type="button" class="button" data-act="show-all">${ esc( __( 'Show all runs', 'smart-image-matcher' ) ) }</button>` : '' }
+			</div>`;
+		} else {
+			list.innerHTML = r.articles.map( articleHtml ).join( '' );
+		}
+		q( '#sim-r-meta' ).innerHTML = sprintf(
+			__( '%1$s suggestions in %2$s articles', 'smart-image-matcher' ),
+			`<strong>${ r.totalSuggestions }</strong>`,
+			`<strong>${ r.totalArticles }</strong>`
+		);
+		syncBulkbar();
+		focusRow( r.focus, false );
+	}
+
+	function renderPager() {
+		const r = state.review;
+		const pages = Math.max( 1, Math.ceil( r.totalArticles / PER_PAGE ) );
+		const pager = q( '#sim-pager' );
+		if ( pages <= 1 ) {
+			pager.innerHTML = '';
+			return;
+		}
+		pager.innerHTML = `<span>${ esc( sprintf( __( 'Page %1$d of %2$d · %3$d articles per page', 'smart-image-matcher' ), r.page, pages, PER_PAGE ) ) }</span>
+			<span class="sim-bp-inline">
+				<button type="button" class="button" data-page="${ r.page - 1 }"${ r.page <= 1 ? ' disabled' : '' }>‹ ${ esc( __( 'Previous', 'smart-image-matcher' ) ) }</button>
+				<button type="button" class="button" data-page="${ r.page + 1 }"${ r.page >= pages ? ' disabled' : '' }>${ esc( __( 'Next', 'smart-image-matcher' ) ) } ›</button>
+			</span>`;
+		qAll( 'button[data-page]', pager ).forEach( ( b ) => b.addEventListener( 'click', () => {
+			r.page = parseInt( b.dataset.page, 10 );
+			fetchReview();
+			q( '.sim-bulk-panel[data-panel="review"]' ).scrollIntoView( { block: 'start' } );
+		} ) );
+	}
+
+	function syncBulkbar() {
+		const n = state.review.selected.size;
+		q( '#sim-sel-count' ).textContent = n ? sprintf( _n( '%d article selected', '%d articles selected', n, 'smart-image-matcher' ), n ) : __( 'Select all on this page', 'smart-image-matcher' );
+		const all = q( '#sim-sel-all' );
+		all.checked = n > 0 && n === state.review.articles.length;
+		all.indeterminate = n > 0 && n < state.review.articles.length;
+		[ '#sim-b-approve', '#sim-b-reject', '#sim-b-ignore' ].forEach( ( s ) => {
+			q( s ).disabled = ! n;
+		} );
+		q( '#sim-bulkbar' ).classList.toggle( 'is-active', n > 0 );
+	}
+
+	function updateDock() {
+		q( '#sim-dock-approved' ).textContent = String( state.tallies.approved );
+		q( '#sim-dock-rejected' ).textContent = String( state.tallies.rejected );
+		const btn = q( '#sim-insert-approved' );
+		btn.disabled = state.tallies.approved < 1;
+		btn.textContent = state.tallies.approved
+			? sprintf( _n( 'Insert %d approved', 'Insert %d approved', state.tallies.approved, 'smart-image-matcher' ), state.tallies.approved )
+			: __( 'Insert approved', 'smart-image-matcher' );
+	}
+
+	function findArticle( postId ) {
+		return state.review.articles.find( ( a ) => parseInt( a.post_id, 10 ) === postId );
+	}
+
+	function findSug( id ) {
+		for ( const a of state.review.articles ) {
+			const rows = a.headings || [];
+			const i = rows.findIndex( ( s ) => parseInt( s.id, 10 ) === id );
+			if ( i > -1 ) return { article: a, index: i, sug: rows[ i ] };
 		}
 		return null;
 	}
 
-	function currentReviewHeading() {
-		const article = reviewCache.find( ( item ) => parseInt( item.post_id, 10 ) === reviewModalPostId );
-		const headings = article && Array.isArray( article.headings ) ? article.headings : [];
-		return headings[ reviewModalIndex ] || null;
+	function rerenderArticle( postId ) {
+		const a = findArticle( postId );
+		const el = q( `.sim-article[data-post="${ postId }"]` );
+		if ( ! a || ! el ) return;
+		el.outerHTML = articleHtml( a );
+		focusRow( state.review.focus, false );
 	}
 
-	function headingUiStatus( heading ) {
-		if ( ! heading ) return 'pending';
-		const row = q( `.sim-slot-row[data-match-id="${ heading.id }"]` );
-		if ( row && row.classList.contains( 'is-approved' ) ) {
-			return 'approved';
-		}
-		if ( row && row.classList.contains( 'is-rejected' ) ) {
-			return 'rejected';
-		}
-		return 'pending';
+	async function decide( ids, status ) {
+		if ( ! ids.length ) return 0;
+		const res = await api( '/review/decide', 'POST', { ids, status } );
+		return parseInt( res.updated || 0, 10 );
 	}
 
-	function renderReviewModal() {
-		const heading = currentReviewHeading();
-		const modal = q( '#sim-review-modal' );
-		if ( ! modal || ! heading ) {
-			closeReviewModal();
+	function applyLocal( ids, status ) {
+		const r = state.review;
+		ids.forEach( ( id ) => {
+			const prev = sugStatus( id );
+			if ( prev === 'approved' ) state.tallies.approved--;
+			if ( prev === 'rejected' ) state.tallies.rejected--;
+			if ( status === 'pending' ) r.decided.delete( id );
+			else r.decided.set( id, status );
+			if ( status === 'approved' ) state.tallies.approved++;
+			if ( status === 'rejected' ) state.tallies.rejected++;
+		} );
+		state.tallies.approved = Math.max( 0, state.tallies.approved );
+		state.tallies.rejected = Math.max( 0, state.tallies.rejected );
+		updateDock();
+	}
+
+	async function setStatus( ids, status, message ) {
+		const posts = new Set( ids.map( ( id ) => findSug( id )?.article.post_id ).filter( Boolean ) );
+		const before = new Map( ids.map( ( id ) => [ id, sugStatus( id ) ] ) );
+		try {
+			await decide( ids, status );
+		} catch ( err ) {
+			toast( errMsg( err, __( 'Could not save that decision.', 'smart-image-matcher' ) ) );
 			return;
 		}
-		const article = reviewCache.find( ( item ) => parseInt( item.post_id, 10 ) === reviewModalPostId );
-		const total = article && article.headings ? article.headings.length : 1;
-		const title = q( '#sim-review-modal-title' );
-		const meta = q( '#sim-review-modal-meta' );
-		const img = q( '#sim-review-modal-img' );
-		const src = heading.image_full || heading.image_url || '';
-		if ( title ) title.textContent = slotLabel( heading );
-		if ( meta ) {
-			const postTitle = article ? ( article.post_title || ( '#' + article.post_id ) ) : '';
-			const file = imageFileLabel( heading );
-			meta.textContent = [ postTitle, file, ( reviewModalIndex + 1 ) + ' of ' + total, parseInt( heading.confidence_score || 0, 10 ) + '%' ].filter( Boolean ).join( ' · ' );
-		}
-		if ( img ) {
-			img.hidden = ! src;
-			img.src = src;
-			img.alt = slotLabel( heading );
-		}
-		const status = headingUiStatus( heading );
-		const decided = status !== 'pending';
-		const statusEl = q( '#sim-review-modal-status' );
-		if ( statusEl ) {
-			statusEl.hidden = ! decided;
-			statusEl.textContent = status === 'approved' ? ( i18n.approved || 'Approved' ) : ( i18n.rejected || 'Rejected' );
-			statusEl.className = 'sim-slot-state ' + ( status === 'approved' ? 'sim-slot-state-approved' : 'sim-slot-state-rejected' );
-		}
-		const approve = q( '#sim-review-modal-approve' );
-		const reject = q( '#sim-review-modal-reject' );
-		const undo = q( '#sim-review-modal-undo' );
-		if ( approve ) {
-			approve.hidden = decided;
-			approve.disabled = false;
-		}
-		if ( reject ) {
-			reject.hidden = decided;
-			reject.disabled = false;
-		}
-		if ( undo ) {
-			undo.hidden = ! decided;
-			undo.disabled = false;
-		}
-		const prev = q( '#sim-review-modal-prev' );
-		const next = q( '#sim-review-modal-next' );
-		if ( prev ) prev.disabled = reviewModalIndex <= 0;
-		if ( next ) next.disabled = reviewModalIndex >= total - 1;
-		modal.hidden = false;
-	}
-
-	function openReviewModal( matchId ) {
-		const found = findReviewSlot( matchId );
-		if ( ! found ) return;
-		reviewModalPostId = parseInt( found.article.post_id, 10 );
-		reviewModalIndex = found.index;
-		renderReviewModal();
-	}
-
-	function closeReviewModal() {
-		const modal = q( '#sim-review-modal' );
-		if ( modal ) modal.hidden = true;
-	}
-
-	function stepReviewModal( delta ) {
-		const article = reviewCache.find( ( item ) => parseInt( item.post_id, 10 ) === reviewModalPostId );
-		const total = article && article.headings ? article.headings.length : 0;
-		reviewModalIndex = Math.max( 0, Math.min( total - 1, reviewModalIndex + delta ) );
-		renderReviewModal();
-	}
-
-	async function approveAbove() {
-		if ( ! apiFetch ) return;
-		try {
-			await apiFetch( {
-				path: '/smart-image-matcher/v1/review/approve-above',
-				method: 'POST',
-				data: { run: reviewRun },
+		applyLocal( ids, status );
+		posts.forEach( ( p ) => rerenderArticle( parseInt( p, 10 ) ) );
+		syncModal();
+		if ( message ) {
+			toast( message, async () => {
+				const back = ids.filter( ( id ) => before.get( id ) === 'pending' );
+				try {
+					await decide( back, 'pending' );
+				} catch ( e ) {
+					return;
+				}
+				applyLocal( back, 'pending' );
+				posts.forEach( ( p ) => rerenderArticle( parseInt( p, 10 ) ) );
+				syncModal();
 			} );
-			loadReview();
+		}
+	}
+
+	function pendingIds( article, minScore ) {
+		return ( article.headings || [] )
+			.filter( ( s ) => sugStatus( parseInt( s.id, 10 ) ) === 'pending' )
+			.filter( ( s ) => minScore === undefined || parseInt( s.confidence_score, 10 ) >= minScore )
+			.map( ( s ) => parseInt( s.id, 10 ) );
+	}
+
+	async function onArticlesClick( e ) {
+		const btn = e.target.closest( '[data-act]' );
+		if ( ! btn ) return;
+		const act = btn.dataset.act;
+
+		if ( act === 'show-all' ) {
+			state.review.run = 'all';
+			setTab( 'review' );
+			return;
+		}
+
+		const articleEl = btn.closest( '.sim-article' );
+		const postId = articleEl ? parseInt( articleEl.dataset.post, 10 ) : 0;
+		const article = findArticle( postId );
+		const sugEl = btn.closest( '.sim-sug' );
+		const id = sugEl ? parseInt( sugEl.dataset.id, 10 ) : 0;
+
+		if ( sugEl ) {
+			const rows = visibleRows();
+			state.review.focus = rows.indexOf( sugEl );
+		}
+
+		switch ( act ) {
+			case 'toggle':
+				if ( state.review.open.has( postId ) ) state.review.open.delete( postId );
+				else state.review.open.add( postId );
+				rerenderArticle( postId );
+				break;
+			case 'approve-hi': {
+				const ids = pendingIds( article, AUTO );
+				await setStatus( ids, 'approved', sprintf( _n( 'Approved %d suggestion.', 'Approved %d suggestions.', ids.length, 'smart-image-matcher' ), ids.length ) );
+				break;
+			}
+			case 'reject-all': {
+				const ids = pendingIds( article );
+				await setStatus( ids, 'rejected', sprintf( _n( 'Rejected %d suggestion. Each stays rejected for its heading.', 'Rejected %d suggestions. Each stays rejected for its heading.', ids.length, 'smart-image-matcher' ), ids.length ) );
+				break;
+			}
+			case 'ignore':
+				await ignoreArticles( [ postId ] );
+				break;
+			case 'approve':
+				await setStatus( [ id ], 'approved' );
+				break;
+			case 'reject':
+				await setStatus( [ id ], 'rejected', __( 'Rejected for this heading. It will not be suggested here again.', 'smart-image-matcher' ) );
+				break;
+			case 'undo':
+				await setStatus( [ id ], 'pending' );
+				break;
+			case 'open':
+				openModal( id );
+				break;
+			case 'more':
+				toggleBlockPanel( sugEl, btn );
+				break;
+			case 'block-cancel':
+				closeBlockPanel( sugEl );
+				break;
+			case 'block-confirm':
+				await blockImage( id, btn );
+				break;
+		}
+	}
+
+	// Site-wide block: always explained, always confirmed, never a shortcut.
+	async function toggleBlockPanel( sugEl, btn ) {
+		const slot = sugEl.querySelector( '.sim-block-slot' );
+		if ( slot.innerHTML ) {
+			closeBlockPanel( sugEl );
+			return;
+		}
+		btn.setAttribute( 'aria-expanded', 'true' );
+		slot.innerHTML = `<div class="sim-block-confirm"><p>${ esc( __( 'Checking where this image is suggested…', 'smart-image-matcher' ) ) }</p></div>`;
+		const id = parseInt( sugEl.dataset.id, 10 );
+		let impact = {};
+		try {
+			impact = await api( '/review/block-impact?match_id=' + id );
 		} catch ( err ) {
-			window.alert( err.message || 'Could not approve matches.' );
+			slot.innerHTML = `<div class="sim-block-confirm"><p>${ esc( errMsg( err, __( 'Could not check this image.', 'smart-image-matcher' ) ) ) }</p></div>`;
+			return;
+		}
+		const file = impact.file || findSug( id )?.sug.image_file || '';
+		const featured = parseInt( impact.other_featured || 0, 10 );
+		const headings = parseInt( impact.other_headings || 0, 10 );
+		slot.innerHTML = `<div class="sim-block-confirm" role="group" aria-label="${ esc( __( 'Block image site-wide', 'smart-image-matcher' ) ) }">
+			<h4>${ sprintf( esc( __( 'Block %s as a featured image on every post?', 'smart-image-matcher' ) ), `<code>${ esc( file ) }</code>` ) }</h4>
+			<ul>
+				<li>${ esc( __( 'It will never be chosen as a featured image again, on any post.', 'smart-image-matcher' ) ) }</li>
+				<li>${ esc( featured
+					? sprintf( _n( '%d other waiting featured suggestion with this image is rejected too.', '%d other waiting featured suggestions with this image are rejected too.', featured, 'smart-image-matcher' ), featured )
+					: __( 'No other waiting featured suggestions use it.', 'smart-image-matcher' ) ) }</li>
+				<li>${ esc( headings
+					? sprintf( _n( 'It can still go under headings — %d heading suggestion keeps it.', 'It can still go under headings — %d heading suggestions keep it.', headings, 'smart-image-matcher' ), headings )
+					: __( 'It can still be inserted under headings.', 'smart-image-matcher' ) ) }</li>
+				<li>${ esc( __( 'Featured images already set are not removed. Undo any time in Tools → Blocked images.', 'smart-image-matcher' ) ) }</li>
+			</ul>
+			<p class="sim-bp-help">${ esc( __( 'Wrong only for this heading? Use ✕ instead.', 'smart-image-matcher' ) ) }</p>
+			<div class="sim-bp-inline">
+				<button type="button" class="button sim-bp-solid-danger" data-act="block-confirm">${ esc( __( 'Block site-wide', 'smart-image-matcher' ) ) }</button>
+				<button type="button" class="button" data-act="block-cancel">${ esc( __( 'Cancel', 'smart-image-matcher' ) ) }</button>
+			</div>
+		</div>`;
+		slot.querySelector( '[data-act="block-cancel"]' ).focus();
+	}
+
+	function closeBlockPanel( sugEl ) {
+		if ( ! sugEl ) return;
+		sugEl.querySelector( '.sim-block-slot' ).innerHTML = '';
+		const more = sugEl.querySelector( '[data-act="more"]' );
+		if ( more ) {
+			more.setAttribute( 'aria-expanded', 'false' );
+			more.focus();
+		}
+	}
+
+	async function blockImage( id, btn ) {
+		btn.disabled = true;
+		try {
+			const res = await api( '/review/exclude-image', 'POST', { match_id: id } );
+			const file = res.file || '';
+			toast( sprintf( __( 'Blocked %s as a featured image site-wide.', 'smart-image-matcher' ), file ), async () => {
+				try {
+					await api( '/review/unblock', 'POST', { file } );
+					toast( sprintf( __( 'Unblocked %s. Rejected suggestions stay rejected.', 'smart-image-matcher' ), file ) );
+				} catch ( e ) {}
+			} );
+			closeModal();
+			fetchReview();
+		} catch ( err ) {
+			btn.disabled = false;
+			toast( errMsg( err, __( 'Could not block this image.', 'smart-image-matcher' ) ) );
+		}
+	}
+
+	async function ignoreArticles( postIds ) {
+		const done = [];
+		for ( const id of postIds ) {
+			try {
+				await api( '/review/ignore', 'POST', { post_id: id, ignored: true } );
+				done.push( id );
+			} catch ( e ) {}
+		}
+		if ( ! done.length ) {
+			toast( __( 'Could not ignore that article.', 'smart-image-matcher' ) );
+			return;
+		}
+		done.forEach( ( id ) => state.review.selected.delete( id ) );
+		toast(
+			sprintf( _n( 'Ignored %d article. No run will touch it.', 'Ignored %d articles. No run will touch them.', done.length, 'smart-image-matcher' ), done.length ),
+			async () => {
+				for ( const id of done ) {
+					try {
+						await api( '/review/ignore', 'POST', { post_id: id, ignored: false } );
+					} catch ( e ) {}
+				}
+				toast( __( 'Un-ignored. The next run will pick it up again.', 'smart-image-matcher' ) );
+			}
+		);
+		fetchReview();
+	}
+
+	function selectedArticles() {
+		return state.review.articles.filter( ( a ) => state.review.selected.has( parseInt( a.post_id, 10 ) ) );
+	}
+
+	async function bulkDecide( kind ) {
+		const arts = selectedArticles();
+		const ids = arts.flatMap( ( a ) => ( kind === 'approve' ? pendingIds( a, AUTO ) : pendingIds( a ) ) );
+		if ( ! ids.length ) {
+			toast( __( 'Nothing to change in the selected articles.', 'smart-image-matcher' ) );
+			return;
+		}
+		if ( kind === 'reject' && ! window.confirm( sprintf( _n( 'Reject %d suggestion? Each stays rejected for its own heading only.', 'Reject %d suggestions? Each stays rejected for its own heading only.', ids.length, 'smart-image-matcher' ), ids.length ) ) ) {
+			return;
+		}
+		await setStatus(
+			ids,
+			kind === 'approve' ? 'approved' : 'rejected',
+			kind === 'approve'
+				? sprintf( _n( 'Approved %d suggestion.', 'Approved %d suggestions.', ids.length, 'smart-image-matcher' ), ids.length )
+				: sprintf( _n( 'Rejected %d suggestion.', 'Rejected %d suggestions.', ids.length, 'smart-image-matcher' ), ids.length )
+		);
+	}
+
+	async function bulkIgnore() {
+		const ids = [ ...state.review.selected ];
+		if ( ! ids.length ) return;
+		if ( ! window.confirm( sprintf( _n( 'Ignore %d article? Its waiting suggestions are removed and no run will touch it until you un-ignore it in Tools.', 'Ignore %d articles? Their waiting suggestions are removed and no run will touch them until you un-ignore them in Tools.', ids.length, 'smart-image-matcher' ), ids.length ) ) ) {
+			return;
+		}
+		await ignoreArticles( ids );
+	}
+
+	async function approveAboveAll() {
+		if ( ! window.confirm( sprintf( __( 'Approve every waiting suggestion scoring %d%% or more, in every article (not just this page)?', 'smart-image-matcher' ), AUTO ) ) ) return;
+		try {
+			const res = await api( '/review/approve-above', 'POST', { run: state.review.run } );
+			toast( sprintf( _n( 'Approved %d suggestion.', 'Approved %d suggestions.', parseInt( res.approved || 0, 10 ), 'smart-image-matcher' ), parseInt( res.approved || 0, 10 ) ) );
+			fetchReview();
+		} catch ( err ) {
+			toast( errMsg( err, __( 'Could not approve.', 'smart-image-matcher' ) ) );
 		}
 	}
 
 	async function insertApproved() {
-		if ( ! apiFetch ) return;
+		const btn = q( '#sim-insert-approved' );
+		btn.disabled = true;
 		try {
-			await apiFetch( {
-				path: '/smart-image-matcher/v1/review/insert-approved',
-				method: 'POST',
-			} );
-			loadReview();
+			const res = await api( '/review/insert-approved', 'POST' );
+			const n = parseInt( res.queued || 0, 10 );
+			toast( sprintf( _n( 'Inserting into %d article in the background.', 'Inserting into %d articles in the background.', n, 'smart-image-matcher' ), n ) );
+			state.tallies.approved = 0;
+			state.tallies.rejected = 0;
+			updateDock();
+			fetchReview();
 		} catch ( err ) {
-			window.alert( err.message || 'Could not queue inserts.' );
+			toast( errMsg( err, __( 'Could not queue the inserts.', 'smart-image-matcher' ) ) );
+			updateDock();
 		}
 	}
 
-	async function restoreJob() {
-		let jobId = null;
-		try { jobId = window.localStorage.getItem( storageKey ); } catch ( err ) {}
-		if ( ! jobId || ! apiFetch ) {
-			buildIdle();
+	// Keyboard: J/K move, A approve, R reject here. No shortcut blocks site-wide.
+	function visibleRows() {
+		return qAll( '#sim-articles .sim-sug' );
+	}
+
+	function focusRow( index, scroll ) {
+		const rows = visibleRows();
+		rows.forEach( ( r ) => r.classList.remove( 'is-focus' ) );
+		if ( index < 0 || ! rows.length ) return;
+		const i = Math.min( index, rows.length - 1 );
+		state.review.focus = i;
+		rows[ i ].classList.add( 'is-focus' );
+		if ( scroll !== false ) {
+			rows[ i ].scrollIntoView( { block: 'nearest' } );
+			rows[ i ].focus( { preventScroll: true } );
+		}
+	}
+
+	function onKey( e ) {
+		if ( e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey ) return;
+		const modal = q( '#sim-review-modal' );
+		if ( ! modal.hidden ) {
+			if ( e.key === 'Escape' ) closeModal();
+			if ( e.key === 'ArrowLeft' ) stepModal( -1 );
+			if ( e.key === 'ArrowRight' ) stepModal( 1 );
 			return;
 		}
-		if ( readCancelledJobs().includes( jobId ) ) {
-			forgetJob();
-			buildIdle();
+		if ( ! q( '#sim-gen-modal' ).hidden ) {
+			if ( e.key === 'Escape' ) q( '#sim-gen-modal' ).hidden = true;
 			return;
 		}
+		if ( state.tab !== 'review' ) return;
+		if ( e.target.closest( 'input, select, textarea, .sim-block-confirm' ) ) return;
+		const key = e.key.toLowerCase();
+		const rows = visibleRows();
+		if ( ! rows.length ) return;
+		if ( key === 'j' || key === 'k' ) {
+			e.preventDefault();
+			const next = state.review.focus < 0 ? 0 : state.review.focus + ( key === 'j' ? 1 : -1 );
+			focusRow( Math.max( 0, Math.min( rows.length - 1, next ) ) );
+			return;
+		}
+		if ( ( key === 'a' || key === 'r' ) && state.review.focus > -1 ) {
+			const row = rows[ state.review.focus ];
+			if ( ! row ) return;
+			e.preventDefault();
+			const id = parseInt( row.dataset.id, 10 );
+			if ( sugStatus( id ) !== 'pending' ) return;
+			const advance = state.review.focus + 1;
+			setStatus( [ id ], key === 'a' ? 'approved' : 'rejected', key === 'r' ? __( 'Rejected for this heading.', 'smart-image-matcher' ) : '' ).then( () => focusRow( advance ) );
+		}
+	}
+
+	// ---------------------------------------------------------------------
+	// Image modal
+	// ---------------------------------------------------------------------
+
+	function modalSug() {
+		const a = findArticle( state.modal.postId );
+		return a && a.headings ? a.headings[ state.modal.index ] : null;
+	}
+
+	function openModal( id ) {
+		const found = findSug( id );
+		if ( ! found ) return;
+		state.modal.postId = parseInt( found.article.post_id, 10 );
+		state.modal.index = found.index;
+		renderModal();
+	}
+
+	function renderModal() {
+		const s = modalSug();
+		const a = findArticle( state.modal.postId );
+		if ( ! s || ! a ) {
+			closeModal();
+			return;
+		}
+		const total = a.headings.length;
+		const featured = isFeatured( s );
+		const title = featured ? __( 'Featured image', 'smart-image-matcher' ) : ( s.heading_tag || 'h2' ).toUpperCase() + ' ' + ( s.heading_text || '' );
+		q( '#sim-review-modal-title' ).textContent = title;
+		q( '#sim-review-modal-meta' ).textContent = [
+			a.post_title || '#' + a.post_id,
+			s.image_file || '',
+			sprintf( __( '%1$d of %2$d', 'smart-image-matcher' ), state.modal.index + 1, total ),
+			parseInt( s.confidence_score || 0, 10 ) + '%',
+		].filter( Boolean ).join( ' · ' );
+		const img = q( '#sim-review-modal-img' );
+		img.src = s.image_full || s.image_url || '';
+		img.alt = title;
+		img.hidden = ! img.src;
+
+		const st = sugStatus( parseInt( s.id, 10 ) );
+		const decided = st !== 'pending';
+		const status = q( '#sim-review-modal-status' );
+		status.hidden = ! decided;
+		status.textContent = st === 'approved' ? __( 'Approved', 'smart-image-matcher' ) : __( 'Rejected here', 'smart-image-matcher' );
+		status.className = 'sim-slot-state is-' + st;
+		q( '#sim-review-modal-approve' ).hidden = decided;
+		q( '#sim-review-modal-reject' ).hidden = decided;
+		q( '#sim-review-modal-undo' ).hidden = ! decided;
+		q( '#sim-review-modal-prev' ).disabled = state.modal.index <= 0;
+		q( '#sim-review-modal-next' ).disabled = state.modal.index >= total - 1;
+		q( '#sim-review-modal' ).hidden = false;
+	}
+
+	function syncModal() {
+		if ( ! q( '#sim-review-modal' ).hidden ) renderModal();
+	}
+
+	function closeModal() {
+		q( '#sim-review-modal' ).hidden = true;
+	}
+
+	function stepModal( delta ) {
+		const a = findArticle( state.modal.postId );
+		const total = a && a.headings ? a.headings.length : 0;
+		state.modal.index = Math.max( 0, Math.min( total - 1, state.modal.index + delta ) );
+		renderModal();
+	}
+
+	function bindModals() {
+		qAll( '[data-sim-gen-cancel]' ).forEach( ( el ) => el.addEventListener( 'click', () => {
+			q( '#sim-gen-modal' ).hidden = true;
+		} ) );
+		q( '#sim-gen-confirm' ).addEventListener( 'click', () => {
+			q( '#sim-gen-modal' ).hidden = true;
+			startJob( 'generate-featured' );
+		} );
+		qAll( '[data-sim-review-close]' ).forEach( ( el ) => el.addEventListener( 'click', closeModal ) );
+		q( '#sim-review-modal-prev' ).addEventListener( 'click', () => stepModal( -1 ) );
+		q( '#sim-review-modal-next' ).addEventListener( 'click', () => stepModal( 1 ) );
+		const decideModal = ( status, msg ) => {
+			const s = modalSug();
+			if ( s ) setStatus( [ parseInt( s.id, 10 ) ], status, msg );
+		};
+		q( '#sim-review-modal-approve' ).addEventListener( 'click', () => decideModal( 'approved' ) );
+		q( '#sim-review-modal-reject' ).addEventListener( 'click', () => decideModal( 'rejected', __( 'Rejected for this heading.', 'smart-image-matcher' ) ) );
+		q( '#sim-review-modal-undo' ).addEventListener( 'click', () => decideModal( 'pending' ) );
+	}
+
+	// ---------------------------------------------------------------------
+	// Health strip + Schedule tab
+	// ---------------------------------------------------------------------
+
+	function renderHealth( data ) {
+		const h = data.health || {};
+		const strip = q( '#sim-bp-health' );
+		const queue = h.queue || {};
+		strip.hidden = false;
+		strip.classList.remove( 'is-good', 'is-warn', 'is-bad' );
+		strip.classList.add( 'is-' + ( h.state || 'good' ) );
+		q( '#sim-bp-health-title' ).textContent = h.title || '';
+		const bits = [];
+		if ( data.settings && data.settings.enabled && data.next_tick ) bits.push( sprintf( __( 'Next automatic run %s', 'smart-image-matcher' ), timeLabel( data.next_tick ) ) );
+		if ( data.settings && ! data.settings.enabled ) bits.push( __( 'Automatic runs are off', 'smart-image-matcher' ) );
+		if ( queue.pending ) bits.push( sprintf( _n( '%d action waiting', '%d actions waiting', queue.pending, 'smart-image-matcher' ), queue.pending ) );
+		const stuck = ( data.open_runs || [] ).filter( ( r ) => r.stuck ).length;
+		if ( stuck ) bits.push( sprintf( _n( '%d run looks stuck', '%d runs look stuck', stuck, 'smart-image-matcher' ), stuck ) );
+		q( '#sim-bp-health-meta' ).textContent = bits.join( ' · ' );
+
+		const pill = q( '#sim-schedule-pill' );
+		pill.className = 'sim-bp-count';
+		if ( h.state === 'bad' || stuck ) {
+			pill.textContent = __( 'Blocked', 'smart-image-matcher' );
+			pill.classList.add( 'is-alert' );
+			pill.hidden = false;
+		} else if ( h.state === 'warn' ) {
+			pill.textContent = __( 'Check', 'smart-image-matcher' );
+			pill.classList.add( 'is-warn' );
+			pill.hidden = false;
+		} else {
+			pill.hidden = true;
+		}
+	}
+
+	async function loadHealth() {
 		try {
-			const data = await apiFetch( {
-				path: '/smart-image-matcher/v1/jobs/' + encodeURIComponent( jobId ),
-				method: 'GET',
-			} );
-			currentJob = data;
-			const status = data.status || '';
-			if ( status === 'queued' || status === 'processing' ) {
-				buildProgress( data );
-				startPolling( jobId );
-			} else if ( status === 'completed' || status === 'failed' || status === 'cancelled' ) {
-				buildProgress( data );
-			} else {
-				buildIdle();
+			const data = await api( '/schedule' );
+			renderHealth( data );
+			return data;
+		} catch ( e ) {
+			return null;
+		}
+	}
+
+	async function loadSchedule() {
+		const root = q( '.sim-bulk-panel[data-panel="schedule"]' );
+		if ( ! root.innerHTML ) root.innerHTML = `<p class="sim-bp-loading">${ esc( __( 'Loading…', 'smart-image-matcher' ) ) }</p>`;
+		const data = await loadHealth();
+		if ( ! data ) {
+			root.innerHTML = `<div class="notice notice-error inline"><p>${ esc( __( 'Could not load the schedule.', 'smart-image-matcher' ) ) }</p></div>`;
+			return;
+		}
+		const s = data.settings || {};
+		const featured = { any: __( 'any featured image state', 'smart-image-matcher' ), missing: __( 'missing a featured image', 'smart-image-matcher' ), has: __( 'with a featured image', 'smart-image-matcher' ) }[ s.featured ] || s.featured || '';
+		const kv = [
+			[ __( 'Automatic runs', 'smart-image-matcher' ), s.enabled ? __( 'On', 'smart-image-matcher' ) : __( 'Off', 'smart-image-matcher' ) ],
+			[ __( 'Frequency', 'smart-image-matcher' ), s.interval || '—' ],
+			[ __( 'Articles', 'smart-image-matcher' ), [ s.types, s.statuses, featured ].filter( Boolean ).join( ' · ' ) ],
+			[ __( 'Fills', 'smart-image-matcher' ), s.fill || '—' ],
+			[ __( 'Also on publish', 'smart-image-matcher' ), s.publish ? __( 'Yes', 'smart-image-matcher' ) : __( 'No', 'smart-image-matcher' ) ],
+			[ __( 'Next run', 'smart-image-matcher' ), s.enabled ? timeLabel( data.next_tick ) : '—' ],
+		];
+
+		const runs = ( data.open_runs || [] ).map( ( r ) => {
+			const missing = Math.max( 0, r.total - r.done );
+			const body = r.stuck
+				? sprintf( __( 'Started %1$s and stuck at %2$d / %3$d for %4$s. %5$d of its article jobs are still queued.', 'smart-image-matcher' ), r.started, r.done, r.total, minutesLabel( r.idle_min ), r.remaining )
+				: sprintf( __( 'Started %1$s · %2$d / %3$d articles · last progress %4$s ago.', 'smart-image-matcher' ), r.started, r.done, r.total, minutesLabel( r.idle_min ) );
+			const hint = r.remaining
+				? __( 'Closing marks it finished; its queued articles still run. The next automatic run can then start.', 'smart-image-matcher' )
+				: sprintf( _n( 'Closing marks it finished. %d article never ran — Re-queue lost sends failed ones back to the queue.', 'Closing marks it finished. %d articles never ran — Re-queue lost sends failed ones back to the queue.', missing, 'smart-image-matcher' ), missing );
+			return `<div class="sim-bp-stuck${ r.stuck ? '' : ' is-ok' }" data-job="${ esc( r.job_id ) }">
+				<h3>${ esc( r.stuck ? sprintf( __( '%s never finished', 'smart-image-matcher' ), r.label ) : sprintf( __( '%s in progress', 'smart-image-matcher' ), r.label ) ) }</h3>
+				<div><code>${ esc( r.job_id ) }</code></div>
+				<div>${ esc( body ) }</div>
+				${ r.stuck ? `<div class="sim-bp-inline">
+					<button type="button" class="button button-primary" data-act="close-job">${ esc( __( 'Close stuck job', 'smart-image-matcher' ) ) }</button>
+					<button type="button" class="button" data-act="requeue">${ esc( __( 'Re-queue lost', 'smart-image-matcher' ) ) }</button>
+				</div><p class="sim-bp-help">${ esc( hint ) }</p>` : '' }
+			</div>`;
+		} ).join( '' );
+
+		const outcome = {
+			queued: [ 'is-ran', __( 'Ran', 'smart-image-matcher' ) ],
+			skipped: [ 'is-skip', __( 'Skipped', 'smart-image-matcher' ) ],
+			nothing: [ 'is-none', __( 'Nothing to do', 'smart-image-matcher' ) ],
+		};
+		const ticks = ( data.ticks || [] ).slice( 0, 48 ).map( ( t ) => {
+			const [ cls, label ] = outcome[ t.outcome ] || [ 'is-none', t.outcome ];
+			return `<tr><td class="sim-num">${ esc( timeLabel( t.at ) ) }</td><td><span class="sim-pill ${ cls }">${ esc( label ) }</span></td><td>${ esc( t.detail || '' ) }</td></tr>`;
+		} ).join( '' );
+
+		root.innerHTML = `<div class="sim-bp-sched-grid">
+			<div class="sim-bp-card sim-bp-section">
+				<div class="sim-bp-section-head"><h2>${ esc( __( 'Automatic runs', 'smart-image-matcher' ) ) }</h2><a href="${ esc( s.settings_url || config.settingsUrl || '#' ) }">${ esc( __( 'Change in Settings', 'smart-image-matcher' ) ) }</a></div>
+				<div class="sim-bp-kv is-flush">${ kv.map( ( [ k, v ] ) => `<div><span>${ esc( k ) }</span><strong>${ esc( v ) }</strong></div>` ).join( '' ) }</div>
+				<div class="sim-bp-runs">${ runs || `<p class="sim-bp-help">${ esc( __( 'No run is open right now.', 'smart-image-matcher' ) ) }</p>` }</div>
+			</div>
+			<div class="sim-bp-card">
+				<div class="sim-bp-section sim-bp-tight-bottom"><div class="sim-bp-section-head sim-bp-tight"><h2>${ esc( __( 'Recent automatic runs', 'smart-image-matcher' ) ) }</h2><span class="sim-bp-help">${ esc( __( 'Every tick is logged, including skips', 'smart-image-matcher' ) ) }</span></div></div>
+				<div class="sim-bp-table-wrap">
+					${ ticks ? `<table class="sim-bp-log"><thead><tr><th>${ esc( __( 'Time', 'smart-image-matcher' ) ) }</th><th>${ esc( __( 'Outcome', 'smart-image-matcher' ) ) }</th><th>${ esc( __( 'Details', 'smart-image-matcher' ) ) }</th></tr></thead><tbody>${ ticks }</tbody></table>`
+						: `<p class="sim-bp-help sim-bp-pad">${ esc( __( 'No automatic run has been logged yet.', 'smart-image-matcher' ) ) }</p>` }
+				</div>
+			</div>
+		</div>`;
+
+		qAll( '[data-act="close-job"]', root ).forEach( ( b ) => b.addEventListener( 'click', () => closeJob( b.closest( '[data-job]' ).dataset.job, b ) ) );
+		qAll( '[data-act="requeue"]', root ).forEach( ( b ) => b.addEventListener( 'click', () => requeueLost( b.closest( '[data-job]' ).dataset.job, b ) ) );
+	}
+
+	async function closeJob( jobId, btn ) {
+		if ( ! window.confirm( __( 'Close this run? It is marked finished so the next automatic run can start.', 'smart-image-matcher' ) ) ) return;
+		btn.disabled = true;
+		try {
+			await api( '/jobs/' + encodeURIComponent( jobId ) + '/close', 'POST' );
+			toast( __( 'Run closed.', 'smart-image-matcher' ) );
+			loadSchedule();
+		} catch ( err ) {
+			btn.disabled = false;
+			toast( errMsg( err, __( 'Could not close the run.', 'smart-image-matcher' ) ) );
+		}
+	}
+
+	async function requeueLost( jobId, btn ) {
+		btn.disabled = true;
+		try {
+			const res = await api( '/jobs/' + encodeURIComponent( jobId ) + '/requeue-lost', 'POST' );
+			const n = parseInt( res.queued || 0, 10 );
+			toast( n ? sprintf( _n( 'Queued %d article again.', 'Queued %d articles again.', n, 'smart-image-matcher' ), n ) : __( 'No failed articles found for this run.', 'smart-image-matcher' ) );
+		} catch ( err ) {
+			toast( errMsg( err, __( 'Could not re-queue.', 'smart-image-matcher' ) ) );
+		}
+		btn.disabled = false;
+	}
+
+	// ---------------------------------------------------------------------
+	// Tools tab
+	// ---------------------------------------------------------------------
+
+	async function loadBlocked() {
+		const list = q( '#sim-blocked-list' );
+		try {
+			const res = await api( '/review/blocked' );
+			renderBlocked( Array.isArray( res.files ) ? res.files : [] );
+		} catch ( err ) {
+			list.innerHTML = `<p class="sim-bp-help">${ esc( errMsg( err, __( 'Could not load.', 'smart-image-matcher' ) ) ) }</p>`;
+		}
+	}
+
+	function renderBlocked( files ) {
+		q( '#sim-blocked-count' ).textContent = String( files.length );
+		q( '#sim-blocked-list' ).innerHTML = files.length
+			? files.map( ( f ) => `<div><code>${ esc( f ) }</code><button type="button" class="button button-small" data-file="${ esc( f ) }">${ esc( __( 'Unblock', 'smart-image-matcher' ) ) }</button></div>` ).join( '' )
+			: `<p class="sim-bp-help">${ esc( __( 'No blocked images.', 'smart-image-matcher' ) ) }</p>`;
+	}
+
+	async function loadIgnored() {
+		const list = q( '#sim-ignored-list' );
+		try {
+			const res = await api( '/review/ignored' );
+			const items = Array.isArray( res.articles ) ? res.articles : [];
+			q( '#sim-ignored-count' ).textContent = String( items.length );
+			list.innerHTML = items.length
+				? items.map( ( a ) => `<div><span><a href="${ esc( a.edit_url || '#' ) }" target="_blank" rel="noopener">${ esc( a.title || '#' + a.id ) }</a> <span class="sim-bp-help">#${ parseInt( a.id, 10 ) }</span></span><button type="button" class="button button-small" data-post="${ parseInt( a.id, 10 ) }">${ esc( __( 'Un-ignore', 'smart-image-matcher' ) ) }</button></div>` ).join( '' )
+				: `<p class="sim-bp-help">${ esc( __( 'No ignored articles. Use “Ignore article” in Review.', 'smart-image-matcher' ) ) }</p>`;
+		} catch ( err ) {
+			list.innerHTML = `<p class="sim-bp-help">${ esc( errMsg( err, __( 'Could not load.', 'smart-image-matcher' ) ) ) }</p>`;
+		}
+	}
+
+	function bindToolLists() {
+		q( '#sim-blocked-list' ).addEventListener( 'click', async ( e ) => {
+			const b = e.target.closest( 'button[data-file]' );
+			if ( ! b ) return;
+			b.disabled = true;
+			try {
+				const res = await api( '/review/unblock', 'POST', { file: b.dataset.file } );
+				renderBlocked( Array.isArray( res.files ) ? res.files : [] );
+				toast( sprintf( __( 'Unblocked %s.', 'smart-image-matcher' ), b.dataset.file ) );
+			} catch ( err ) {
+				b.disabled = false;
+				toast( errMsg( err, __( 'Could not unblock.', 'smart-image-matcher' ) ) );
 			}
-		} catch ( err ) {
-			forgetJob();
-			buildIdle();
-		}
-	}
-
-	function syncToolsVisibility() {
-		const running = !!( currentJob && ( currentJob.status === 'queued' || currentJob.status === 'processing' ) );
-		const runTools = q( '#sim-run-tools' );
-		const reviewTools = q( '#sim-review-tools' );
-		if ( runTools ) {
-			runTools.hidden = currentTab !== 'run' || running;
-		}
-		if ( reviewTools ) {
-			reviewTools.hidden = currentTab !== 'review';
-		}
-	}
-
-	function sprintf( template, ...args ) {
-		let i = 0;
-		return String( template || '' ).replace( /%d/g, () => String( args[ i++ ] || 0 ) );
-	}
-
-	let recoveryPreview = null;
-
-	function recoveryNotice( type, message ) {
-		const box = q( '#sim-fal-recovery-notice' );
-		if ( ! box ) return;
-		box.innerHTML = `<div class="notice notice-${ type || 'info' } inline"><p>${ escHtml( message ) }</p></div>`;
-	}
-
-	function recoveryHours() {
-		return parseInt( q( '#sim-fal-recovery-hours' )?.value || '48', 10 );
-	}
-
-	function recoveryStatuses() {
-		const statuses = getCheckedValues( '.sim-post-status' );
-		return statuses.length ? statuses : [ 'draft' ];
-	}
-
-	function renderRecoveryPreview( result ) {
-		const matched = Array.isArray( result.matched ) ? result.matched : [];
-		const unmatched = Array.isArray( result.unmatched ) ? result.unmatched : [];
-		const summary = q( '#sim-fal-recovery-summary' );
-		const table = q( '#sim-fal-recovery-table' );
-		const body = q( '#sim-fal-recovery-body' );
-		if ( q( '#sim-fal-recovery-matched' ) ) q( '#sim-fal-recovery-matched' ).textContent = String( matched.length );
-		if ( q( '#sim-fal-recovery-unmatched' ) ) q( '#sim-fal-recovery-unmatched' ).textContent = String( unmatched.length );
-		if ( summary ) summary.hidden = false;
-		if ( ! table || ! body ) return;
-		const rows = [];
-		matched.forEach( ( item ) => {
-			const prompt = String( item.prompt || '' );
-			rows.push( `<tr><td>${ escHtml( item.post_title || ( '#' + item.post_id ) ) }</td><td>${ escHtml( item.request_id || '' ) }</td><td>${ escHtml( prompt.length > 140 ? prompt.slice( 0, 137 ) + '…' : prompt ) }</td><td><span class="sim-status sim-status-good">Safe match</span></td></tr>` );
 		} );
-		unmatched.forEach( ( item ) => {
-			const prompt = String( item.prompt || '' );
-			const reason = item.reason ? String( item.reason ) : 'Not matched';
-			rows.push( `<tr><td>${ escHtml( item.near_post_title || '—' ) }</td><td>${ escHtml( item.request_id || '' ) }</td><td>${ escHtml( prompt.length > 140 ? prompt.slice( 0, 137 ) + '…' : prompt ) }</td><td><span class="sim-status sim-status-warn">${ escHtml( reason ) }</span></td></tr>` );
+		q( '#sim-ignored-list' ).addEventListener( 'click', async ( e ) => {
+			const b = e.target.closest( 'button[data-post]' );
+			if ( ! b ) return;
+			b.disabled = true;
+			try {
+				await api( '/review/ignore', 'POST', { post_id: parseInt( b.dataset.post, 10 ), ignored: false } );
+				toast( __( 'Un-ignored. The next run will pick it up again.', 'smart-image-matcher' ) );
+				loadIgnored();
+			} catch ( err ) {
+				b.disabled = false;
+				toast( errMsg( err, __( 'Could not un-ignore.', 'smart-image-matcher' ) ) );
+			}
 		} );
-		body.innerHTML = rows.join( '' );
-		table.hidden = rows.length === 0;
-		const runBtn = q( '#sim-fal-recovery-run-button' );
-		if ( runBtn ) runBtn.disabled = matched.length === 0;
 	}
 
-	async function previewRecovery() {
-		if ( ! apiFetch ) return;
-		recoveryPreview = null;
-		recoveryNotice( 'info', 'Checking recent completed fal.ai images…' );
-		try {
-			const result = await apiFetch( {
-				path: '/smart-image-matcher/v1/generate-images/recover',
-				method: 'POST',
-				data: {
-					discover_recent: true,
-					dry_run: true,
-					hours: recoveryHours(),
-					post_statuses: recoveryStatuses().join( ',' ),
-				},
-			} );
-			recoveryPreview = result;
-			renderRecoveryPreview( result );
-			const matched = Array.isArray( result.matched ) ? result.matched.length : 0;
-			const unmatched = Array.isArray( result.unmatched ) ? result.unmatched.length : 0;
-			recoveryNotice( matched > 0 ? 'success' : 'warning', matched > 0 ? ( matched + ' safe match(es) found; ' + unmatched + ' will remain untouched.' ) : 'No safe matches were found. Nothing will be imported.' );
-		} catch ( err ) {
-			recoveryNotice( 'error', err.message || 'Could not preview fal.ai recovery.' );
-		}
-	}
-
-	async function runRecovery() {
-		const matched = recoveryPreview && Array.isArray( recoveryPreview.matched ) ? recoveryPreview.matched.length : 0;
-		if ( matched <= 0 ) return;
-		if ( ! window.confirm( sprintf( i18n.confirmRecovery || 'Recover %d matched image(s) into WordPress?', matched ) ) ) {
-			return;
-		}
-		try {
-			const result = await apiFetch( {
-				path: '/smart-image-matcher/v1/generate-images/recover',
-				method: 'POST',
-				data: {
-					discover_recent: true,
-					hours: recoveryHours(),
-					post_statuses: recoveryStatuses().join( ',' ),
-				},
-			} );
-			const jobs = Array.isArray( result.jobs ) ? result.jobs : [];
-			recoveryNotice( jobs.length ? 'info' : 'error', jobs.length ? ( jobs.length + ' image(s) queued for recovery.' ) : 'Could not queue fal.ai recovery.' );
-			recoveryPreview = null;
-			const runBtn = q( '#sim-fal-recovery-run-button' );
-			if ( runBtn ) runBtn.disabled = true;
-		} catch ( err ) {
-			recoveryNotice( 'error', err.message || 'Could not queue fal.ai recovery.' );
-		}
-	}
-
-	let lastAuditScan = null;
+	// Fix incorrect featured images.
+	let lastAudit = null;
 
 	function auditNotice( type, message ) {
-		const box = q( '#sim-fiaa-audit-notice' );
-		if ( ! box ) return;
-		box.innerHTML = `<div class="notice notice-${ type || 'info' } inline"><p>${ escHtml( message ) }</p></div>`;
+		q( '#sim-fiaa-audit-notice' ).innerHTML = `<div class="notice notice-${ type } inline"><p>${ esc( message ) }</p></div>`;
 	}
 
 	function auditSettings() {
-		const statuses = qAll( '.sim-audit-status' ).filter( ( item ) => item.checked ).map( ( item ) => item.value );
-		return {
-			post_type: q( '#sim-audit-post-type' )?.value || 'post',
-			post_statuses: statuses.length ? statuses : [ 'draft' ],
-		};
+		const list = qAll( '.sim-audit-status' ).filter( ( el ) => el.checked ).map( ( el ) => el.value );
+		return { post_type: val( '#sim-audit-post-type' ) || 'post', post_statuses: list.length ? list : [ 'draft' ] };
 	}
 
-	function renderAuditResults( result ) {
-		const total = parseInt( result.total_assigned || 0, 10 );
-		const safe = parseInt( result.safe || 0, 10 );
-		const unsafe = parseInt( result.unsafe || 0, 10 );
-		const preview = Array.isArray( result.preview ) ? result.preview : [];
-		const summary = q( '#sim-fiaa-audit-summary' );
+	function renderAudit( res ) {
+		const unsafe = parseInt( res.unsafe || 0, 10 );
+		const preview = Array.isArray( res.preview ) ? res.preview : [];
+		q( '#sim-fiaa-audit-total-assigned' ).textContent = String( parseInt( res.total_assigned || 0, 10 ) );
+		q( '#sim-fiaa-audit-safe' ).textContent = String( parseInt( res.safe || 0, 10 ) );
+		q( '#sim-fiaa-audit-unsafe' ).textContent = String( unsafe );
+		q( '#sim-fiaa-audit-summary' ).hidden = false;
 		const table = q( '#sim-fiaa-audit-table' );
-		const body = q( '#sim-fiaa-audit-body' );
-		if ( q( '#sim-fiaa-audit-total-assigned' ) ) q( '#sim-fiaa-audit-total-assigned' ).textContent = String( total );
-		if ( q( '#sim-fiaa-audit-safe' ) ) q( '#sim-fiaa-audit-safe' ).textContent = String( safe );
-		if ( q( '#sim-fiaa-audit-unsafe' ) ) q( '#sim-fiaa-audit-unsafe' ).textContent = String( unsafe );
-		if ( summary ) summary.hidden = false;
-		if ( table && body ) {
-			if ( preview.length ) {
-				table.hidden = false;
-				body.innerHTML = preview.map( ( item ) => `<tr><td>${ escHtml( item.title || ( '#' + item.id ) ) }</td><td><code>${ escHtml( item.post_slug || '' ) }</code></td><td><code>${ escHtml( item.image_slug || '' ) }</code></td><td>${ escHtml( item.method || '' ) }</td><td>${ escHtml( String( parseInt( item.score || 0, 10 ) ) ) }%</td></tr>` ).join( '' );
-			} else {
-				table.hidden = true;
-				body.innerHTML = '';
-			}
-		}
+		table.hidden = ! preview.length;
+		q( '#sim-fiaa-audit-body' ).innerHTML = preview.map( ( it ) => `<tr><td>${ esc( it.title || '#' + it.id ) }</td><td><code>${ esc( it.post_slug || '' ) }</code></td><td><code>${ esc( it.image_slug || '' ) }</code></td><td>${ esc( it.method || '' ) }</td><td>${ parseInt( it.score || 0, 10 ) }%</td></tr>` ).join( '' );
 		const note = q( '#sim-fiaa-audit-preview-note' );
-		if ( note ) {
-			if ( unsafe > preview.length && preview.length > 0 ) {
-				note.hidden = false;
-				note.textContent = 'Showing the first ' + preview.length + ' of ' + unsafe + ' unsafe posts.';
-			} else {
-				note.hidden = true;
-			}
-		}
-		const clearBtn = q( '#sim-fiaa-audit-clear-button' );
-		if ( clearBtn ) clearBtn.disabled = unsafe <= 0;
+		note.hidden = ! ( unsafe > preview.length && preview.length );
+		note.textContent = sprintf( __( 'Showing the first %1$d of %2$d.', 'smart-image-matcher' ), preview.length, unsafe );
+		q( '#sim-fiaa-audit-clear-button' ).disabled = unsafe <= 0;
 	}
 
 	async function scanAudit() {
-		if ( ! apiFetch ) return;
-		const settings = auditSettings();
-		auditNotice( 'info', 'Scanning featured images…' );
+		const s = auditSettings();
+		auditNotice( 'info', __( 'Scanning featured images…', 'smart-image-matcher' ) );
+		const params = new URLSearchParams();
+		params.set( 'post_type', s.post_type );
+		s.post_statuses.forEach( ( st ) => params.append( 'post_statuses[]', st ) );
 		try {
-			const params = new URLSearchParams();
-			params.set( 'post_type', settings.post_type );
-			settings.post_statuses.forEach( ( status ) => params.append( 'post_statuses[]', status ) );
-			const result = await apiFetch( {
-				path: '/smart-image-matcher/v1/featured-image-audit?' + params.toString(),
-				method: 'GET',
-			} );
-			lastAuditScan = result;
-			renderAuditResults( result );
-			const unsafe = parseInt( result.unsafe || 0, 10 );
-			auditNotice( unsafe > 0 ? 'warning' : 'success', unsafe > 0 ? ( 'Found ' + unsafe + ' unsafe featured image(s).' ) : 'No unsafe featured images were found.' );
+			lastAudit = await api( '/featured-image-audit?' + params.toString() );
+			renderAudit( lastAudit );
+			const unsafe = parseInt( lastAudit.unsafe || 0, 10 );
+			auditNotice( unsafe ? 'warning' : 'success', unsafe ? sprintf( _n( 'Found %d unsafe featured image.', 'Found %d unsafe featured images.', unsafe, 'smart-image-matcher' ), unsafe ) : __( 'No unsafe featured images found.', 'smart-image-matcher' ) );
 		} catch ( err ) {
-			auditNotice( 'error', err.message || 'Could not scan featured images.' );
+			auditNotice( 'error', errMsg( err, __( 'Could not scan featured images.', 'smart-image-matcher' ) ) );
 		}
 	}
 
 	async function clearAudit() {
-		if ( ! apiFetch ) return;
-		const unsafe = lastAuditScan ? parseInt( lastAuditScan.unsafe || 0, 10 ) : 0;
-		if ( unsafe <= 0 ) {
-			auditNotice( 'error', 'No unsafe featured images were found.' );
-			return;
-		}
-		if ( ! window.confirm( i18n.confirmAuditClear || 'Remove unsafe featured images from the scanned posts?' ) ) {
-			return;
-		}
+		if ( ! lastAudit || parseInt( lastAudit.unsafe || 0, 10 ) <= 0 ) return;
+		if ( ! window.confirm( __( 'Remove unsafe featured images from the scanned posts? Exact and prefix matches are left alone.', 'smart-image-matcher' ) ) ) return;
 		try {
-			const job = await apiFetch( {
-				path: '/smart-image-matcher/v1/featured-image-audit/clear',
-				method: 'POST',
-				data: auditSettings(),
-			} );
+			const job = await api( '/featured-image-audit/clear', 'POST', auditSettings() );
 			if ( ! job.job_id ) {
-				auditNotice( 'success', job.message || 'No unsafe featured images were found.' );
-				lastAuditScan = { total_assigned: 0, safe: 0, unsafe: 0, preview: [] };
-				renderAuditResults( lastAuditScan );
+				auditNotice( 'success', job.message || __( 'No unsafe featured images found.', 'smart-image-matcher' ) );
+				renderAudit( { total_assigned: 0, safe: 0, unsafe: 0, preview: [] } );
 				return;
 			}
-			auditNotice( 'info', 'Cleanup queued. Refresh this panel in a minute if counts have not dropped.' );
+			auditNotice( 'info', __( 'Cleanup queued. Scan again in a minute to see the new counts.', 'smart-image-matcher' ) );
 		} catch ( err ) {
-			auditNotice( 'error', err.message || 'Could not start cleanup.' );
+			auditNotice( 'error', errMsg( err, __( 'Could not start the cleanup.', 'smart-image-matcher' ) ) );
 		}
 	}
 
-	function fillAuditPostTypes() {
-		const select = q( '#sim-audit-post-type' );
-		if ( ! select ) return;
-		select.innerHTML = '';
-		Object.entries( postTypes ).forEach( ( [ slug, label ] ) => {
-			select.insertAdjacentHTML( 'beforeend', `<option value="${ escHtml( slug ) }">${ escHtml( label ) }</option>` );
-		} );
+	// Recover finished fal.ai images.
+	let recovery = null;
+
+	function recoveryNotice( type, message ) {
+		q( '#sim-fal-recovery-notice' ).innerHTML = `<div class="notice notice-${ type } inline"><p>${ esc( message ) }</p></div>`;
+	}
+
+	function recoveryBody( dry ) {
+		const list = statuses();
+		const body = {
+			discover_recent: true,
+			hours: parseInt( val( '#sim-fal-recovery-hours' ) || '48', 10 ),
+			post_statuses: ( list.length ? list : [ 'draft' ] ).join( ',' ),
+		};
+		if ( dry ) body.dry_run = true;
+		return body;
+	}
+
+	function cut( text ) {
+		const s = String( text || '' );
+		return s.length > 140 ? s.slice( 0, 137 ) + '…' : s;
+	}
+
+	async function previewRecovery() {
+		recovery = null;
+		recoveryNotice( 'info', __( 'Checking recently finished images…', 'smart-image-matcher' ) );
+		try {
+			const res = await api( '/generate-images/recover', 'POST', recoveryBody( true ) );
+			recovery = res;
+			const matched = Array.isArray( res.matched ) ? res.matched : [];
+			const unmatched = Array.isArray( res.unmatched ) ? res.unmatched : [];
+			q( '#sim-fal-recovery-matched' ).textContent = String( matched.length );
+			q( '#sim-fal-recovery-unmatched' ).textContent = String( unmatched.length );
+			q( '#sim-fal-recovery-summary' ).hidden = false;
+			const rows = matched.map( ( it ) => `<tr><td>${ esc( it.post_title || '#' + it.post_id ) }</td><td>${ esc( it.request_id || '' ) }</td><td>${ esc( cut( it.prompt ) ) }</td><td><span class="sim-pill is-ran">${ esc( __( 'Safe match', 'smart-image-matcher' ) ) }</span></td></tr>` )
+				.concat( unmatched.map( ( it ) => `<tr><td>${ esc( it.near_post_title || '—' ) }</td><td>${ esc( it.request_id || '' ) }</td><td>${ esc( cut( it.prompt ) ) }</td><td><span class="sim-pill is-skip">${ esc( it.reason || __( 'Not matched', 'smart-image-matcher' ) ) }</span></td></tr>` ) );
+			q( '#sim-fal-recovery-body' ).innerHTML = rows.join( '' );
+			q( '#sim-fal-recovery-table' ).hidden = ! rows.length;
+			q( '#sim-fal-recovery-run-button' ).disabled = ! matched.length;
+			recoveryNotice( matched.length ? 'success' : 'warning', matched.length
+				? sprintf( __( '%1$d safe match(es); %2$d will be left alone.', 'smart-image-matcher' ), matched.length, unmatched.length )
+				: __( 'No safe matches. Nothing will be imported.', 'smart-image-matcher' ) );
+		} catch ( err ) {
+			recoveryNotice( 'error', errMsg( err, __( 'Could not preview the recovery.', 'smart-image-matcher' ) ) );
+		}
+	}
+
+	async function runRecovery() {
+		const n = recovery && Array.isArray( recovery.matched ) ? recovery.matched.length : 0;
+		if ( ! n ) return;
+		if ( ! window.confirm( sprintf( _n( 'Import %d matched image into WordPress? Unmatched images are not imported.', 'Import %d matched images into WordPress? Unmatched images are not imported.', n, 'smart-image-matcher' ), n ) ) ) return;
+		try {
+			const res = await api( '/generate-images/recover', 'POST', recoveryBody( false ) );
+			const jobs = Array.isArray( res.jobs ) ? res.jobs.length : 0;
+			recoveryNotice( jobs ? 'info' : 'error', jobs ? sprintf( _n( '%d image queued for import.', '%d images queued for import.', jobs, 'smart-image-matcher' ), jobs ) : __( 'Could not queue the import.', 'smart-image-matcher' ) );
+			recovery = null;
+			q( '#sim-fal-recovery-run-button' ).disabled = true;
+		} catch ( err ) {
+			recoveryNotice( 'error', errMsg( err, __( 'Could not queue the import.', 'smart-image-matcher' ) ) );
+		}
 	}
 
 	function bindTools() {
-		fillAuditPostTypes();
-		q( '#sim-fal-recovery-preview-button' )?.addEventListener( 'click', previewRecovery );
-		q( '#sim-fal-recovery-run-button' )?.addEventListener( 'click', runRecovery );
-		q( '#sim-fiaa-audit-scan-button' )?.addEventListener( 'click', scanAudit );
-		q( '#sim-fiaa-audit-clear-button' )?.addEventListener( 'click', clearAudit );
+		const select = q( '#sim-audit-post-type' );
+		select.innerHTML = Object.entries( postTypes ).map( ( [ slug, label ] ) => `<option value="${ esc( slug ) }">${ esc( label ) }</option>` ).join( '' );
+		q( '#sim-fiaa-audit-scan-button' ).addEventListener( 'click', scanAudit );
+		q( '#sim-fiaa-audit-clear-button' ).addEventListener( 'click', clearAudit );
+		q( '#sim-fal-recovery-preview-button' ).addEventListener( 'click', previewRecovery );
+		q( '#sim-fal-recovery-run-button' ).addEventListener( 'click', runRecovery );
+		bindToolLists();
 	}
 
-	function bindChrome() {
-		qAll( '.sim-tab' ).forEach( ( tab ) => {
-			tab.addEventListener( 'click', ( event ) => {
-				event.preventDefault();
-				setTab( tab.dataset.tab );
-			} );
-		} );
-		qAll( '[data-sim-gen-cancel]' ).forEach( ( el ) => {
-			el.addEventListener( 'click', closeGenerateModal );
-		} );
-		q( '#sim-gen-confirm' )?.addEventListener( 'click', async () => {
-			closeGenerateModal();
-			await startJob( 'generate-featured' );
-		} );
-		qAll( '[data-sim-review-close]' ).forEach( ( el ) => {
-			el.addEventListener( 'click', closeReviewModal );
-		} );
-		q( '#sim-review-modal-prev' )?.addEventListener( 'click', () => stepReviewModal( -1 ) );
-		q( '#sim-review-modal-next' )?.addEventListener( 'click', () => stepReviewModal( 1 ) );
-		q( '#sim-review-modal-approve' )?.addEventListener( 'click', async () => {
-			const heading = currentReviewHeading();
-			if ( ! heading ) return;
-			await updateMatch( parseInt( heading.id, 10 ), 'approved' );
-		} );
-		q( '#sim-review-modal-reject' )?.addEventListener( 'click', async () => {
-			const heading = currentReviewHeading();
-			if ( ! heading ) return;
-			await updateMatch( parseInt( heading.id, 10 ), 'rejected' );
-		} );
-		q( '#sim-review-modal-undo' )?.addEventListener( 'click', async () => {
-			const heading = currentReviewHeading();
-			if ( ! heading ) return;
-			await updateMatch( parseInt( heading.id, 10 ), 'pending' );
-		} );
-		q( '#sim-review-modal-never' )?.addEventListener( 'click', async () => {
-			const heading = currentReviewHeading();
-			if ( ! heading ) return;
-			await excludeImage( parseInt( heading.id, 10 ) );
-		} );
-		document.addEventListener( 'keydown', ( event ) => {
-			const modal = q( '#sim-review-modal' );
-			if ( ! modal || modal.hidden ) return;
-			if ( event.key === 'Escape' ) {
-				closeReviewModal();
-			}
-			if ( event.key === 'ArrowLeft' ) {
-				stepReviewModal( -1 );
-			}
-			if ( event.key === 'ArrowRight' ) {
-				stepReviewModal( 1 );
-			}
-		} );
-	}
-
-	if ( ! app ) {
-		return;
-	}
+	// ---------------------------------------------------------------------
+	// Boot
+	// ---------------------------------------------------------------------
 
 	if ( ! apiFetch ) {
-		const root = q( '.sim-bulk-panel[data-panel="run"]' ) || app;
-		root.innerHTML = '<div class="notice notice-error inline"><p>Bulk Processor could not load because wp.apiFetch is unavailable.</p></div>';
+		q( '.sim-bulk-panel[data-panel="run"]' ).innerHTML = '<div class="notice notice-error inline"><p>Bulk Processor could not load because wp.apiFetch is unavailable.</p></div>';
 		return;
 	}
 
-	bindChrome();
+	qAll( '.sim-bp-tab' ).forEach( ( tab ) => tab.addEventListener( 'click', ( e ) => {
+		e.preventDefault();
+		setTab( tab.dataset.tab );
+	} ) );
+	app.addEventListener( 'click', ( e ) => {
+		const go = e.target.closest( '[data-goto-tab]' );
+		if ( go ) setTab( go.dataset.gotoTab );
+	} );
+	q( '#sim-insert-approved' ).addEventListener( 'click', insertApproved );
+	document.addEventListener( 'keydown', onKey );
+
+	buildRun();
+	bindModals();
 	bindTools();
-	syncToolsVisibility();
-	if ( currentTab === 'review' ) {
-		buildReview();
-		restoreJob();
-	} else {
-		restoreJob();
-	}
+	restoreJob();
+	setTab( state.tab );
+	loadHealth();
+	if ( state.tab !== 'review' ) refreshReviewCount();
+	window.setInterval( loadHealth, 60000 );
 }() );

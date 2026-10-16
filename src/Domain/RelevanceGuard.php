@@ -31,6 +31,51 @@ class RelevanceGuard {
 	const PLACE_CONFLICT  = 'place_conflict';
 	const NO_SHARED_TOPIC = 'no_shared_topic';
 
+	/** Post meta: candidates these rules dropped during the article's last run. */
+	const META_FILTERED = '_smart_image_matcher_filtered';
+
+	/**
+	 * Candidates rejected by filter() since the last takeRejectedCount().
+	 *
+	 * @var int
+	 */
+	private static int $rejectedCount = 0;
+
+	/**
+	 * Read and reset the running rejected-candidate count.
+	 *
+	 * @since 3.7.0
+	 * @return int
+	 */
+	public static function takeRejectedCount(): int {
+		$n                   = self::$rejectedCount;
+		self::$rejectedCount = 0;
+		return $n;
+	}
+
+	/**
+	 * Words a heading and an image share once places and generic legal words are removed.
+	 *
+	 * Shown on Review cards ("Shared: animal, waste").
+	 *
+	 * @since 3.7.0
+	 * @param string               $heading_text Heading text.
+	 * @param array<string, mixed> $image        Row with filename / title / alt.
+	 * @return string[]
+	 */
+	public static function sharedTopicTerms( string $heading_text, array $image ): array {
+		$places     = self::placeTerms();
+		$image_text = implode(
+			' ',
+			array(
+				pathinfo( (string) ( $image['filename'] ?? '' ), PATHINFO_FILENAME ),
+				(string) ( $image['title'] ?? '' ),
+				(string) ( $image['alt'] ?? '' ),
+			)
+		);
+		return array_values( array_unique( array_intersect( self::topicTerms( $heading_text, $places ), self::topicTerms( $image_text, $places ) ) ) );
+	}
+
 	/**
 	 * US states + DC. Multi-word names first so "west virginia" is consumed
 	 * before "virginia" is looked for.
@@ -147,12 +192,16 @@ class RelevanceGuard {
 	 * @return array<int, array<string, mixed>>
 	 */
 	public static function filter( array $candidates, string $heading_text, string $context_text ): array {
-		return array_values(
+		$kept = array_values(
 			array_filter(
 				$candidates,
 				static fn( array $image ): bool => '' === self::rejectReason( $heading_text, $context_text, $image )
 			)
 		);
+
+		self::$rejectedCount += count( $candidates ) - count( $kept );
+
+		return $kept;
 	}
 
 	/**

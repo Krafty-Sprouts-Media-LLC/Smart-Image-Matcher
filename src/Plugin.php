@@ -437,9 +437,11 @@ class Plugin {
 		$this->container->get( 'rest.featured_image' )->registerRoutes();
 		$this->container->get( 'rest.image_gen' )->registerRoutes();
 		( new \SmartImageMatcher\REST\MissingImagesController() )->registerRoutes();
+		( new \SmartImageMatcher\REST\DashboardController() )->registerRoutes();
 
 		if ( Premium::has( 'rest_premium_endpoints' ) ) {
 			$this->container->get( 'rest.bulk' )->registerRoutes();
+			( new \SmartImageMatcher\REST\ReviewToolsController() )->registerRoutes();
 		}
 	}
 
@@ -466,6 +468,26 @@ class Plugin {
 				array( 'smart-image-matcher-admin' ),
 				filemtime( SMART_IMAGE_MATCHER_PLUGIN_DIR . 'admin/css/sim-pages.css' )
 			);
+		}
+
+		if ( 'toplevel_page_smart-image-matcher' === $hook ) {
+			$dash_css = SMART_IMAGE_MATCHER_PLUGIN_DIR . 'admin/css/sim-dashboard.css';
+			wp_enqueue_style(
+				'smart-image-matcher-dashboard',
+				SMART_IMAGE_MATCHER_PLUGIN_URL . 'admin/css/sim-dashboard.css',
+				array( 'smart-image-matcher-pages' ),
+				file_exists( $dash_css ) ? (string) filemtime( $dash_css ) : SMART_IMAGE_MATCHER_VERSION
+			);
+			$dash_js = SMART_IMAGE_MATCHER_PLUGIN_DIR . 'admin/js/src/dashboard.js';
+			wp_enqueue_script(
+				'smart-image-matcher-dashboard',
+				SMART_IMAGE_MATCHER_PLUGIN_URL . 'admin/js/src/dashboard.js',
+				array( 'wp-api-fetch', 'wp-i18n' ),
+				file_exists( $dash_js ) ? (string) filemtime( $dash_js ) : SMART_IMAGE_MATCHER_VERSION,
+				true
+			);
+			wp_set_script_translations( 'smart-image-matcher-dashboard', 'smart-image-matcher', SMART_IMAGE_MATCHER_PLUGIN_DIR . 'languages' );
+			// The chart data and nonce are printed by the view (admin/views/dashboard.php).
 		}
 
 		if ( false !== strpos( $hook, 'smart-image-matcher-settings' ) ) {
@@ -777,10 +799,11 @@ class Plugin {
 			)
 		);
 
-		// Rejected matches > 30 days.
+		// Rejected matches > 1 year. They are the "remembered Reject" memory
+		// (MatchRepository::rejectedImageIds), so they outlive pending rows.
 		$wpdb->query(
 			$wpdb->prepare(
-				"DELETE FROM {$matches} WHERE status = %s AND created_at < DATE_SUB(NOW(), INTERVAL 30 DAY)",
+				"DELETE FROM {$matches} WHERE status = %s AND created_at < DATE_SUB(NOW(), INTERVAL 365 DAY)",
 				'rejected'
 			)
 		);

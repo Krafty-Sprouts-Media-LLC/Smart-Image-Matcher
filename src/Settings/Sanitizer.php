@@ -189,6 +189,27 @@ class Sanitizer {
 	}
 
 	/**
+	 * Remove one filename from the blocked list (compared normalized, like matching).
+	 *
+	 * @since 3.7.0
+	 * @param string $raw Filename or slug to unblock.
+	 * @return string New stored list.
+	 */
+	public function removeExcludedImageSlug( string $raw ): string {
+		$target = $this->peelWpMediaCopySuffix( $this->normalizeImageSlug( $raw ) );
+		$kept   = array();
+		foreach ( preg_split( '/\R+/', (string) Settings::get( 'fiaa_excluded_image_slugs' ) ) ?: array() as $line ) {
+			if ( '' === trim( (string) $line ) ) {
+				continue;
+			}
+			if ( $this->peelWpMediaCopySuffix( $this->normalizeImageSlug( (string) $line ) ) !== $target ) {
+				$kept[] = (string) $line;
+			}
+		}
+		return $this->excludedImageSlugs( implode( "\n", $kept ) );
+	}
+
+	/**
 	 * Normalize a filename or slug the same way FIAA compares attachment slugs.
 	 *
 	 * @since 3.0.9

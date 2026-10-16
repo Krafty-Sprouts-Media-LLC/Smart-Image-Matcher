@@ -56,7 +56,7 @@ class QueueWatchdog {
 	/**
 	 * Recent scheduled ticks kept for the Dashboard.
 	 */
-	const MAX_TICKS = 12;
+	const MAX_TICKS = 96;
 
 	/**
 	 * Admin-post action for "Check now".
@@ -236,7 +236,7 @@ class QueueWatchdog {
 	 * @param string $job_id Job ID (appears in each action's args).
 	 * @return int
 	 */
-	private static function remainingActions( string $job_id ): int {
+	public static function remainingActions( string $job_id ): int {
 		if ( '' === $job_id || ! function_exists( 'as_get_scheduled_actions' ) || ! class_exists( '\ActionScheduler_Store' ) ) {
 			return 1; // Unknown: never close a job we cannot inspect.
 		}
@@ -392,6 +392,11 @@ class QueueWatchdog {
 			$state = 'bad';
 			/* translators: 1: hook name, 2: minutes */
 			$title = sprintf( __( 'Blocked: %1$s has been running for %2$d min', 'smart-image-matcher' ), $queue['stuck_hook'], $queue['stuck_minutes'] );
+		} elseif ( $queue['past_due'] > 0 && $queue['oldest_past_due_minutes'] >= 30 && $queue['completed_recent'] > 0 ) {
+			// Still working through the backlog: not an outage.
+			$state = 'warn';
+			/* translators: 1: count, 2: count */
+			$title = sprintf( __( 'Busy: %1$d actions waiting, %2$d finished in the last 10 min', 'smart-image-matcher' ), $queue['past_due'], $queue['completed_recent'] );
 		} elseif ( $queue['past_due'] > 0 && $queue['oldest_past_due_minutes'] >= 30 ) {
 			$state = 'bad';
 			/* translators: 1: count, 2: minutes */
@@ -431,6 +436,7 @@ class QueueWatchdog {
 			'stuck_since'             => '',
 			'stuck_minutes'           => 0,
 			'stale_claims'            => 0,
+			'completed_recent'        => 0,
 		);
 
 		$actions = $wpdb->prefix . 'actionscheduler_actions';
@@ -468,6 +474,16 @@ class QueueWatchdog {
 			ARRAY_A
 		);
 
+		// Finished in the last 10 minutes: a long backlog that is still moving is busy, not blocked.
+		$recent = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT(*) FROM {$actions} a
+				 INNER JOIN {$groups} g ON g.group_id = a.group_id
+				 WHERE g.slug = %s AND a.status = 'complete' AND a.last_attempt_gmt > DATE_SUB(UTC_TIMESTAMP(), INTERVAL 10 MINUTE)",
+				Queue::GROUP
+			)
+		);
+
 		$stale = (int) $wpdb->get_var(
 			$wpdb->prepare(
 				"SELECT COUNT(DISTINCT a.claim_id)
@@ -494,7 +510,8 @@ class QueueWatchdog {
 			$snap['stuck_minutes'] = (int) round( ( time() - (int) strtotime( $stuck['since'] . ' UTC' ) ) / 60 );
 		}
 
-		$snap['stale_claims'] = $stale;
+		$snap['stale_claims']     = $stale;
+		$snap['completed_recent'] = $recent;
 
 		return $snap;
 	}

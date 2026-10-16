@@ -26,6 +26,10 @@ if ( ! defined( 'DAY_IN_SECONDS' ) ) {
 	define( 'DAY_IN_SECONDS', 86400 );
 }
 
+if ( ! defined( 'MINUTE_IN_SECONDS' ) ) {
+	define( 'MINUTE_IN_SECONDS', 60 );
+}
+
 if ( ! defined( 'SIM_VERSION' ) ) {
 	define( 'SIM_VERSION', '3.0.0' );
 }
@@ -126,6 +130,7 @@ if ( ! function_exists( 'as_schedule_recurring_action' ) ) {
 		abstract class ActionScheduler_Store {
 			const STATUS_PENDING = 'pending';
 			const STATUS_RUNNING = 'in-progress';
+			const STATUS_FAILED  = 'failed';
 			/** @param string $action_id Action ID. */
 			abstract public function fetch_action( $action_id ): ActionScheduler_Action;
 		}

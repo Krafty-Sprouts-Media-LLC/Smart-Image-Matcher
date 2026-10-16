@@ -23,6 +23,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 use SmartImageMatcher\Domain\ArticleProcessor;
+use SmartImageMatcher\Domain\IgnoredArticles;
+use SmartImageMatcher\Domain\RelevanceGuard;
 use SmartImageMatcher\FeaturedImages\FeaturedImageService;
 use SmartImageMatcher\FeaturedImages\SlugMapBuilder;
 use SmartImageMatcher\Insertion\BlockBuilder;
@@ -136,6 +138,8 @@ class BulkController extends Controller {
 					'per_page' => array( 'type' => 'integer', 'minimum' => 1, 'maximum' => 50, 'default' => 20, 'sanitize_callback' => 'absint' ),
 					'slot'     => array( 'type' => 'string', 'enum' => array( 'all', 'heading', 'featured' ), 'default' => 'all', 'sanitize_callback' => 'sanitize_key' ),
 					'run'      => array( 'type' => 'string', 'enum' => array( 'all', 'last' ), 'default' => 'all', 'sanitize_callback' => 'sanitize_key' ),
+					'search'   => array( 'type' => 'string', 'default' => '', 'sanitize_callback' => 'sanitize_text_field' ),
+					'band'     => array( 'type' => 'string', 'enum' => array( 'all', 'hi', 'mid', 'lo' ), 'default' => 'all', 'sanitize_callback' => 'sanitize_key' ),
 				),
 			),
 		) );
@@ -160,8 +164,9 @@ class BulkController extends Controller {
 			'callback'            => array( $this, 'approveArticle' ),
 			'permission_callback' => array( $this, 'checkAdminPermission' ),
 			'args'                => array(
-				'post_id' => array( 'type' => 'integer', 'required' => true, 'sanitize_callback' => 'absint' ),
-				'run'     => array( 'type' => 'string', 'enum' => array( 'all', 'last' ), 'default' => 'all', 'sanitize_callback' => 'sanitize_key' ),
+				'post_id'   => array( 'type' => 'integer', 'required' => true, 'sanitize_callback' => 'absint' ),
+				'run'       => array( 'type' => 'string', 'enum' => array( 'all', 'last' ), 'default' => 'all', 'sanitize_callback' => 'sanitize_key' ),
+				'min_score' => array( 'type' => 'integer', 'minimum' => 0, 'maximum' => 100, 'default' => 0, 'sanitize_callback' => 'absint' ),
 			),
 		) );
 
@@ -768,6 +773,8 @@ class BulkController extends Controller {
 		global $wpdb;
 
 		$matchesTable = esc_sql( $wpdb->prefix . 'smart_image_matcher_matches' );
+		// Approved rows still waiting for Insert approved (shown in the Review dock).
+		$approved_waiting = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$matchesTable} WHERE status = 'approved'" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$where        = array( "m.status = 'pending'" );
 		$args         = array();
 
@@ -775,6 +782,35 @@ class BulkController extends Controller {
 			$where[] = "( m.heading_hash = 'featured' OR m.heading_tag = 'featured' )";
 		} elseif ( 'heading' === $slot ) {
 			$where[] = "m.heading_hash <> 'featured' AND ( m.heading_tag IS NULL OR m.heading_tag <> 'featured' )";
+		}
+
+		// Score band (applies to the article list and to the rows shown).
+		$band     = sanitize_key( (string) $request->get_param( 'band' ) );
+		$auto     = (int) Settings::get( 'auto_insert_threshold' );
+		$band_sql = '';
+		if ( 'hi' === $band ) {
+			$band_sql = sprintf( ' AND m.confidence_score >= %d', $auto );
+		} elseif ( 'mid' === $band ) {
+			$band_sql = sprintf( ' AND m.confidence_score >= 80 AND m.confidence_score < %d', $auto );
+		} elseif ( 'lo' === $band ) {
+			$band_sql = ' AND m.confidence_score < 80';
+		}
+		if ( '' !== $band_sql ) {
+			$where[] = ltrim( substr( $band_sql, 5 ) );
+		}
+
+		// Search: article title, heading text, or post ID.
+		$search = trim( (string) $request->get_param( 'search' ) );
+		if ( '' !== $search ) {
+			if ( ctype_digit( $search ) ) {
+				$where[] = 'm.post_id = %d';
+				$args[]  = (int) $search;
+			} else {
+				$like    = '%' . $wpdb->esc_like( $search ) . '%';
+				$where[] = '( p.post_title LIKE %s OR m.heading_text LIKE %s )';
+				$args[]  = $like;
+				$args[]  = $like;
+			}
 		}
 
 		if ( 'last' === $run ) {
@@ -787,28 +823,33 @@ class BulkController extends Controller {
 						'page'           => $page,
 						'per_page'       => $perPage,
 						'run'            => 'last',
+						'approved_waiting' => $approved_waiting,
 					)
 				);
 			}
-			$where[] = 'm.created_at >= %s';
-			$args[]  = (string) $last['created_at'];
+			$where[]     = 'm.created_at >= %s';
+			$args[]      = (string) $last['created_at'];
+			$since_value = (string) $last['created_at'];
 		}
 
 		$whereSql = implode( ' AND ', $where );
 		$offset   = ( $page - 1 ) * $perPage;
 
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
-		$count_sql = "SELECT COUNT(DISTINCT m.post_id) FROM {$matchesTable} m WHERE {$whereSql}";
-		$list_sql  = "SELECT DISTINCT m.post_id FROM {$matchesTable} m WHERE {$whereSql} ORDER BY m.post_id DESC LIMIT %d OFFSET %d";
+		$from      = "{$matchesTable} m LEFT JOIN {$wpdb->posts} p ON p.ID = m.post_id";
+		$count_sql = "SELECT COUNT(DISTINCT m.post_id) AS articles, COUNT(*) AS suggestions FROM {$from} WHERE {$whereSql}";
+		$list_sql  = "SELECT DISTINCT m.post_id FROM {$from} WHERE {$whereSql} ORDER BY m.post_id DESC LIMIT %d OFFSET %d";
 
 		if ( ! empty( $args ) ) {
-			$total_articles = (int) $wpdb->get_var( $wpdb->prepare( $count_sql, $args ) );
-			$list_args      = array_merge( $args, array( $perPage, $offset ) );
-			$post_ids       = $wpdb->get_col( $wpdb->prepare( $list_sql, $list_args ) );
+			$totals_row = $wpdb->get_row( $wpdb->prepare( $count_sql, $args ), ARRAY_A );
+			$list_args  = array_merge( $args, array( $perPage, $offset ) );
+			$post_ids   = $wpdb->get_col( $wpdb->prepare( $list_sql, $list_args ) );
 		} else {
-			$total_articles = (int) $wpdb->get_var( $count_sql );
-			$post_ids       = $wpdb->get_col( $wpdb->prepare( $list_sql, $perPage, $offset ) );
+			$totals_row = $wpdb->get_row( $count_sql, ARRAY_A );
+			$post_ids   = $wpdb->get_col( $wpdb->prepare( $list_sql, $perPage, $offset ) );
 		}
+		$total_articles    = (int) ( $totals_row['articles'] ?? 0 );
+		$total_suggestions = (int) ( $totals_row['suggestions'] ?? 0 );
 		// phpcs:enable
 
 		$post_ids = array_map( 'absint', is_array( $post_ids ) ? $post_ids : array() );
@@ -822,6 +863,7 @@ class BulkController extends Controller {
 					'page'           => $page,
 					'per_page'       => $perPage,
 					'run'            => $run,
+					'approved_waiting' => $approved_waiting,
 				)
 			);
 		}
@@ -837,20 +879,20 @@ class BulkController extends Controller {
 		}
 
 		$since_sql = '';
-		if ( 'last' === $run && ! empty( $args ) ) {
+		if ( isset( $since_value ) ) {
 			$since_sql  = ' AND m.created_at >= %s';
-			$row_args[] = $args[0];
+			$row_args[] = $since_value;
 		}
 
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT m.*, p.post_title
+				"SELECT m.*, p.post_title, p.post_status
 				 FROM {$matchesTable} m
 				 LEFT JOIN {$wpdb->posts} p ON p.ID = m.post_id
 				 WHERE m.status = 'pending'
 				   AND m.post_id IN ({$placeholders})
-				   {$slot_sql}{$since_sql}
+				   {$slot_sql}{$since_sql}{$band_sql}
 				 ORDER BY m.post_id DESC, m.confidence_score DESC",
 				$row_args
 			),
@@ -862,7 +904,12 @@ class BulkController extends Controller {
 		foreach ( $rows as $i => $row ) {
 			if ( 'featured' === ( $row['heading_hash'] ?? '' ) || 'featured' === ( $row['heading_tag'] ?? '' ) ) {
 				$rows[ $i ]['reason'] = self::featuredReason( $row );
+				continue;
 			}
+			// Words the heading and the image share — one word is the weakest kind of match.
+			$shared               = RelevanceGuard::sharedTopicTerms( (string) ( $row['heading_text'] ?? '' ), array( 'filename' => (string) ( $row['image_file'] ?? '' ) ) );
+			$rows[ $i ]['shared'] = $shared;
+			$rows[ $i ]['thin']   = count( $shared ) <= 1;
 		}
 		$articles = array_values(
 			array_filter(
@@ -872,14 +919,22 @@ class BulkController extends Controller {
 				}
 			)
 		);
+		foreach ( $articles as $i => $article ) {
+			$first                       = $article['headings'][0] ?? array();
+			$status                      = get_post_status_object( (string) ( $first['post_status'] ?? '' ) );
+			$articles[ $i ]['status']    = $status ? (string) $status->label : '';
+			$articles[ $i ]['filtered']  = (int) get_post_meta( (int) $article['post_id'], RelevanceGuard::META_FILTERED, true );
+		}
 
 		return rest_ensure_response(
 			array(
-				'articles'       => $articles,
-				'total_articles' => $total_articles,
+				'articles'          => $articles,
+				'total_suggestions' => $total_suggestions,
+				'total_articles'    => $total_articles,
 				'page'           => $page,
 				'per_page'       => $perPage,
 				'run'            => $run,
+					'approved_waiting' => $approved_waiting,
 			)
 		);
 	}
@@ -928,8 +983,9 @@ class BulkController extends Controller {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function approveArticle( \WP_REST_Request $request ) {
-		$post_id = (int) $request->get_param( 'post_id' );
-		$run     = sanitize_key( (string) $request->get_param( 'run' ) );
+		$post_id   = (int) $request->get_param( 'post_id' );
+		$run       = sanitize_key( (string) $request->get_param( 'run' ) );
+		$min_score = (int) $request->get_param( 'min_score' );
 
 		if ( $post_id <= 0 || ! current_user_can( 'edit_post', $post_id ) ) {
 			return new \WP_Error(
@@ -941,7 +997,7 @@ class BulkController extends Controller {
 
 		return rest_ensure_response(
 			array(
-				'approved' => $this->approvePendingMatches( $run, $post_id, null ),
+				'approved' => $this->approvePendingMatches( $run, $post_id, $min_score > 0 ? $min_score : null ),
 				'post_id'  => $post_id,
 			)
 		);
@@ -1515,6 +1571,11 @@ class BulkController extends Controller {
 					),
 				);
 			}
+
+			// Ignored articles are never queued.
+			$args['meta_query'] = isset( $args['meta_query'] ) // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+				? array( 'relation' => 'AND', IgnoredArticles::excludeClause(), $args['meta_query'] )
+				: array( IgnoredArticles::excludeClause() );
 
 			$search = (string) ( $filters['search'] ?? '' );
 			if ( '' !== $search ) {

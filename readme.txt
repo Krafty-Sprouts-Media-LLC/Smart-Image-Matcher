@@ -4,7 +4,7 @@ Tags: images, media library, alt text, featured image, automation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 3.6.2
+Stable tag: 3.7.0
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -95,6 +95,16 @@ No AI data is sent automatically — only when you explicitly trigger AI matchin
 The plugin stores match results and job metadata in your own database only. Update checks may contact GitHub (see External services). No post content leaves your server unless you explicitly use AI features with a configured provider.
 
 == Changelog ==
+
+= 3.7.0 =
+* New Bulk Processor: Run, Review, Schedule and Tools tabs, with a strip at the top that says whether automatic runs are working.
+* Run shows how many articles match before you start, what each score band does, and progress with time left. Published is never ticked for you.
+* Review groups suggestions by article. You can approve the strong ones, reject all, or ignore an article, each with Undo. Every suggestion shows the words it shares with the image and warns when only one word matches. Rejecting is remembered for that heading only. Blocking an image site-wide is behind the ⋯ menu and explains what it will do before you confirm. Keyboard: A approve, R reject, J/K move.
+* Schedule shows the automatic-run settings, every run (including skipped ones), and lets you close a stuck run or re-queue articles it lost.
+* Tools now lists blocked images and ignored articles so you can undo either.
+* New Dashboard: images inserted today, the Review backlog, the current run with time left, featured coverage, a runs-by-hour chart that shows stalls, recent runs, what the queue is doing right now, things that need you, and errors grouped by message with Dismiss.
+* Fixed: featured coverage could show more than 100%.
+* Fixed: the queue showed "Blocked" while it was busy but still working; it now says "Busy" and keeps red for a queue that has stopped.
 
 = 3.6.2 =
 * Fixed: featured-image suggestions never appeared in Review on sites with a fallback featured image (e.g. KSM Extensions). Review hid every featured suggestion because the fallback made every post look like it already had one. Review now uses the same rule as runs: a real, saved featured image. Suggestions created before this update show up again. AI-generated featured images are also set correctly on those sites.

@@ -7,6 +7,31 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.7.0] - 16/10/2026
+
+### Added
+
+- **Bulk Processor redesign** (`admin/views/bulk-processor.php`, `admin/js/src/bulk.js`, `admin/css/sim-bulk.css`), built from `docs/html-demos/bulk-processor-redesign.html`. Four tabs: Run | Review | Schedule | Tools, plus a health strip that says whether automatic runs are working.
+  - **Run:** step-by-step form (mode → which articles → options) with a summary rail that shows the live article count (`POST /jobs` with `dry_run`), the score bands, and the button labelled with the count. Status chips (Draft ticked, Published never pre-ticked), featured-image segmented control, "More filters" disclosure (IDs/slugs, taxonomy, content, published/modified dates, stop after). What to fill is a segmented control; Replace featured images hides for headings-only runs; image style only appears for Generate. Saved selections can be deleted. Progress shows Inserted / To review / No good match / Had an image, an ETA, and errors.
+  - **Review:** one row per article with a score-distribution bar, status, and "N hidden by rules". Per article: Approve ≥ auto (only the suggestions shown), Reject all, Ignore article — each with Undo. Bulk bar for selected articles. Filters: search (title, heading or post ID), slot, score band, source. Each suggestion shows the shared topic words, flags one-word matches, and shows the featured reason. ✓ approves; ✕ rejects **for that heading only** and is remembered. "Block site-wide…" sits behind ⋯ with a confirmation that lists what it affects (`GET /review/block-impact`); it has no keyboard shortcut. Keys: A approve, R reject here, J/K move. Sticky dock with approved/rejected tallies and Insert approved.
+  - **Schedule:** automatic-run settings, open runs with **Close stuck job** and **Re-queue lost**, and every logged tick including skips.
+  - **Tools:** Fix incorrect featured images, Recover fal.ai images, **Blocked images** (unblock) and **Ignored articles** (un-ignore).
+- **Remembered Reject.** A rejected image is never suggested again for that heading (or that featured slot): `MatchRepository::rejectedImageIds()`, used by `ArticleProcessor`. Rejected rows are kept 365 days (was 30) because they are that memory.
+- **Ignore article.** `Domain\IgnoredArticles` (post meta `_smart_image_matcher_ignored`). Ignored articles are skipped by `ArticleProcessor`, Bulk Processor selections, the scheduled run and the Missing Images index; ignoring removes their waiting suggestions.
+- `RelevanceGuard::sharedTopicTerms()` and a per-article count of candidates dropped by the relevance rules (`_smart_image_matcher_filtered`).
+- REST: `POST /review/decide` (approve / reject / reset a list of suggestions — only pending rows can be decided and only decided rows reset), `POST /review/reject-article`, `POST /review/ignore`, `GET /review/ignored`, `GET /review/blocked`, `POST /review/unblock`, `GET /review/block-impact`, `GET /schedule`, `POST /jobs/{id}/close`, `POST /jobs/{id}/requeue-lost` (`REST\ReviewToolsController`). `GET /review` gains `search` and `band` and returns `total_suggestions` and `approved_waiting`; `POST /review/approve-article` accepts `min_score`. `Sanitizer::removeExcludedImageSlug()`.
+- **Dashboard redesign** (`admin/views/dashboard.php`, `admin/js/src/dashboard.js`, `admin/css/sim-dashboard.css`, `Admin\DashboardData`), built from `docs/html-demos/dashboard-redesign.html`: health strip; KPIs for images inserted today vs yesterday, Review backlog (with one-word matches), current run with ETA, and featured coverage; **Runs by hour** chart over 24/48 h (inserted and sent to Review per hour, hatched skipped ticks, a band over stalls, tooltip, table view); recent runs with result bars and stop reasons; Queue card (waiting / overdue / running, the article running now, pace, last finished, watchdog, Check now); Automation and "How images are chosen" cards; **Needs your attention** (lost articles with Re-queue, one-word matches, a large backlog) with Dismiss; **Errors grouped by message** with count, time range, affected posts, details, Dismiss and Clear all (`REST\DashboardController`, `Logger::removeErrors()`). The error log keeps 50 entries (was 20); the tick log keeps 96 (was 12).
+
+### Fixed
+
+- Featured coverage could show more than 100% when a post had more than one `_thumbnail_id` row; posts are now counted once (`COUNT(DISTINCT)`), with scheduled, pending and private posts included.
+- Queue health said "Blocked" (red) whenever actions were 30+ minutes overdue, even while the queue was working through a backlog. If actions finished in the last 10 minutes it now says "Busy" (amber) instead; red is kept for a queue that is not moving.
+- `GET /review` with "Last run" used the wrong placeholder value once other filters were added.
+
+### Changed
+
+- Bulk Processor and Dashboard strings are translated with `wp.i18n` (`wp_set_script_translations()`) instead of a localized string array.
+
 ## [3.6.2] - 16/10/2026
 
 ### Added

@@ -269,10 +269,11 @@ class FiaaCron {
 				'update_post_term_cache' => false,
 			);
 
-			$metaQuery = $this->getFeaturedImageMetaQuery( $featuredFilter );
-			if ( ! empty( $metaQuery ) ) {
-				$args['meta_query'] = $metaQuery; // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
-			}
+			// Ignored articles are never queued.
+			$metaQuery          = $this->getFeaturedImageMetaQuery( $featuredFilter );
+			$args['meta_query'] = empty( $metaQuery ) // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+				? array( \SmartImageMatcher\Domain\IgnoredArticles::excludeClause() )
+				: array( 'relation' => 'AND', \SmartImageMatcher\Domain\IgnoredArticles::excludeClause(), $metaQuery );
 
 			$batch = get_posts( $args );
 

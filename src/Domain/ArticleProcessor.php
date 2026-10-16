@@ -168,6 +168,13 @@ class ArticleProcessor {
 			return $counts;
 		}
 
+		if ( IgnoredArticles::isIgnored( $post_id ) ) {
+			return $counts;
+		}
+
+		// Candidates the state / topic rules drop during this article (shown on Review).
+		RelevanceGuard::takeRejectedCount();
+
 		$auto       = (int) Settings::get( 'auto_insert_threshold' );
 		$review_min = (int) Settings::get( 'confidence_threshold' );
 		if ( isset( $options['review_min'] ) && is_numeric( $options['review_min'] ) ) {
@@ -187,6 +194,8 @@ class ArticleProcessor {
 		if ( 'featured' !== $fill ) {
 			$this->processHeadings( $post, $counts, $auto, $review_min, $can_generate );
 		}
+
+		update_post_meta( $post_id, RelevanceGuard::META_FILTERED, RelevanceGuard::takeRejectedCount() );
 
 		Logger::info(
 			'ArticleProcessor: finished',
@@ -229,6 +238,12 @@ class ArticleProcessor {
 			$score = (int) ( $best['score'] ?? 0 );
 			$image = (int) ( $best['attachment_id'] ?? 0 );
 		}
+		// Remembered Reject: an image the user rejected for this featured slot is never offered again.
+		if ( $image > 0 && in_array( $image, $this->matches->rejectedImageIds( (int) $post->ID, 'featured' ), true ) ) {
+			$score = 0;
+			$image = 0;
+		}
+
 		$action = MatchDecision::decide( $score, $auto, $review_min, $can_generate );
 
 		// Only exact / prefix slug matches go straight onto the post.
@@ -295,7 +310,13 @@ class ArticleProcessor {
 
 			$heading['context'] = (string) $post->post_title;
 
-			$best   = $this->bestHeadingMatch( $heading, $used_ids );
+			// Remembered Reject: images rejected for this heading are excluded like used ones.
+			$exclude = $used_ids;
+			foreach ( $this->matches->rejectedImageIds( (int) $post->ID, $hash ) as $rejected_id ) {
+				$exclude[ $rejected_id ] = $rejected_id;
+			}
+
+			$best   = $this->bestHeadingMatch( $heading, $exclude );
 			$score  = (int) $best['score'];
 			$image  = (int) $best['image_id'];
 			$action = MatchDecision::decide( $score, $auto, $review_min, $can_generate );

@@ -45,13 +45,14 @@ class QueueWatchdogTest extends TestCase {
 
 	/** @test */
 	public function ticks_are_newest_first_and_capped(): void {
-		for ( $i = 1; $i <= 15; $i++ ) {
+		$last = QueueWatchdog::MAX_TICKS + 3;
+		for ( $i = 1; $i <= $last; $i++ ) {
 			QueueWatchdog::recordTick( 'skipped', 'tick ' . $i );
 		}
 
 		$runtime = get_option( Settings::RUNTIME_OPTION, array() );
 		$this->assertCount( QueueWatchdog::MAX_TICKS, $runtime['ticks'] );
-		$this->assertSame( 'tick 15', $runtime['ticks'][0]['detail'] );
+		$this->assertSame( 'tick ' . $last, $runtime['ticks'][0]['detail'] );
 		$this->assertSame( 'skipped', $runtime['ticks'][0]['outcome'] );
 	}
 

@@ -188,7 +188,8 @@ class MissingImagesIndex {
 		$post = get_post( $post_id );
 		if ( ! $post instanceof \WP_Post
 			|| ! in_array( $post->post_type, self::POST_TYPES, true )
-			|| ! in_array( $post->post_status, self::STATUSES, true ) ) {
+			|| ! in_array( $post->post_status, self::STATUSES, true )
+			|| IgnoredArticles::isIgnored( $post_id ) ) {
 			self::forget( $post_id );
 			return;
 		}

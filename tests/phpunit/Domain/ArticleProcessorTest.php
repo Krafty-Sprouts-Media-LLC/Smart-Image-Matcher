@@ -158,6 +158,68 @@ class ArticleProcessorTest extends TestCase {
 	}
 
 	/**
+	 * A rejected image is never suggested again for that heading (remembered Reject).
+	 *
+	 * @return void
+	 */
+	public function test_rejected_image_is_not_suggested_again_for_that_heading(): void {
+		$extractor = $this->createMock( HeadingExtractor::class );
+		$extractor->method( 'extract' )->willReturn( array( $this->heading ) );
+
+		$matcher = $this->createMock( Matcher::class );
+		$matcher->method( 'filterByHierarchy' )->willReturnArgument( 0 );
+		$matcher->method( 'extractKeywords' )->willReturn( array( 'goldfinch' ) );
+		$matcher->method( 'calculateScore' )->willReturnCallback(
+			static fn( array $terms, array $image ) => 42 === (int) ( $image['id'] ?? 0 ) ? 100 : 95
+		);
+
+		$images = $this->createMock( ImageRepository::class );
+		$images->method( 'findCandidates' )->willReturn(
+			array(
+				array( 'id' => 42, 'filename' => 'american-goldfinch.jpg' ),
+				array( 'id' => 43, 'filename' => 'american-goldfinch-perched.jpg' ),
+			)
+		);
+
+		$insertion = $this->createMock( InsertionService::class );
+		$insertion->method( 'headingHasFollowingImage' )->willReturn( false );
+		$insertion->method( 'attachmentIdsInContent' )->willReturn( array() );
+		$insertion->expects( $this->once() )->method( 'bulkInsert' )->with(
+			10,
+			$this->equalTo( array( array( 'heading_hash' => 'hash-goldfinch', 'image_id' => 43 ) ) )
+		)->willReturn( true );
+
+		$matches = $this->createMock( MatchRepository::class );
+		$matches->method( 'rejectedImageIds' )->willReturnCallback(
+			static fn( int $post, string $hash ) => 'hash-goldfinch' === $hash ? array( 42 ) : array()
+		);
+
+		$featured = $this->createMock( FeaturedImageService::class );
+		$featured->method( 'needsFeaturedImage' )->willReturn( false );
+
+		( new ArticleProcessor( $matcher, $images, $extractor, $insertion, $matches, $featured, null, null, null ) )->process( 10 );
+	}
+
+	/**
+	 * An ignored article is left completely alone.
+	 *
+	 * @return void
+	 */
+	public function test_ignored_article_is_skipped(): void {
+		$GLOBALS['sim_test_post_meta'][10]['_smart_image_matcher_ignored'] = '1';
+
+		$extractor = $this->createMock( HeadingExtractor::class );
+		$extractor->expects( $this->never() )->method( 'extract' );
+		$featured = $this->createMock( FeaturedImageService::class );
+		$featured->expects( $this->never() )->method( 'needsFeaturedImage' );
+
+		$result = ( new ArticleProcessor( $this->createMock( Matcher::class ), $this->createMock( ImageRepository::class ), $extractor, $this->createMock( InsertionService::class ), $this->createMock( MatchRepository::class ), $featured, null, null, null ) )->process( 10 );
+
+		unset( $GLOBALS['sim_test_post_meta'][10] );
+		$this->assertSame( 0, $result['inserted'] + $result['review'] + $result['skipped'] );
+	}
+
+	/**
 	 * fill=featured never looks at the article body.
 	 *
 	 * @return void
