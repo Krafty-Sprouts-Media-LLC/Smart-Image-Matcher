@@ -1960,7 +1960,119 @@
 		}
 	}
 
+	// Featured images stuck in the article body: scan in batches, then move the ticked ones.
+	const misplaced = { items: [], scanning: false };
+
+	function misplacedRow( it ) {
+		return `<tr data-post="${ parseInt( it.id, 10 ) }">
+			<th scope="row" class="check-column"><input type="checkbox" class="sim-misplaced-pick" value="${ parseInt( it.id, 10 ) }" checked /></th>
+			<td><span class="sim-misplaced-thumb">${ it.thumb ? `<img src="${ esc( it.thumb ) }" alt="" loading="lazy" />` : '' }<code>${ esc( it.file ) }</code></span></td>
+			<td><a href="${ esc( it.edit_url || '#' ) }" target="_blank" rel="noopener">${ esc( it.title || '#' + it.id ) }</a> <span class="sim-bp-help">#${ parseInt( it.id, 10 ) } · ${ esc( it.status ) }</span></td>
+			<td class="sim-misplaced-result">—</td>
+		</tr>`;
+	}
+
+	function syncMisplacedButton() {
+		const n = qAll( '.sim-misplaced-pick' ).filter( ( el ) => el.checked && ! el.disabled ).length;
+		const btn = q( '#sim-misplaced-move' );
+		btn.disabled = ! n || misplaced.scanning;
+		btn.textContent = n
+			? sprintf( _n( 'Move %d to featured image', 'Move %d to featured image', n, 'smart-image-matcher' ), n )
+			: __( 'Move to featured image', 'smart-image-matcher' );
+	}
+
+	async function scanMisplaced() {
+		const list = qAll( '.sim-misplaced-status' ).filter( ( el ) => el.checked ).map( ( el ) => el.value );
+		if ( ! list.length ) {
+			q( '#sim-misplaced-status' ).textContent = __( 'Tick at least one status.', 'smart-image-matcher' );
+			return;
+		}
+		misplaced.items = [];
+		misplaced.scanning = true;
+		q( '#sim-misplaced-body' ).innerHTML = '';
+		q( '#sim-misplaced-table' ).hidden = true;
+		q( '#sim-misplaced-scan' ).disabled = true;
+		syncMisplacedButton();
+
+		let after = 0;
+		let scanned = 0;
+		try {
+			for ( ;; ) {
+				const params = new URLSearchParams( { post_type: val( '#sim-misplaced-type' ) || 'post', post_statuses: list.join( ',' ), after_id: String( after ) } );
+				const res = await api( '/featured-misplaced?' + params.toString() );
+				scanned += parseInt( res.scanned || 0, 10 );
+				( res.items || [] ).forEach( ( it ) => {
+					misplaced.items.push( it );
+					q( '#sim-misplaced-body' ).insertAdjacentHTML( 'beforeend', misplacedRow( it ) );
+				} );
+				q( '#sim-misplaced-table' ).hidden = ! misplaced.items.length;
+				q( '#sim-misplaced-status' ).textContent = sprintf( __( 'Checked %1$s articles · %2$s found', 'smart-image-matcher' ), scanned.toLocaleString(), misplaced.items.length.toLocaleString() );
+				if ( res.done || parseInt( res.next_after_id || 0, 10 ) <= after ) break;
+				after = parseInt( res.next_after_id, 10 );
+			}
+			if ( ! misplaced.items.length ) {
+				q( '#sim-misplaced-status' ).textContent = sprintf( __( 'Checked %s articles · none have their featured image stuck in the body.', 'smart-image-matcher' ), scanned.toLocaleString() );
+			}
+		} catch ( err ) {
+			q( '#sim-misplaced-status' ).textContent = errMsg( err, __( 'Could not scan.', 'smart-image-matcher' ) );
+		}
+		misplaced.scanning = false;
+		q( '#sim-misplaced-scan' ).disabled = false;
+		syncMisplacedButton();
+	}
+
+	async function moveMisplaced() {
+		const ids = qAll( '.sim-misplaced-pick' ).filter( ( el ) => el.checked && ! el.disabled ).map( ( el ) => parseInt( el.value, 10 ) );
+		if ( ! ids.length ) return;
+		if ( ! window.confirm( sprintf( _n( 'Set the image as the featured image of %d article and remove it from the body?', 'Set the image as the featured image of %d articles and remove it from their body?', ids.length, 'smart-image-matcher' ), ids.length ) ) ) return;
+
+		const btn = q( '#sim-misplaced-move' );
+		btn.disabled = true;
+		let moved = 0;
+		for ( let i = 0; i < ids.length; i += 25 ) {
+			const batch = ids.slice( i, i + 25 );
+			let results = [];
+			try {
+				results = ( await api( '/featured-misplaced/move', 'POST', { post_ids: batch } ) ).results || [];
+			} catch ( err ) {
+				results = batch.map( ( id ) => ( { id, ok: false, message: errMsg( err, __( 'Request failed.', 'smart-image-matcher' ) ) } ) );
+			}
+			results.forEach( ( r ) => {
+				const row = q( `#sim-misplaced-body tr[data-post="${ parseInt( r.id, 10 ) }"]` );
+				if ( ! row ) return;
+				const cell = row.querySelector( '.sim-misplaced-result' );
+				const pick = row.querySelector( '.sim-misplaced-pick' );
+				if ( r.ok ) {
+					++moved;
+					pick.checked = false;
+					pick.disabled = true;
+					cell.innerHTML = `<span class="sim-pill is-ran">${ esc( __( 'Moved', 'smart-image-matcher' ) ) }</span>${ r.message ? ` <span class="sim-bp-help">${ esc( r.message ) }</span>` : '' }`;
+				} else {
+					cell.innerHTML = `<span class="sim-pill is-skip">${ esc( __( 'Not moved', 'smart-image-matcher' ) ) }</span> <span class="sim-bp-help">${ esc( r.message || '' ) }</span>`;
+				}
+			} );
+			q( '#sim-misplaced-status' ).textContent = sprintf( __( 'Moved %1$d of %2$d…', 'smart-image-matcher' ), moved, ids.length );
+		}
+		q( '#sim-misplaced-status' ).textContent = sprintf( _n( 'Moved %d featured image out of the body.', 'Moved %d featured images out of the body.', moved, 'smart-image-matcher' ), moved );
+		toast( q( '#sim-misplaced-status' ).textContent );
+		syncMisplacedButton();
+	}
+
+	function bindMisplaced() {
+		q( '#sim-misplaced-type' ).innerHTML = Object.entries( postTypes ).map( ( [ slug, label ] ) => `<option value="${ esc( slug ) }">${ esc( label ) }</option>` ).join( '' );
+		q( '#sim-misplaced-scan' ).addEventListener( 'click', scanMisplaced );
+		q( '#sim-misplaced-move' ).addEventListener( 'click', moveMisplaced );
+		q( '#sim-misplaced-all' ).addEventListener( 'change', ( e ) => {
+			qAll( '.sim-misplaced-pick' ).forEach( ( el ) => {
+				if ( ! el.disabled ) el.checked = e.target.checked;
+			} );
+			syncMisplacedButton();
+		} );
+		q( '#sim-misplaced-body' ).addEventListener( 'change', syncMisplacedButton );
+	}
+
 	function bindTools() {
+		bindMisplaced();
 		const select = q( '#sim-audit-post-type' );
 		select.innerHTML = Object.entries( postTypes ).map( ( [ slug, label ] ) => `<option value="${ esc( slug ) }">${ esc( label ) }</option>` ).join( '' );
 		q( '#sim-fiaa-audit-scan-button' ).addEventListener( 'click', scanAudit );

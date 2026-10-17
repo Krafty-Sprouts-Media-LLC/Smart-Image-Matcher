@@ -95,6 +95,43 @@ $smart_image_matcher_tabs = array(
 
 	<section class="sim-bulk-panel" data-panel="tools" <?php echo 'tools' === $smart_image_matcher_tab ? '' : 'hidden'; ?>>
 		<div class="sim-bp-tools">
+			<div class="sim-bp-card sim-bp-tool sim-bp-tool-wide" id="sim-misplaced">
+				<h2><?php esc_html_e( 'Featured images stuck in the article body', 'smart-image-matcher' ); ?></h2>
+				<p class="description"><?php esc_html_e( 'Articles with no featured image whose own image (exact or prefix filename match) sits in the body, usually under the first heading. Moving sets it as the featured image and removes it from the body. Preview first.', 'smart-image-matcher' ); ?></p>
+				<div class="sim-bp-fields">
+					<div class="sim-bp-field">
+						<label for="sim-misplaced-type"><?php esc_html_e( 'Post type', 'smart-image-matcher' ); ?></label>
+						<select id="sim-misplaced-type"></select>
+					</div>
+					<div class="sim-bp-field">
+						<span class="sim-bp-label"><?php esc_html_e( 'Status', 'smart-image-matcher' ); ?></span>
+						<div class="sim-bp-chips">
+							<label class="sim-bp-chip"><input type="checkbox" class="sim-misplaced-status" value="publish" /> <?php esc_html_e( 'Published', 'smart-image-matcher' ); ?></label>
+							<label class="sim-bp-chip"><input type="checkbox" class="sim-misplaced-status" value="draft" checked /> <?php esc_html_e( 'Draft', 'smart-image-matcher' ); ?></label>
+							<label class="sim-bp-chip"><input type="checkbox" class="sim-misplaced-status" value="future" checked /> <?php esc_html_e( 'Scheduled', 'smart-image-matcher' ); ?></label>
+							<label class="sim-bp-chip"><input type="checkbox" class="sim-misplaced-status" value="pending" /> <?php esc_html_e( 'Pending', 'smart-image-matcher' ); ?></label>
+							<label class="sim-bp-chip"><input type="checkbox" class="sim-misplaced-status" value="private" /> <?php esc_html_e( 'Private', 'smart-image-matcher' ); ?></label>
+						</div>
+					</div>
+				</div>
+				<div class="sim-bp-actions">
+					<button type="button" id="sim-misplaced-scan" class="button"><?php esc_html_e( 'Scan', 'smart-image-matcher' ); ?></button>
+					<button type="button" id="sim-misplaced-move" class="button button-primary" disabled><?php esc_html_e( 'Move to featured image', 'smart-image-matcher' ); ?></button>
+					<span class="sim-bp-help" id="sim-misplaced-status"></span>
+				</div>
+				<div class="sim-bp-table-wrap">
+					<table class="widefat striped" id="sim-misplaced-table" hidden>
+						<thead><tr>
+							<td class="check-column"><input type="checkbox" id="sim-misplaced-all" checked aria-label="<?php esc_attr_e( 'Select all', 'smart-image-matcher' ); ?>" /></td>
+							<th><?php esc_html_e( 'Image in the body', 'smart-image-matcher' ); ?></th>
+							<th><?php esc_html_e( 'Article', 'smart-image-matcher' ); ?></th>
+							<th><?php esc_html_e( 'Result', 'smart-image-matcher' ); ?></th>
+						</tr></thead>
+						<tbody id="sim-misplaced-body"></tbody>
+					</table>
+				</div>
+			</div>
+
 			<div class="sim-bp-card sim-bp-tool">
 				<h2><?php esc_html_e( 'Fix incorrect featured images', 'smart-image-matcher' ); ?></h2>
 				<p class="description"><?php esc_html_e( 'Find featured images whose filename fails today’s rules (not an exact or prefix match), then remove them so the next run can assign a better one.', 'smart-image-matcher' ); ?></p>

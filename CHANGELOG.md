@@ -7,6 +7,16 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.7.3] - 17/10/2026
+
+### Fixed
+
+- **An article's own featured image could be inserted under its first heading.** Before 3.6.2 a fallback featured image (KSM Extensions) made posts look like they already had one, so runs skipped the featured slot while the heading pass matched the article-title image to the first heading. `ArticleProcessor::processHeadings()` now keeps the featured candidate (the featured slot's pick from this run, or `scoreBestForPost()` when that slot did not run, e.g. headings-only) out of the body whenever the post has no real featured image and the candidate scores at or above the Review floor.
+
+### Added
+
+- **Featured images stuck in the article body** (Bulk Processor → Tools): scan posts by type and status in batches of 100 (`GET /featured-misplaced`), preview each article with the body image, then move the ticked ones (`POST /featured-misplaced/move`, 25 per request). A post qualifies only when it has no real featured image, is not ignored, and its body holds an exact or prefix filename match (`FeaturedImageService::isAutoAssignSafeAttachment()`). Moving sets the featured image, then removes the image from the body in one save. `FeaturedImages\MisplacedFeaturedImages`; `InsertionService::removeImage()` / `withoutImage()` (blocks: drops `core/image` blocks with that ID and their innerContent placeholders, never inside a gallery; Classic: caption, figure, image-only paragraph, bare image).
+
 ## [3.7.2] - 16/10/2026
 
 ### Fixed

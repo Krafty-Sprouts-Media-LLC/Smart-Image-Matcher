@@ -417,6 +417,47 @@ class ArticleProcessorTest extends TestCase {
 	}
 
 	/**
+	 * With no featured image yet, the article's own featured match stays out of the
+	 * body even on a headings-only run (it used to land under the first heading).
+	 *
+	 * @return void
+	 */
+	public function test_featured_match_is_kept_out_of_the_body_when_post_has_none(): void {
+		$extractor = $this->createMock( HeadingExtractor::class );
+		$extractor->method( 'extract' )->willReturn( array( $this->heading ) );
+
+		$matcher = $this->createMock( Matcher::class );
+		$matcher->method( 'filterByHierarchy' )->willReturnCallback( static fn( array $h ) => $h );
+		$matcher->method( 'extractKeywords' )->willReturn( array( 'goldfinch' ) );
+		$matcher->method( 'calculateScore' )->willReturnCallback(
+			static fn( array $terms, array $image ) => 42 === (int) ( $image['id'] ?? 0 ) ? 100 : 95
+		);
+
+		$images = $this->createMock( ImageRepository::class );
+		$images->method( 'findCandidates' )->willReturn(
+			array(
+				array( 'id' => 42, 'filename' => 'american-goldfinch.jpg' ),
+				array( 'id' => 43, 'filename' => 'american-goldfinch-perched.jpg' ),
+			)
+		);
+
+		$insertion = $this->createMock( InsertionService::class );
+		$insertion->method( 'headingHasFollowingImage' )->willReturn( false );
+		$insertion->method( 'attachmentIdsInContent' )->willReturn( array() );
+		$insertion->expects( $this->once() )->method( 'bulkInsert' )->with(
+			10,
+			$this->equalTo( array( array( 'heading_hash' => 'hash-goldfinch', 'image_id' => 43 ) ) )
+		)->willReturn( true );
+
+		$featured = $this->createMock( FeaturedImageService::class );
+		$featured->method( 'needsFeaturedImage' )->willReturn( true );
+		$featured->method( 'scoreBestForPost' )->willReturn( array( 'score' => 100, 'attachment_id' => 42 ) );
+
+		$processor = new ArticleProcessor( $matcher, $images, $extractor, $insertion, $this->createMock( MatchRepository::class ), $featured, null, null, null );
+		$processor->process( 10, array( 'fill' => 'headings' ) );
+	}
+
+	/**
 	 * A confident model pick whose filename barely matches the heading is
 	 * parked for review, not inserted ("Firearm Discharge Rules in
 	 * Massachusetts" → One-bite-rule-in-Maine.jpg).

@@ -95,6 +95,13 @@ class ArticleProcessor {
 	private ?FeaturedMatchGate $featured_match;
 
 	/**
+	 * Featured-slot pick from this run, by post ID: kept out of the body.
+	 *
+	 * @var array<int, array{score:int, image:int}>
+	 */
+	private array $featured_pick = array();
+
+	/**
 	 * Constructor.
 	 *
 	 * @since 3.3.0
@@ -244,6 +251,11 @@ class ArticleProcessor {
 			$image = 0;
 		}
 
+		$this->featured_pick[ (int) $post->ID ] = array(
+			'score' => $score,
+			'image' => $image,
+		);
+
 		$action = MatchDecision::decide( $score, $auto, $review_min, $can_generate );
 
 		// Only exact / prefix slug matches go straight onto the post.
@@ -293,6 +305,23 @@ class ArticleProcessor {
 		$featured_id = FeaturedImageService::getStoredThumbnailId( (int) $post->ID );
 		if ( $featured_id > 0 ) {
 			$used_ids[ $featured_id ] = $featured_id;
+		}
+
+		// No real featured image yet: keep the article's own featured match out of the body,
+		// even on a headings-only run, so it can still become the featured image.
+		if ( ! FeaturedImageService::hasActionableFeaturedImage( (int) $post->ID ) ) {
+			// Reuse the featured slot's pick from this run; look it up only when that slot did not run.
+			if ( isset( $this->featured_pick[ (int) $post->ID ] ) ) {
+				$reserved_id    = $this->featured_pick[ (int) $post->ID ]['image'];
+				$reserved_score = $this->featured_pick[ (int) $post->ID ]['score'];
+			} else {
+				$reserved       = $this->featured->scoreBestForPost( (int) $post->ID );
+				$reserved_id    = (int) ( $reserved['attachment_id'] ?? 0 );
+				$reserved_score = (int) ( $reserved['score'] ?? 0 );
+			}
+			if ( $reserved_id > 0 && $reserved_score >= $review_min ) {
+				$used_ids[ $reserved_id ] = $reserved_id;
+			}
 		}
 
 		foreach ( $headings as $heading ) {

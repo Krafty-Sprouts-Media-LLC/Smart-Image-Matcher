@@ -108,6 +108,26 @@ class ReviewToolsController extends Controller {
 			'args'                => array( 'match_id' => array( 'type' => 'integer', 'required' => true, 'sanitize_callback' => 'absint' ) ),
 		) );
 
+		register_rest_route( self::NAMESPACE, '/featured-misplaced', array(
+			'methods'             => \WP_REST_Server::READABLE,
+			'callback'            => array( $this, 'misplacedScan' ),
+			'permission_callback' => array( $this, 'canManage' ),
+			'args'                => array(
+				'post_type'     => array( 'type' => 'string', 'default' => 'post', 'sanitize_callback' => 'sanitize_key' ),
+				'post_statuses' => array( 'type' => 'string', 'default' => 'draft', 'sanitize_callback' => 'sanitize_text_field' ),
+				'after_id'      => array( 'type' => 'integer', 'default' => 0, 'sanitize_callback' => 'absint' ),
+			),
+		) );
+
+		register_rest_route( self::NAMESPACE, '/featured-misplaced/move', array(
+			'methods'             => \WP_REST_Server::CREATABLE,
+			'callback'            => array( $this, 'misplacedMove' ),
+			'permission_callback' => array( $this, 'canManage' ),
+			'args'                => array(
+				'post_ids' => array( 'type' => 'array', 'required' => true, 'items' => array( 'type' => 'integer' ) ),
+			),
+		) );
+
 		register_rest_route( self::NAMESPACE, '/schedule', array(
 			'methods'             => \WP_REST_Server::READABLE,
 			'callback'            => array( $this, 'schedule' ),
@@ -284,6 +304,96 @@ class ReviewToolsController extends Controller {
 				'other_headings'    => $headings,
 			)
 		);
+	}
+
+	// -------------------------------------------------------------------------
+	// Featured images stuck in the body
+	// -------------------------------------------------------------------------
+
+	/** Posts checked per scan request (keeps each request short). */
+	const MISPLACED_BATCH = 100;
+
+	/** Posts moved per request. */
+	const MISPLACED_MOVE_MAX = 25;
+
+	/**
+	 * Mover service.
+	 *
+	 * @return \SmartImageMatcher\FeaturedImages\MisplacedFeaturedImages
+	 */
+	private function misplaced(): \SmartImageMatcher\FeaturedImages\MisplacedFeaturedImages {
+		return new \SmartImageMatcher\FeaturedImages\MisplacedFeaturedImages(
+			new \SmartImageMatcher\FeaturedImages\FeaturedImageService( new \SmartImageMatcher\FeaturedImages\SlugMapBuilder() ),
+			new \SmartImageMatcher\Insertion\InsertionService( new \SmartImageMatcher\Insertion\BlockBuilder() )
+		);
+	}
+
+	/**
+	 * Scan one batch of posts (by ID) for a featured image sitting in the body.
+	 *
+	 * The client calls again with `after_id = next_after_id` until `done`.
+	 *
+	 * @since 3.7.3
+	 * @param \WP_REST_Request $request Request.
+	 * @return \WP_REST_Response
+	 */
+	public function misplacedScan( \WP_REST_Request $request ): \WP_REST_Response {
+		global $wpdb;
+
+		$type     = (string) $request->get_param( 'post_type' );
+		$type     = post_type_exists( $type ) ? $type : 'post';
+		$statuses = PostStatuses::sanitizeList( (string) $request->get_param( 'post_statuses' ) );
+		$after    = (int) $request->get_param( 'after_id' );
+		$in       = implode( ',', array_fill( 0, count( $statuses ), '%s' ) );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- only (ID) by keyset; placeholders built above.
+		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT ID FROM {$wpdb->posts} WHERE post_type = %s AND post_status IN ({$in}) AND ID > %d ORDER BY ID ASC LIMIT %d", array_merge( array( $type ), $statuses, array( $after, self::MISPLACED_BATCH ) ) ) );
+		$ids = array_map( 'intval', is_array( $ids ) ? $ids : array() );
+
+		$mover = $this->misplaced();
+		$items = array();
+		foreach ( $ids as $post_id ) {
+			$image_id = $mover->candidate( $post_id );
+			if ( $image_id <= 0 ) {
+				continue;
+			}
+			$file    = get_attached_file( $image_id );
+			$items[] = array(
+				'id'       => $post_id,
+				'title'    => html_entity_decode( (string) get_the_title( $post_id ), ENT_QUOTES, 'UTF-8' ),
+				'edit_url' => (string) get_edit_post_link( $post_id, 'raw' ),
+				'status'   => (string) get_post_status( $post_id ),
+				'image_id' => $image_id,
+				'file'     => $file ? wp_basename( (string) $file ) : '',
+				'thumb'    => (string) wp_get_attachment_image_url( $image_id, 'thumbnail' ),
+			);
+		}
+
+		return rest_ensure_response(
+			array(
+				'items'         => $items,
+				'scanned'       => count( $ids ),
+				'next_after_id' => $ids ? (int) end( $ids ) : $after,
+				'done'          => count( $ids ) < self::MISPLACED_BATCH,
+			)
+		);
+	}
+
+	/**
+	 * Move up to 25 posts' body image to their featured image.
+	 *
+	 * @since 3.7.3
+	 * @param \WP_REST_Request $request Request.
+	 * @return \WP_REST_Response
+	 */
+	public function misplacedMove( \WP_REST_Request $request ): \WP_REST_Response {
+		$ids   = array_slice( array_values( array_filter( array_map( 'absint', (array) $request->get_param( 'post_ids' ) ) ) ), 0, self::MISPLACED_MOVE_MAX );
+		$mover = $this->misplaced();
+		$out   = array();
+		foreach ( $ids as $post_id ) {
+			$out[] = array_merge( array( 'id' => $post_id ), $mover->move( $post_id ) );
+		}
+		return rest_ensure_response( array( 'results' => $out ) );
 	}
 
 	// -------------------------------------------------------------------------

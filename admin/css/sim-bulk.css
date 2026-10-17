@@ -910,6 +910,11 @@
 }
 
 .sim-bp-tool { padding: 18px 20px; min-width: 0; }
+.sim-bp-tool-wide { grid-column: 1 / -1; }
+.sim-misplaced-thumb { display: flex; gap: 10px; align-items: center; }
+.sim-misplaced-thumb img { width: 64px; height: 48px; object-fit: cover; border-radius: 3px; flex: none; }
+.sim-misplaced-thumb code { overflow-wrap: anywhere; background: transparent; padding: 0; }
+#sim-misplaced-table .check-column { width: 2.2em; vertical-align: middle; }
 .sim-bp-tool h2 { margin: 0 0 4px; font-size: 14px; display: flex; gap: 8px; align-items: center; }
 .sim-bp-tool > .description { margin: 0 0 12px; }
 .sim-bp-tool .sim-bp-fields { margin-bottom: 12px; }

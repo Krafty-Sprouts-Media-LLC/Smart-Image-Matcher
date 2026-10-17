@@ -4,7 +4,7 @@ Tags: images, media library, alt text, featured image, automation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 3.7.2
+Stable tag: 3.7.3
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -95,6 +95,10 @@ No AI data is sent automatically — only when you explicitly trigger AI matchin
 The plugin stores match results and job metadata in your own database only. Update checks may contact GitHub (see External services). No post content leaves your server unless you explicitly use AI features with a configured provider.
 
 == Changelog ==
+
+= 3.7.3 =
+* Fixed: an article's own featured image could be inserted under its first heading instead of becoming the featured image. This happened on sites with a fallback featured image (e.g. KSM Extensions) before 3.6.2. Runs now keep that image out of the body while the article has no featured image.
+* New: Bulk Processor → Tools → "Featured images stuck in the article body". Scan, review the list, and move each image to the featured image (it is removed from the body). Only articles with no featured image and an exact or prefix filename match are listed.
 
 = 3.7.2 =
 * Fixed: notices from other plugins no longer land inside the Dashboard and Bulk Processor headers.

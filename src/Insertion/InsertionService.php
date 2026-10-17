@@ -324,6 +324,134 @@ class InsertionService {
 	}
 
 	/**
+	 * Remove every standalone copy of one image from a post's body (one save).
+	 *
+	 * Used to move an article's featured image out of the body. Images inside a
+	 * gallery are left alone.
+	 *
+	 * @since 3.7.3
+	 * @param int $post_id  Post ID.
+	 * @param int $image_id Attachment ID.
+	 * @return true|\WP_Error
+	 */
+	public function removeImage( int $post_id, int $image_id ) {
+		$post = get_post( $post_id );
+		if ( ! $post instanceof \WP_Post || $image_id <= 0 ) {
+			return new \WP_Error( 'smart_image_matcher_invalid_post', __( 'Post not found.', 'smart-image-matcher' ) );
+		}
+
+		$content = (string) $post->post_content;
+		$updated = $this->withoutImage( $content, $image_id );
+		if ( $updated === $content ) {
+			return new \WP_Error( 'smart_image_matcher_image_not_in_body', __( 'That image was not found in the article body.', 'smart-image-matcher' ) );
+		}
+
+		$result = wp_update_post(
+			wp_slash(
+				array(
+					'ID'           => $post_id,
+					'post_content' => $updated,
+				)
+			),
+			true
+		);
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		Cache::clearPost( $post_id );
+		return true;
+	}
+
+	/**
+	 * Content with every standalone copy of an image removed.
+	 *
+	 * @since 3.7.3
+	 * @param string $content  Post content.
+	 * @param int    $image_id Attachment ID.
+	 * @return string Unchanged when the image is not there.
+	 */
+	public function withoutImage( string $content, int $image_id ): string {
+		if ( '' === $content || $image_id <= 0 ) {
+			return $content;
+		}
+
+		if ( has_blocks( $content ) ) {
+			$removed = 0;
+			$blocks  = $this->dropImageBlocks( parse_blocks( $content ), $image_id, '', $removed );
+			return $removed > 0 ? serialize_blocks( $this->normalizeBlocksForSerialize( $blocks ) ) : $content;
+		}
+
+		// Classic: caption shortcode, figure, a paragraph holding only the image, then a bare image.
+		$id       = (string) $image_id;
+		$patterns = array(
+			'#\[caption[^\]]*\](?:(?!\[/caption\]).)*?wp-image-' . $id . '(?!\d)(?:(?!\[/caption\]).)*\[/caption\]\s*#s',
+			'#<figure\b[^>]*>(?:(?!</figure>).)*?wp-image-' . $id . '(?!\d)(?:(?!</figure>).)*</figure>\s*#s',
+			'#<p>\s*(?:<a\b[^>]*>\s*)?<img\b[^>]*wp-image-' . $id . '(?!\d)[^>]*>\s*(?:</a>\s*)?</p>\s*#s',
+			'#(?:<a\b[^>]*>\s*)?<img\b[^>]*wp-image-' . $id . '(?!\d)[^>]*>(?:\s*</a>)?#s',
+		);
+		foreach ( $patterns as $pattern ) {
+			$next = preg_replace( $pattern, '', $content );
+			if ( is_string( $next ) ) {
+				$content = $next;
+			}
+		}
+		return $content;
+	}
+
+	/**
+	 * Drop core/image blocks for one attachment, keeping innerContent placeholders in step.
+	 *
+	 * @param array<int, mixed> $blocks   Blocks.
+	 * @param int               $image_id Attachment ID.
+	 * @param string            $parent   Parent block name ('' at the top level).
+	 * @param int               $removed  Blocks removed (by ref).
+	 * @return array<int, array<string, mixed>>
+	 */
+	private function dropImageBlocks( array $blocks, int $image_id, string $parent, int &$removed ): array {
+		$out = array();
+		foreach ( $blocks as $block ) {
+			if ( ! is_array( $block ) ) {
+				continue;
+			}
+			$name = (string) ( $block['blockName'] ?? '' );
+			if ( 'core/image' === $name && 'core/gallery' !== $parent && (int) ( $block['attrs']['id'] ?? 0 ) === $image_id ) {
+				++$removed;
+				continue;
+			}
+
+			$children = isset( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) ? $block['innerBlocks'] : array();
+			if ( $children ) {
+				$before = $removed;
+				$keep   = array();
+				foreach ( $children as $i => $child ) {
+					$keep[ $i ] = ! ( is_array( $child ) && 'core/image' === ( $child['blockName'] ?? '' ) && 'core/gallery' !== $name && (int) ( $child['attrs']['id'] ?? 0 ) === $image_id );
+				}
+				$block['innerBlocks'] = $this->dropImageBlocks( $children, $image_id, $name, $removed );
+
+				// Remove the null placeholder of each dropped direct child.
+				if ( $removed > $before && isset( $block['innerContent'] ) && is_array( $block['innerContent'] ) ) {
+					$content = array();
+					$slot    = 0;
+					foreach ( $block['innerContent'] as $chunk ) {
+						if ( ! is_string( $chunk ) ) {
+							$kept_child = $keep[ $slot ] ?? true;
+							++$slot;
+							if ( ! $kept_child ) {
+								continue;
+							}
+						}
+						$content[] = $chunk;
+					}
+					$block['innerContent'] = $content;
+				}
+			}
+			$out[] = $block;
+		}
+		return $out;
+	}
+
+	/**
 	 * Collect core/image and core/gallery attachment IDs from a block tree.
 	 *
 	 * @since 3.4.3
