@@ -4,7 +4,7 @@ Tags: images, media library, alt text, featured image, automation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 3.7.4
+Stable tag: 3.7.5
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -95,6 +95,10 @@ No AI data is sent automatically — only when you explicitly trigger AI matchin
 The plugin stores match results and job metadata in your own database only. Update checks may contact GitHub (see External services). No post content leaves your server unless you explicitly use AI features with a configured provider.
 
 == Changelog ==
+
+= 3.7.5 =
+* Fixed: images removed with "Remove images from body" could be put back by a later run (hourly, on publish, or Bulk Processor). Every removed image is now remembered for that article and never inserted into it again.
+* Fixed: images inside a paragraph, Classic or Custom HTML block were not removed or counted. They are now; a paragraph that held only the image is removed with it.
 
 = 3.7.4 =
 * New: "Remove images from body…" in the Posts list bulk actions. Preview first, choose every image or only images this plugin added, optionally ignore the articles, then remove. Featured images and gallery images are never touched, and WordPress keeps a revision of each article.

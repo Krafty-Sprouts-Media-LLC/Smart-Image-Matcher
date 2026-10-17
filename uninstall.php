@@ -82,6 +82,9 @@ foreach ( $tables as $table ) {
 // Missing Images index (post meta).
 $wpdb->query( "DELETE FROM {$wpdb->postmeta} WHERE meta_key LIKE '\\_smart\\_image\\_matcher\\_missing%'" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared
 
+// Per-article decisions: ignored, removed images, relevance-rule counts.
+$wpdb->query( "DELETE FROM {$wpdb->postmeta} WHERE meta_key IN ('_smart_image_matcher_ignored', '_smart_image_matcher_removed_images', '_smart_image_matcher_filtered')" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared
+
 // Delete all smart_image_matcher_* options and transients.
 $wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE 'smart_image_matcher_%'" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared
 $wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_smart_image_matcher_%'" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared

@@ -38,6 +38,37 @@ class BodyImageRemover {
 	/** Only images this plugin inserted. */
 	const SCOPE_PLUGIN = 'plugin';
 
+	/** Post meta: attachment IDs removed from this article's body; runs never put them back. */
+	const META_REMOVED = '_smart_image_matcher_removed_images';
+
+	/**
+	 * Images the user removed from this article's body.
+	 *
+	 * @since 3.7.5
+	 * @param int $post_id Post ID.
+	 * @return int[]
+	 */
+	public static function removedImageIds( int $post_id ): array {
+		$ids = get_post_meta( $post_id, self::META_REMOVED, true );
+		return is_array( $ids ) ? array_values( array_filter( array_map( 'absint', $ids ) ) ) : array();
+	}
+
+	/**
+	 * Remember removed images for an article (kept to the newest 200).
+	 *
+	 * @param int   $post_id Post ID.
+	 * @param int[] $ids     Attachment IDs.
+	 * @return void
+	 */
+	private static function rememberRemoved( int $post_id, array $ids ): void {
+		$ids = array_values( array_filter( array_map( 'absint', $ids ) ) );
+		if ( empty( $ids ) ) {
+			return;
+		}
+		$all = array_values( array_unique( array_merge( $ids, self::removedImageIds( $post_id ) ) ) );
+		update_post_meta( $post_id, self::META_REMOVED, array_slice( $all, 0, 200 ) );
+	}
+
 	/**
 	 * Insertion service.
 	 *
@@ -136,6 +167,10 @@ class BodyImageRemover {
 			}
 		}
 		$this->matches->setStatusByIds( $rejected, 'rejected' );
+
+		// Every removed library image stays out of this article, whoever inserted it
+		// and whatever runs next (hourly, on publish, Bulk Processor).
+		self::rememberRemoved( $post_id, $removed );
 
 		if ( $ignore ) {
 			IgnoredArticles::set( $post_id, true );

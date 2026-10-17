@@ -131,6 +131,35 @@ class RemoveImageTest extends TestCase {
 	}
 
 	/** @test */
+	public function inline_images_in_paragraphs_are_removed_and_empty_paragraphs_dropped(): void {
+		$para = static fn( string $html ): array => array(
+			'blockName'    => 'core/paragraph',
+			'attrs'        => array(),
+			'innerBlocks'  => array(),
+			'innerHTML'    => $html,
+			'innerContent' => array( $html ),
+		);
+		$GLOBALS['sim_test_parse_blocks']     = static fn() => array(
+			$para( '<p><img class="wp-image-8" src="a.jpg" /></p>' ),
+			$para( '<p>Text with <img class="wp-image-9" src="b.jpg" /> inline.</p>' ),
+			$para( '<p>No image.</p>' ),
+		);
+		$GLOBALS['sim_test_serialize_blocks'] = static fn( array $blocks ) => wp_json_encode_for_test( $blocks );
+
+		$service = new InsertionService( new BlockBuilder() );
+		$this->assertSame( array( 8, 9 ), $service->standaloneImageIds( '<!-- wp:paragraph -->' ), 'Inline images are counted.' );
+
+		$result = $service->withoutImages( '<!-- wp:paragraph -->', null );
+		$blocks = json_decode( $result['content'], true );
+
+		$this->assertSame( array( 8, 9 ), $result['removed'] );
+		$this->assertCount( 2, $blocks, 'The image-only paragraph is dropped.' );
+		$this->assertStringNotContainsString( '<img', $blocks[0]['innerHTML'] );
+		$this->assertStringContainsString( 'Text with', $blocks[0]['innerHTML'] );
+		$this->assertStringNotContainsString( '<img', $blocks[0]['innerContent'][0] );
+	}
+
+	/** @test */
 	public function content_without_the_image_is_unchanged(): void {
 		$content = '<p><img class="wp-image-7" src="c.jpg" /></p>';
 		$this->assertSame( $content, ( new InsertionService( new BlockBuilder() ) )->withoutImage( $content, 8 ) );

@@ -307,6 +307,11 @@ class ArticleProcessor {
 			$used_ids[ $featured_id ] = $featured_id;
 		}
 
+		// Images the user removed from this article's body never go back in.
+		foreach ( BodyImageRemover::removedImageIds( (int) $post->ID ) as $removed_id ) {
+			$used_ids[ $removed_id ] = $removed_id;
+		}
+
 		// No real featured image yet: keep the article's own featured match out of the body,
 		// even on a headings-only run, so it can still become the featured image.
 		if ( ! FeaturedImageService::hasActionableFeaturedImage( (int) $post->ID ) ) {

@@ -411,11 +411,20 @@ class InsertionService {
 	}
 
 	/**
-	 * Content with standalone images removed (never images inside a gallery).
+	 * Blocks whose HTML may hold inline images (removed from their markup).
+	 * Layout blocks such as media-text and cover are never edited.
+	 *
+	 * @since 3.7.5
+	 */
+	const INLINE_IMAGE_BLOCKS = array( '', 'core/paragraph', 'core/html', 'core/freeform' );
+
+	/**
+	 * Content with images removed: image blocks, and images inline in paragraphs,
+	 * Classic and Custom HTML blocks. Never images inside a gallery.
 	 *
 	 * @since 3.7.4
 	 * @param string     $content   Post content.
-	 * @param int[]|null $image_ids Attachment IDs, or null for every standalone image.
+	 * @param int[]|null $image_ids Attachment IDs, or null for every image.
 	 * @return array{content:string, removed:array<int, int>}
 	 */
 	public function withoutImages( string $content, ?array $image_ids ): array {
@@ -436,35 +445,57 @@ class InsertionService {
 			);
 		}
 
-		// Classic: caption shortcode, figure, a paragraph holding only the image, then a bare image.
+		return array(
+			'content' => self::stripImagesFromHtml( $content, $ids, $removed ),
+			'removed' => $removed,
+		);
+	}
+
+	/**
+	 * Remove images from HTML: caption shortcode, figure, a paragraph holding only
+	 * the image, then any remaining image tag (with its link).
+	 *
+	 * @since 3.7.5
+	 * @param string          $html    HTML.
+	 * @param int[]|null      $ids     Attachment IDs, or null for every image.
+	 * @param array<int, int> $removed IDs removed (by ref; 0 when an image has none).
+	 * @return string
+	 */
+	private static function stripImagesFromHtml( string $html, ?array $ids, array &$removed ): string {
+		if ( false === stripos( $html, '<img' ) ) {
+			return $html;
+		}
+
 		$targets = null === $ids ? array( '' ) : array_map( 'strval', $ids );
 		foreach ( $targets as $id ) {
 			$img      = '' === $id ? '<img\b[^>]*>' : '<img\b[^>]*wp-image-' . $id . '(?!\d)[^>]*>';
 			$patterns = array(
 				'#\[caption[^\]]*\](?:(?!\[/caption\]).)*?' . $img . '(?:(?!\[/caption\]).)*\[/caption\]\s*#s',
 				'#<figure\b[^>]*>(?:(?!</figure>).)*?' . $img . '(?:(?!</figure>).)*</figure>\s*#s',
-				'#<p>\s*(?:<a\b[^>]*>\s*)?' . $img . '\s*(?:</a>\s*)?</p>\s*#s',
+				'#<p\b[^>]*>\s*(?:<a\b[^>]*>\s*)?' . $img . '\s*(?:</a>\s*)?</p>\s*#s',
 				'#(?:<a\b[^>]*>\s*)?' . $img . '(?:\s*</a>)?#s',
 			);
 			foreach ( $patterns as $pattern ) {
-				$content = (string) preg_replace_callback(
+				$html = (string) preg_replace_callback(
 					$pattern,
 					static function ( array $m ) use ( &$removed ): string {
-						$removed[] = preg_match( '/wp-image-(\d+)/', $m[0], $idm ) ? (int) $idm[1] : 0;
+						$count = preg_match_all( '/<img\b[^>]*>/i', $m[0], $tags );
+						for ( $i = 0; $i < max( 1, (int) $count ); $i++ ) {
+							$tag       = $tags[0][ $i ] ?? $m[0];
+							$removed[] = preg_match( '/wp-image-(\d+)/', $tag, $idm ) ? (int) $idm[1] : 0;
+						}
 						return '';
 					},
-					$content
+					$html
 				);
 			}
 		}
-		return array(
-			'content' => $content,
-			'removed' => $removed,
-		);
+		return $html;
 	}
 
 	/**
-	 * Standalone images in the body (attachment ID, or 0 when it has none). Gallery images are not counted.
+	 * Images in the body (attachment ID, or 0 when it has none): image blocks and
+	 * images inline in paragraphs, Classic and Custom HTML blocks. Gallery images are not counted.
 	 *
 	 * @since 3.7.4
 	 * @param string $content Post content.
@@ -479,7 +510,18 @@ class InsertionService {
 			$this->collectStandaloneImages( parse_blocks( $content ), '', $found );
 			return $found;
 		}
-		if ( preg_match_all( '/<img\b[^>]*>/i', $content, $tags ) ) {
+		return self::imgIdsInHtml( $content );
+	}
+
+	/**
+	 * Attachment IDs of every image tag in HTML (0 when a tag has none).
+	 *
+	 * @param string $html HTML.
+	 * @return array<int, int>
+	 */
+	private static function imgIdsInHtml( string $html ): array {
+		$found = array();
+		if ( preg_match_all( '/<img\b[^>]*>/i', $html, $tags ) ) {
 			foreach ( $tags[0] as $tag ) {
 				$found[] = preg_match( '/wp-image-(\d+)/', $tag, $m ) ? (int) $m[1] : 0;
 			}
@@ -488,7 +530,7 @@ class InsertionService {
 	}
 
 	/**
-	 * Collect core/image blocks outside galleries.
+	 * Collect image blocks and inline images outside galleries.
 	 *
 	 * @param array<int, mixed> $blocks Blocks.
 	 * @param string            $parent Parent block name.
@@ -497,12 +539,16 @@ class InsertionService {
 	 */
 	private function collectStandaloneImages( array $blocks, string $parent, array &$found ): void {
 		foreach ( $blocks as $block ) {
-			if ( ! is_array( $block ) ) {
+			if ( ! is_array( $block ) || 'core/gallery' === $parent ) {
 				continue;
 			}
 			$name = (string) ( $block['blockName'] ?? '' );
-			if ( 'core/image' === $name && 'core/gallery' !== $parent ) {
+			if ( 'core/image' === $name ) {
 				$found[] = (int) ( $block['attrs']['id'] ?? 0 );
+			} elseif ( in_array( $name, self::INLINE_IMAGE_BLOCKS, true ) && empty( $block['innerBlocks'] ) ) {
+				foreach ( self::imgIdsInHtml( (string) ( $block['innerHTML'] ?? '' ) ) as $id ) {
+					$found[] = $id;
+				}
 			}
 			if ( ! empty( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) ) {
 				$this->collectStandaloneImages( $block['innerBlocks'], $name, $found );
@@ -511,7 +557,7 @@ class InsertionService {
 	}
 
 	/**
-	 * Whether a block is a standalone image this removal targets.
+	 * Whether a block is an image block this removal targets.
 	 *
 	 * @param mixed      $block  Block.
 	 * @param int[]|null $ids    Target IDs, or null for every image.
@@ -526,7 +572,7 @@ class InsertionService {
 	}
 
 	/**
-	 * Drop target core/image blocks, keeping innerContent placeholders in step.
+	 * Remove target images from a block list, keeping innerContent placeholders in step.
 	 *
 	 * @param array<int, mixed> $blocks  Blocks.
 	 * @param int[]|null        $ids     Target IDs, or null for every image.
@@ -537,44 +583,87 @@ class InsertionService {
 	private function dropImageBlocks( array $blocks, ?array $ids, string $parent, array &$removed ): array {
 		$out = array();
 		foreach ( $blocks as $block ) {
-			if ( ! is_array( $block ) ) {
-				continue;
+			$kept = $this->filterImageBlock( $block, $ids, $parent, $removed );
+			if ( null !== $kept ) {
+				$out[] = $kept;
 			}
-			if ( self::isTargetImage( $block, $ids, $parent ) ) {
-				$removed[] = (int) ( $block['attrs']['id'] ?? 0 );
-				continue;
-			}
-
-			$name     = (string) ( $block['blockName'] ?? '' );
-			$children = isset( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) ? $block['innerBlocks'] : array();
-			if ( $children ) {
-				$before = count( $removed );
-				$keep   = array();
-				foreach ( $children as $i => $child ) {
-					$keep[ $i ] = ! self::isTargetImage( $child, $ids, $name );
-				}
-				$block['innerBlocks'] = $this->dropImageBlocks( $children, $ids, $name, $removed );
-
-				// Remove the null placeholder of each dropped direct child.
-				if ( count( $removed ) > $before && isset( $block['innerContent'] ) && is_array( $block['innerContent'] ) ) {
-					$content = array();
-					$slot    = 0;
-					foreach ( $block['innerContent'] as $chunk ) {
-						if ( ! is_string( $chunk ) ) {
-							$kept_child = $keep[ $slot ] ?? true;
-							++$slot;
-							if ( ! $kept_child ) {
-								continue;
-							}
-						}
-						$content[] = $chunk;
-					}
-					$block['innerContent'] = $content;
-				}
-			}
-			$out[] = $block;
 		}
 		return $out;
+	}
+
+	/**
+	 * One block with its target images removed, or null when the whole block goes.
+	 *
+	 * @param mixed           $block   Block.
+	 * @param int[]|null      $ids     Target IDs, or null for every image.
+	 * @param string          $parent  Parent block name.
+	 * @param array<int, int> $removed IDs removed (by ref).
+	 * @return array<string, mixed>|null
+	 */
+	private function filterImageBlock( $block, ?array $ids, string $parent, array &$removed ): ?array {
+		if ( ! is_array( $block ) ) {
+			return null;
+		}
+		if ( self::isTargetImage( $block, $ids, $parent ) ) {
+			$removed[] = (int) ( $block['attrs']['id'] ?? 0 );
+			return null;
+		}
+
+		$name     = (string) ( $block['blockName'] ?? '' );
+		$children = isset( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) ? $block['innerBlocks'] : array();
+
+		// Inline images in a paragraph, Classic or Custom HTML block: edit the markup.
+		if ( ! $children && 'core/gallery' !== $parent && in_array( $name, self::INLINE_IMAGE_BLOCKS, true ) && false !== stripos( (string) ( $block['innerHTML'] ?? '' ), '<img' ) ) {
+			$before = count( $removed );
+			$chunks = array();
+			foreach ( (array) ( $block['innerContent'] ?? array() ) as $chunk ) {
+				$chunks[] = is_string( $chunk ) ? self::stripImagesFromHtml( $chunk, $ids, $removed ) : $chunk;
+			}
+			if ( count( $removed ) === $before ) {
+				return $block;
+			}
+			$ignored               = array();
+			$block['innerContent'] = $chunks;
+			$block['innerHTML']    = self::stripImagesFromHtml( (string) $block['innerHTML'], $ids, $ignored );
+
+			// A paragraph or HTML block that held only the image goes with it.
+			$left = trim( str_replace( array( '&nbsp;', "\xC2\xA0" ), ' ', strip_tags( $block['innerHTML'] ) ) );
+			if ( '' === $left && '' !== $name ) {
+				return null;
+			}
+			return $block;
+		}
+
+		if ( $children ) {
+			$new_children = array();
+			$keep         = array();
+			foreach ( array_values( $children ) as $i => $child ) {
+				$kept       = $this->filterImageBlock( $child, $ids, $name, $removed );
+				$keep[ $i ] = null !== $kept;
+				if ( null !== $kept ) {
+					$new_children[] = $kept;
+				}
+			}
+			$block['innerBlocks'] = $new_children;
+
+			// Remove the null placeholder of each dropped direct child.
+			if ( in_array( false, $keep, true ) && isset( $block['innerContent'] ) && is_array( $block['innerContent'] ) ) {
+				$content = array();
+				$slot    = 0;
+				foreach ( $block['innerContent'] as $chunk ) {
+					if ( ! is_string( $chunk ) ) {
+						$kept_child = $keep[ $slot ] ?? true;
+						++$slot;
+						if ( ! $kept_child ) {
+							continue;
+						}
+					}
+					$content[] = $chunk;
+				}
+				$block['innerContent'] = $content;
+			}
+		}
+		return $block;
 	}
 
 	/**

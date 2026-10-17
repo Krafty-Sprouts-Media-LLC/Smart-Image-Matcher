@@ -7,6 +7,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.7.5] - 17/10/2026
+
+### Fixed
+
+- **Removed images could come back.** Only images with a plugin insert record were remembered, and those records are pruned after 90 days. Every library image the remover takes out is now stored on the article (post meta `_smart_image_matcher_removed_images`, `BodyImageRemover::removedImageIds()`), and `ArticleProcessor::processHeadings()` never inserts those images into that article again — hourly runs, "Process article on first publish" and Bulk Processor runs alike.
+- **Inline images were not removed.** In block content only `core/image` blocks were removed; an image inside a paragraph, Classic (`core/freeform`) or Custom HTML block was skipped and not counted in the preview. `InsertionService::withoutImages()` now edits those blocks' markup (`stripImagesFromHtml()`), drops a paragraph or HTML block left empty, and `standaloneImageIds()` counts them. Layout blocks (media-text, cover) and gallery images are never edited.
+- Uninstall also removes the per-article ignored / removed-images / relevance-count meta.
+
 ## [3.7.4] - 17/10/2026
 
 ### Added
