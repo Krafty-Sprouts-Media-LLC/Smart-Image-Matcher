@@ -7,6 +7,17 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.7.4] - 17/10/2026
+
+### Added
+
+- **Remove images from body…** in the Posts list bulk actions (admins). It never removes anything by itself: it opens Bulk Processor → Tools → Remove images from articles with the selection filled in and previewed (`POST /body-images/preview`). Choose every image in the body or only images this plugin added, optionally ignore the articles, then remove in groups of 25 (`POST /body-images/remove`). The featured image is never touched and gallery images are left alone; one save per article (WordPress keeps a revision). A removed image the plugin had inserted becomes `rejected` for its heading, so runs do not put it back. `Domain\BodyImageRemover`; `InsertionService::removeImages()`, `withoutImages()`, `standaloneImageIds()`; `MatchRepository::insertedBodyRows()`, `setStatusByIds()`, `deleteByIds()`.
+
+### Fixed
+
+- **Insert approved could insert images twice.** Inserted images kept the `approved` status, so Insert approved re-queued every post that ever had one, and the insert path did not check for images already in place. `InsertionService::performBulkInsert()` now skips images already in the post and headings that already have an image (`smart_image_matcher_already_inserted`). Inserted rows get a new `inserted` status (`MatchRepository::STATUS_INSERTED`, set by `markInserted()` and by `runBulkInsertJob()` once the image is in the post), so the Review dock's approved count is right. Migration 8 runs a one-time background reconcile (`JobRunner::runReconcileApproved()`, hook `smart_image_matcher_queue_reconcile_approved`) that marks old approved rows whose image is already in the post. Daily cleanup prunes `inserted` rows after 90 days like `approved`.
+- **Approved featured suggestions were never applied.** Insert approved sent them to heading insertion, which found no heading. `runBulkInsertJob()` now sets the featured image when the post has no real one (and drops the approval when another featured image was set meanwhile).
+
 ## [3.7.3] - 17/10/2026
 
 ### Fixed

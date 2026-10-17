@@ -24,6 +24,115 @@ if ( ! defined( 'ABSPATH' ) ) {
 class MatchRepository {
 
 	/**
+	 * Status of a row whose image is in the post (or set as its featured image).
+	 * "approved" means approved and still waiting for Insert approved.
+	 *
+	 * @since 3.7.4
+	 */
+	const STATUS_INSERTED = 'inserted';
+
+	/**
+	 * Set the status of specific rows.
+	 *
+	 * @since 3.7.4
+	 * @param int[]  $ids    Row IDs.
+	 * @param string $status New status.
+	 * @return int Rows changed.
+	 */
+	public function setStatusByIds( array $ids, string $status ): int {
+		global $wpdb;
+
+		$ids = array_values( array_filter( array_map( 'absint', $ids ) ) );
+		if ( empty( $ids ) ) {
+			return 0;
+		}
+
+		$table = $wpdb->prefix . 'smart_image_matcher_matches';
+		$in    = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+		$result = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status = %s WHERE id IN ({$in})", array_merge( array( $status ), $ids ) ) );
+
+		return is_int( $result ) ? $result : 0;
+	}
+
+	/**
+	 * Delete specific rows.
+	 *
+	 * @since 3.7.4
+	 * @param int[] $ids Row IDs.
+	 * @return void
+	 */
+	public function deleteByIds( array $ids ): void {
+		global $wpdb;
+
+		$ids = array_values( array_filter( array_map( 'absint', $ids ) ) );
+		if ( empty( $ids ) ) {
+			return;
+		}
+
+		$table = $wpdb->prefix . 'smart_image_matcher_matches';
+		$in    = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE id IN ({$in})", $ids ) );
+	}
+
+	/**
+	 * Approved rows after an ID cursor, oldest first (for the one-time reconcile).
+	 *
+	 * @since 3.7.4
+	 * @param int $after_id Last row ID already handled.
+	 * @param int $limit    Batch size.
+	 * @return array<int, array<string, mixed>> Rows with id, post_id, image_id, heading_hash.
+	 */
+	public function approvedBatchAfter( int $after_id, int $limit ): array {
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT id, post_id, image_id, heading_hash FROM {$wpdb->prefix}smart_image_matcher_matches WHERE status = %s AND id > %d ORDER BY id ASC LIMIT %d",
+				'approved',
+				$after_id,
+				$limit
+			),
+			ARRAY_A
+		);
+
+		return is_array( $rows ) ? $rows : array();
+	}
+
+	/**
+	 * Body images this plugin put into a post (inserted, or approved before 3.7.4).
+	 *
+	 * @since 3.7.4
+	 * @param int $post_id Post ID.
+	 * @return array<int, array<int, int>> image_id => row IDs.
+	 */
+	public function insertedBodyRows( int $post_id ): array {
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT id, image_id FROM {$wpdb->prefix}smart_image_matcher_matches WHERE post_id = %d AND heading_hash <> %s AND status IN (%s, %s)",
+				$post_id,
+				'featured',
+				self::STATUS_INSERTED,
+				'approved'
+			),
+			ARRAY_A
+		);
+
+		$out = array();
+		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+			$out[ (int) $row['image_id'] ][] = (int) $row['id'];
+		}
+		return $out;
+	}
+
+	/**
 	 * Save match results for a post, replacing any existing pending rows.
 	 *
 	 * Deletes previous pending rows for this post first so repeated modal
@@ -164,7 +273,20 @@ class MatchRepository {
 	 * @return void
 	 */
 	public function markInserted( int $postId, int $imageId, string $headingHash ): void {
-		$this->markApproved( $postId, $imageId, $headingHash );
+		global $wpdb;
+
+		// "inserted", not "approved": approved rows are the ones still waiting for Insert approved.
+		$wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$wpdb->prefix . 'smart_image_matcher_matches',
+			array( 'status' => self::STATUS_INSERTED ),
+			array(
+				'post_id'      => $postId,
+				'image_id'     => $imageId,
+				'heading_hash' => $headingHash,
+			),
+			array( '%s' ),
+			array( '%d', '%d', '%s' )
+		);
 		$this->clearPendingForHeading( $postId, $headingHash );
 	}
 

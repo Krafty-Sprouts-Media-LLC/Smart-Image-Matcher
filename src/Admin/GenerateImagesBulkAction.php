@@ -44,6 +44,14 @@ class GenerateImagesBulkAction {
 	private const ACTION_PROCESS = 'sim_process_articles';
 
 	/**
+	 * Bulk action slug: remove images from the article body (confirmed on Bulk Processor → Tools).
+	 *
+	 * @since 3.7.4
+	 * @var string
+	 */
+	private const ACTION_REMOVE = 'sim_remove_images';
+
+	/**
 	 * Register bulk action filters for public post types.
 	 *
 	 * @since 3.2.0
@@ -78,6 +86,7 @@ class GenerateImagesBulkAction {
 		$args[] = 'sim_mode';
 		$args[] = 'sim_post_ids';
 		$args[] = 'sim_post_type';
+		$args[] = 'sim_remove_ids';
 		return $args;
 	}
 
@@ -91,6 +100,9 @@ class GenerateImagesBulkAction {
 	public function addBulkAction( array $actions ): array {
 		$actions[ self::ACTION_PROCESS ] = __( 'Process articles…', 'smart-image-matcher' );
 		$actions[ self::ACTION ]         = __( 'Generate featured images…', 'smart-image-matcher' );
+		if ( current_user_can( 'manage_options' ) ) {
+			$actions[ self::ACTION_REMOVE ] = __( 'Remove images from body…', 'smart-image-matcher' );
+		}
 		return $actions;
 	}
 
@@ -164,6 +176,10 @@ class GenerateImagesBulkAction {
 	 * @return string
 	 */
 	public function handleBulkAction( string $redirect_url, string $action, array $post_ids ): string {
+		if ( self::ACTION_REMOVE === $action ) {
+			return $this->handleRemove( $redirect_url, $post_ids );
+		}
+
 		if ( self::ACTION !== $action && self::ACTION_PROCESS !== $action ) {
 			return $redirect_url;
 		}
@@ -214,6 +230,36 @@ class GenerateImagesBulkAction {
 				'sim_featured_ids' => implode( ',', $ids ),
 			),
 			$redirect_url
+		);
+	}
+
+	/**
+	 * Send the selection to Bulk Processor → Tools, where removal is previewed and confirmed.
+	 *
+	 * Nothing is removed here.
+	 *
+	 * @since 3.7.4
+	 * @param string $redirect_url Default redirect URL.
+	 * @param int[]  $post_ids     Selected post IDs.
+	 * @return string
+	 */
+	private function handleRemove( string $redirect_url, array $post_ids ): string {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return $redirect_url;
+		}
+
+		$ids = array_slice( array_values( array_filter( array_map( 'absint', $post_ids ) ) ), 0, 200 );
+		if ( empty( $ids ) ) {
+			return $redirect_url;
+		}
+
+		return add_query_arg(
+			array(
+				'page'           => 'smart-image-matcher-bulk',
+				'sim_tab'        => 'tools',
+				'sim_remove_ids' => implode( ',', $ids ),
+			),
+			admin_url( 'admin.php' )
 		);
 	}
 }

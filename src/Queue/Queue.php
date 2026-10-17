@@ -106,6 +106,13 @@ class Queue {
 	const HOOK_MISSING_SCAN = 'smart_image_matcher_queue_missing_scan';
 
 	/**
+	 * Action hook: one batch of the one-time approved → inserted reconcile.
+	 *
+	 * @since 3.7.4
+	 */
+	const HOOK_RECONCILE_APPROVED = 'smart_image_matcher_queue_reconcile_approved';
+
+	/**
 	 * Seconds between fal poll AS jobs.
 	 *
 	 * @since 3.2.18
@@ -144,6 +151,7 @@ class Queue {
 		add_action( self::HOOK_FAL_RECOVER, array( JobRunner::class, 'runFalRecoverJob' ), 10, 2 );
 		add_action( self::HOOK_PENDING_RECHECK, array( JobRunner::class, 'runPendingRecheck' ) );
 		add_action( self::HOOK_MISSING_SCAN, array( JobRunner::class, 'runMissingScan' ) );
+		add_action( self::HOOK_RECONCILE_APPROVED, array( JobRunner::class, 'runReconcileApproved' ) );
 	}
 
 	/**
@@ -170,6 +178,30 @@ class Queue {
 		}
 
 		as_enqueue_async_action( self::HOOK_MISSING_SCAN, array(), self::GROUP );
+	}
+
+	/**
+	 * Schedule the approved → inserted reconcile while it is unfinished.
+	 *
+	 * @since 3.7.4
+	 * @return void
+	 */
+	public function maybeResumeReconcileApproved(): void {
+		$state = get_option( JobRunner::RECONCILE_OPTION, array() );
+		if ( ! is_array( $state ) || empty( $state ) || ! empty( $state['done'] ) || ! self::isAvailable() ) {
+			return;
+		}
+
+		if ( class_exists( 'ActionScheduler' ) && ! \ActionScheduler::is_initialized() ) {
+			add_action( 'action_scheduler_init', array( $this, 'maybeResumeReconcileApproved' ) );
+			return;
+		}
+
+		if ( as_has_scheduled_action( self::HOOK_RECONCILE_APPROVED, array(), self::GROUP ) ) {
+			return;
+		}
+
+		as_enqueue_async_action( self::HOOK_RECONCILE_APPROVED, array(), self::GROUP );
 	}
 
 	/**

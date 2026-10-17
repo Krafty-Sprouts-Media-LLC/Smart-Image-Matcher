@@ -34,6 +34,7 @@ if ( ! in_array( $smart_image_matcher_mode, array( 'process', 'generate-featured
 }
 
 $smart_image_matcher_post_ids  = isset( $_GET['sim_post_ids'] ) ? sanitize_text_field( wp_unslash( (string) $_GET['sim_post_ids'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+$smart_image_matcher_remove    = isset( $_GET['sim_remove_ids'] ) ? implode( ',', array_filter( array_map( 'absint', explode( ',', sanitize_text_field( wp_unslash( (string) $_GET['sim_remove_ids'] ) ) ) ) ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- prefill only; removal needs a REST nonce.
 $smart_image_matcher_post_type = isset( $_GET['sim_post_type'] ) ? sanitize_key( wp_unslash( (string) $_GET['sim_post_type'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 
 $smart_image_matcher_tabs = array(
@@ -48,7 +49,8 @@ $smart_image_matcher_tabs = array(
 	data-sim-run="<?php echo esc_attr( $smart_image_matcher_run ); ?>"
 	data-sim-mode="<?php echo esc_attr( $smart_image_matcher_mode ); ?>"
 	data-sim-post-ids="<?php echo esc_attr( $smart_image_matcher_post_ids ); ?>"
-	data-sim-post-type="<?php echo esc_attr( $smart_image_matcher_post_type ); ?>">
+	data-sim-post-type="<?php echo esc_attr( $smart_image_matcher_post_type ); ?>"
+	data-sim-remove-ids="<?php echo esc_attr( $smart_image_matcher_remove ); ?>">
 
 	<div class="sim-bp-head">
 		<div>
@@ -95,6 +97,45 @@ $smart_image_matcher_tabs = array(
 
 	<section class="sim-bulk-panel" data-panel="tools" <?php echo 'tools' === $smart_image_matcher_tab ? '' : 'hidden'; ?>>
 		<div class="sim-bp-tools">
+			<div class="sim-bp-card sim-bp-tool sim-bp-tool-wide" id="sim-remove-images">
+				<h2><?php esc_html_e( 'Remove images from articles', 'smart-image-matcher' ); ?></h2>
+				<p class="description"><?php esc_html_e( 'Takes images out of the article body. The featured image is never touched, and images inside a gallery are left alone. Each article is saved once, so WordPress keeps a revision you can restore. Images this plugin added will not be suggested for those headings again.', 'smart-image-matcher' ); ?></p>
+				<div class="sim-bp-fields">
+					<div class="sim-bp-field sim-bp-full">
+						<label for="sim-remove-ids"><?php esc_html_e( 'Articles', 'smart-image-matcher' ); ?></label>
+						<textarea id="sim-remove-ids" rows="2" placeholder="<?php esc_attr_e( 'Post IDs, comma separated — or choose “Remove images from body…” in the Posts list bulk actions', 'smart-image-matcher' ); ?>"></textarea>
+					</div>
+					<div class="sim-bp-field">
+						<span class="sim-bp-label" id="sim-remove-scope-label"><?php esc_html_e( 'Remove', 'smart-image-matcher' ); ?></span>
+						<div class="sim-bp-seg is-stack" role="radiogroup" aria-labelledby="sim-remove-scope-label">
+							<label><input type="radio" name="sim-remove-scope" value="all" checked /><?php esc_html_e( 'Every image in the body', 'smart-image-matcher' ); ?></label>
+							<label><input type="radio" name="sim-remove-scope" value="plugin" /><?php esc_html_e( 'Only images added by Smart Image Matcher', 'smart-image-matcher' ); ?></label>
+						</div>
+					</div>
+					<div class="sim-bp-field">
+						<span class="sim-bp-label"><?php esc_html_e( 'Afterwards', 'smart-image-matcher' ); ?></span>
+						<label><input type="checkbox" id="sim-remove-ignore" /> <?php esc_html_e( 'Ignore these articles (no run adds images to them again)', 'smart-image-matcher' ); ?></label>
+					</div>
+				</div>
+				<div class="sim-bp-actions">
+					<button type="button" id="sim-remove-preview" class="button"><?php esc_html_e( 'Preview', 'smart-image-matcher' ); ?></button>
+					<button type="button" id="sim-remove-run" class="button sim-bp-solid-danger" disabled><?php esc_html_e( 'Remove images', 'smart-image-matcher' ); ?></button>
+					<span class="sim-bp-help" id="sim-remove-status"></span>
+				</div>
+				<div class="sim-bp-table-wrap">
+					<table class="widefat striped" id="sim-remove-table" hidden>
+						<thead><tr>
+							<td class="check-column"><input type="checkbox" id="sim-remove-all" checked aria-label="<?php esc_attr_e( 'Select all', 'smart-image-matcher' ); ?>" /></td>
+							<th><?php esc_html_e( 'Article', 'smart-image-matcher' ); ?></th>
+							<th><?php esc_html_e( 'Images in the body', 'smart-image-matcher' ); ?></th>
+							<th><?php esc_html_e( 'Added by this plugin', 'smart-image-matcher' ); ?></th>
+							<th><?php esc_html_e( 'Result', 'smart-image-matcher' ); ?></th>
+						</tr></thead>
+						<tbody id="sim-remove-body"></tbody>
+					</table>
+				</div>
+			</div>
+
 			<div class="sim-bp-card sim-bp-tool sim-bp-tool-wide" id="sim-misplaced">
 				<h2><?php esc_html_e( 'Featured images stuck in the article body', 'smart-image-matcher' ); ?></h2>
 				<p class="description"><?php esc_html_e( 'Articles with no featured image whose own image (exact or prefix filename match) sits in the body, usually under the first heading. Moving sets it as the featured image and removes it from the body. Preview first.', 'smart-image-matcher' ); ?></p>

@@ -128,6 +128,26 @@ class ReviewToolsController extends Controller {
 			),
 		) );
 
+		register_rest_route( self::NAMESPACE, '/body-images/preview', array(
+			'methods'             => \WP_REST_Server::CREATABLE,
+			'callback'            => array( $this, 'bodyImagesPreview' ),
+			'permission_callback' => array( $this, 'canManage' ),
+			'args'                => array(
+				'post_ids' => array( 'type' => 'array', 'required' => true, 'items' => array( 'type' => 'integer' ) ),
+			),
+		) );
+
+		register_rest_route( self::NAMESPACE, '/body-images/remove', array(
+			'methods'             => \WP_REST_Server::CREATABLE,
+			'callback'            => array( $this, 'bodyImagesRemove' ),
+			'permission_callback' => array( $this, 'canManage' ),
+			'args'                => array(
+				'post_ids' => array( 'type' => 'array', 'required' => true, 'items' => array( 'type' => 'integer' ) ),
+				'scope'    => array( 'type' => 'string', 'required' => true, 'enum' => array( 'all', 'plugin' ) ),
+				'ignore'   => array( 'type' => 'boolean', 'default' => false ),
+			),
+		) );
+
 		register_rest_route( self::NAMESPACE, '/schedule', array(
 			'methods'             => \WP_REST_Server::READABLE,
 			'callback'            => array( $this, 'schedule' ),
@@ -392,6 +412,64 @@ class ReviewToolsController extends Controller {
 		$out   = array();
 		foreach ( $ids as $post_id ) {
 			$out[] = array_merge( array( 'id' => $post_id ), $mover->move( $post_id ) );
+		}
+		return rest_ensure_response( array( 'results' => $out ) );
+	}
+
+	// -------------------------------------------------------------------------
+	// Remove images from article bodies
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Remover service.
+	 *
+	 * @return \SmartImageMatcher\Domain\BodyImageRemover
+	 */
+	private function remover(): \SmartImageMatcher\Domain\BodyImageRemover {
+		return new \SmartImageMatcher\Domain\BodyImageRemover(
+			new \SmartImageMatcher\Insertion\InsertionService( new \SmartImageMatcher\Insertion\BlockBuilder() ),
+			new MatchRepository()
+		);
+	}
+
+	/**
+	 * Image counts for up to 200 posts (what removing would affect).
+	 *
+	 * @since 3.7.4
+	 * @param \WP_REST_Request $request Request.
+	 * @return \WP_REST_Response
+	 */
+	public function bodyImagesPreview( \WP_REST_Request $request ): \WP_REST_Response {
+		$ids     = array_slice( array_values( array_unique( array_filter( array_map( 'absint', (array) $request->get_param( 'post_ids' ) ) ) ) ), 0, 200 );
+		$remover = $this->remover();
+		$items   = array();
+		foreach ( $ids as $post_id ) {
+			if ( ! current_user_can( 'edit_post', $post_id ) ) {
+				continue;
+			}
+			$row = $remover->preview( $post_id );
+			if ( null !== $row ) {
+				$items[] = $row;
+			}
+		}
+		return rest_ensure_response( array( 'items' => $items ) );
+	}
+
+	/**
+	 * Remove images from up to 25 posts.
+	 *
+	 * @since 3.7.4
+	 * @param \WP_REST_Request $request Request.
+	 * @return \WP_REST_Response
+	 */
+	public function bodyImagesRemove( \WP_REST_Request $request ): \WP_REST_Response {
+		$ids     = array_slice( array_values( array_unique( array_filter( array_map( 'absint', (array) $request->get_param( 'post_ids' ) ) ) ) ), 0, 25 );
+		$scope   = 'plugin' === (string) $request->get_param( 'scope' ) ? 'plugin' : 'all';
+		$ignore  = (bool) $request->get_param( 'ignore' );
+		$remover = $this->remover();
+		$out     = array();
+		foreach ( $ids as $post_id ) {
+			$out[] = array_merge( array( 'id' => $post_id ), $remover->remove( $post_id, $scope, $ignore ) );
 		}
 		return rest_ensure_response( array( 'results' => $out ) );
 	}

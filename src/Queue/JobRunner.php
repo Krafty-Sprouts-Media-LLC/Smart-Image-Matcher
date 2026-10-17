@@ -39,6 +39,13 @@ use SmartImageMatcher\Settings\Settings;
 class JobRunner {
 
 	/**
+	 * Option holding the one-time approved → inserted reconcile cursor (autoload=no).
+	 *
+	 * @since 3.7.4
+	 */
+	const RECONCILE_OPTION = 'smart_image_matcher_reconcile_approved';
+
+	/**
 	 * Run an AI match job for a single post.
 	 *
 	 * Uses AI\Matcher for ai mode. A failed AI call does not fall back to
@@ -478,8 +485,33 @@ class JobRunner {
 			return;
 		}
 
-		$insertions = array();
+		// Featured slot: set it (only when the post has no real featured image).
+		$heading_rows = array();
 		foreach ( $approved as $row ) {
+			if ( 'featured' !== (string) $row['heading_hash'] ) {
+				$heading_rows[] = $row;
+				continue;
+			}
+			$image_id = (int) $row['image_id'];
+			if ( FeaturedImageService::getStoredThumbnailId( $postId ) === $image_id ) {
+				$matchRepo->setStatusByIds( array( (int) $row['id'] ), MatchRepository::STATUS_INSERTED );
+			} elseif ( FeaturedImageService::hasActionableFeaturedImage( $postId ) ) {
+				// The post got another featured image meanwhile; this approval is moot.
+				$matchRepo->deleteByIds( array( (int) $row['id'] ) );
+			} elseif ( $image_id > 0 && wp_attachment_is_image( $image_id ) ) {
+				set_post_thumbnail( $postId, $image_id );
+				if ( FeaturedImageService::getStoredThumbnailId( $postId ) === $image_id ) {
+					$matchRepo->setStatusByIds( array( (int) $row['id'] ), MatchRepository::STATUS_INSERTED );
+				}
+			}
+		}
+
+		if ( empty( $heading_rows ) ) {
+			return;
+		}
+
+		$insertions = array();
+		foreach ( $heading_rows as $row ) {
 			$insertions[] = array(
 				'heading_hash' => (string) $row['heading_hash'],
 				'image_id'     => (int) $row['image_id'],
@@ -489,7 +521,7 @@ class JobRunner {
 		$service = new InsertionService( new BlockBuilder() );
 		$result  = $service->bulkInsert( $postId, $insertions );
 
-		if ( is_wp_error( $result ) ) {
+		if ( is_wp_error( $result ) && 'smart_image_matcher_already_inserted' !== $result->get_error_code() ) {
 			Logger::error(
 				'JobRunner: bulk insert failed',
 				array(
@@ -497,6 +529,74 @@ class JobRunner {
 					'error'   => $result->get_error_message(),
 				)
 			);
+		}
+
+		// Rows whose image is now in the post are done; the rest stay approved.
+		$present = $service->attachmentIdsInContent( $postId );
+		$done    = array();
+		foreach ( $heading_rows as $row ) {
+			if ( isset( $present[ (int) $row['image_id'] ] ) ) {
+				$done[] = (int) $row['id'];
+			}
+		}
+		$matchRepo->setStatusByIds( $done, MatchRepository::STATUS_INSERTED );
+	}
+
+	/**
+	 * One batch of the one-time reconcile: approved rows whose image is already in
+	 * the post (or set as its featured image) become "inserted".
+	 *
+	 * Before 3.7.4 inserted images kept the "approved" status, so Insert approved
+	 * re-queued them and the Review dock over-counted.
+	 *
+	 * @since 3.7.4
+	 * @return void
+	 */
+	public static function runReconcileApproved(): void {
+		$state = get_option( self::RECONCILE_OPTION, array() );
+		if ( ! is_array( $state ) || empty( $state ) || ! empty( $state['done'] ) ) {
+			return;
+		}
+
+		$repo    = new MatchRepository();
+		$service = new InsertionService( new BlockBuilder() );
+		$rows    = $repo->approvedBatchAfter( (int) ( $state['after_id'] ?? 0 ), 200 );
+		$in_body = array();
+		$done    = array();
+		$last    = (int) ( $state['after_id'] ?? 0 );
+
+		foreach ( $rows as $row ) {
+			$last     = (int) $row['id'];
+			$post_id  = (int) $row['post_id'];
+			$image_id = (int) $row['image_id'];
+			if ( 'featured' === (string) $row['heading_hash'] ) {
+				if ( FeaturedImageService::getStoredThumbnailId( $post_id ) === $image_id ) {
+					$done[] = $last;
+				}
+				continue;
+			}
+			if ( ! isset( $in_body[ $post_id ] ) ) {
+				$in_body[ $post_id ] = $service->attachmentIdsInContent( $post_id );
+			}
+			if ( isset( $in_body[ $post_id ][ $image_id ] ) ) {
+				$done[] = $last;
+			}
+		}
+
+		$repo->setStatusByIds( $done, MatchRepository::STATUS_INSERTED );
+		$finished = count( $rows ) < 200;
+		update_option(
+			self::RECONCILE_OPTION,
+			array(
+				'after_id' => $last,
+				'done'     => $finished,
+				'fixed'    => (int) ( $state['fixed'] ?? 0 ) + count( $done ),
+			),
+			false
+		);
+
+		if ( ! $finished && function_exists( 'as_enqueue_async_action' ) ) {
+			as_enqueue_async_action( Queue::HOOK_RECONCILE_APPROVED, array(), Queue::GROUP );
 		}
 	}
 

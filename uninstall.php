@@ -37,6 +37,7 @@ if ( function_exists( 'as_unschedule_all_actions' ) ) {
 		'smart_image_matcher_fiaa_scheduled_run',
 		'smart_image_matcher_queue_pending_recheck',
 		'smart_image_matcher_queue_missing_scan',
+		'smart_image_matcher_queue_reconcile_approved',
 		// Legacy pre-rename hook names (sim_* -> smart_image_matcher_*).
 		// Orphaned actions under these names fail forever with "no
 		// callbacks registered" if left behind on uninstall.

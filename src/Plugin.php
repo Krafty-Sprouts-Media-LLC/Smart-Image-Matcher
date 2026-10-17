@@ -808,11 +808,12 @@ class Plugin {
 			)
 		);
 
-		// Approved matches > 90 days (audit trail past usefulness).
+		// Approved and inserted matches > 90 days (audit trail past usefulness).
 		$wpdb->query(
 			$wpdb->prepare(
-				"DELETE FROM {$matches} WHERE status = %s AND created_at < DATE_SUB(NOW(), INTERVAL 90 DAY)",
-				'approved'
+				"DELETE FROM {$matches} WHERE status IN (%s, %s) AND created_at < DATE_SUB(NOW(), INTERVAL 90 DAY)",
+				'approved',
+				'inserted'
 			)
 		);
 

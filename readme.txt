@@ -4,7 +4,7 @@ Tags: images, media library, alt text, featured image, automation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 3.7.3
+Stable tag: 3.7.4
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -95,6 +95,11 @@ No AI data is sent automatically — only when you explicitly trigger AI matchin
 The plugin stores match results and job metadata in your own database only. Update checks may contact GitHub (see External services). No post content leaves your server unless you explicitly use AI features with a configured provider.
 
 == Changelog ==
+
+= 3.7.4 =
+* New: "Remove images from body…" in the Posts list bulk actions. Preview first, choose every image or only images this plugin added, optionally ignore the articles, then remove. Featured images and gallery images are never touched, and WordPress keeps a revision of each article.
+* Fixed: "Insert approved" could insert images that were already in an article a second time. It now skips images already in place, and inserted images are tracked separately from ones waiting for approval. Existing records are corrected in the background after updating.
+* Fixed: approving a featured-image suggestion in Review now sets it as the featured image.
 
 = 3.7.3 =
 * Fixed: an article's own featured image could be inserted under its first heading instead of becoming the featured image. This happened on sites with a fallback featured image (e.g. KSM Extensions) before 3.6.2. Runs now keep that image out of the body while the article has no featured image.

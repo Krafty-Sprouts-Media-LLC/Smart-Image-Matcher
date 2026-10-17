@@ -2071,7 +2071,126 @@
 		q( '#sim-misplaced-body' ).addEventListener( 'change', syncMisplacedButton );
 	}
 
+	// Remove images from articles: preview counts, then remove the ticked ones in groups of 25.
+	const removal = { items: [] };
+
+	function removeScope() {
+		return radioValue( 'sim-remove-scope', 'all' ) === 'plugin' ? 'plugin' : 'all';
+	}
+
+	function renderRemoveRows() {
+		const scope = removeScope();
+		q( '#sim-remove-body' ).innerHTML = removal.items.map( ( it ) => {
+			const n = scope === 'plugin' ? parseInt( it.plugin, 10 ) : parseInt( it.total, 10 );
+			const done = !! it.done;
+			return `<tr data-post="${ parseInt( it.id, 10 ) }">
+				<th scope="row" class="check-column"><input type="checkbox" class="sim-remove-pick" value="${ parseInt( it.id, 10 ) }"${ n > 0 && ! done ? ' checked' : ' disabled' } /></th>
+				<td><a href="${ esc( it.edit_url || '#' ) }" target="_blank" rel="noopener">${ esc( it.title || '#' + it.id ) }</a> <span class="sim-bp-help">#${ parseInt( it.id, 10 ) } · ${ esc( it.status ) }</span></td>
+				<td class="sim-num">${ parseInt( it.total, 10 ) }</td>
+				<td class="sim-num">${ parseInt( it.plugin, 10 ) }</td>
+				<td class="sim-remove-result">${ it.resultHtml || ( n > 0 ? '—' : `<span class="sim-bp-help">${ esc( __( 'Nothing to remove', 'smart-image-matcher' ) ) }</span>` ) }</td>
+			</tr>`;
+		} ).join( '' );
+		q( '#sim-remove-table' ).hidden = ! removal.items.length;
+		syncRemoveButton();
+	}
+
+	function syncRemoveButton() {
+		const picks = qAll( '.sim-remove-pick' ).filter( ( el ) => el.checked && ! el.disabled );
+		const scope = removeScope();
+		const images = picks.reduce( ( sum, el ) => {
+			const it = removal.items.find( ( i ) => String( i.id ) === el.value );
+			return sum + ( it ? parseInt( scope === 'plugin' ? it.plugin : it.total, 10 ) : 0 );
+		}, 0 );
+		const btn = q( '#sim-remove-run' );
+		btn.disabled = ! picks.length;
+		btn.textContent = picks.length
+			? sprintf( __( 'Remove %1$d images from %2$d articles', 'smart-image-matcher' ), images, picks.length )
+			: __( 'Remove images', 'smart-image-matcher' );
+	}
+
+	function removeIds() {
+		return [ ...new Set( val( '#sim-remove-ids' ).split( /[\s,]+/ ).map( ( s ) => parseInt( s, 10 ) ).filter( ( n ) => n > 0 ) ) ].slice( 0, 200 );
+	}
+
+	async function previewRemoval() {
+		const ids = removeIds();
+		if ( ! ids.length ) {
+			q( '#sim-remove-status' ).textContent = __( 'Enter at least one post ID.', 'smart-image-matcher' );
+			return;
+		}
+		q( '#sim-remove-status' ).textContent = __( 'Counting images…', 'smart-image-matcher' );
+		try {
+			const res = await api( '/body-images/preview', 'POST', { post_ids: ids } );
+			removal.items = res.items || [];
+			renderRemoveRows();
+			const total = removal.items.reduce( ( s, it ) => s + parseInt( it.total, 10 ), 0 );
+			q( '#sim-remove-status' ).textContent = sprintf( __( '%1$d articles · %2$d images in their bodies', 'smart-image-matcher' ), removal.items.length, total );
+		} catch ( err ) {
+			q( '#sim-remove-status' ).textContent = errMsg( err, __( 'Could not count images.', 'smart-image-matcher' ) );
+		}
+	}
+
+	async function runRemoval() {
+		const ids = qAll( '.sim-remove-pick' ).filter( ( el ) => el.checked && ! el.disabled ).map( ( el ) => parseInt( el.value, 10 ) );
+		if ( ! ids.length ) return;
+		const scope = removeScope();
+		const ignore = !! q( '#sim-remove-ignore' ).checked;
+		const what = scope === 'plugin'
+			? __( 'the images Smart Image Matcher added', 'smart-image-matcher' )
+			: __( 'every image in the body', 'smart-image-matcher' );
+		if ( ! window.confirm( sprintf( _n( 'Remove %1$s from %2$d article? The featured image is kept. WordPress keeps a revision you can restore.', 'Remove %1$s from %2$d articles? Featured images are kept. WordPress keeps a revision of each you can restore.', ids.length, 'smart-image-matcher' ), what, ids.length ) ) ) return;
+
+		q( '#sim-remove-run' ).disabled = true;
+		let removed = 0;
+		for ( let i = 0; i < ids.length; i += 25 ) {
+			const batch = ids.slice( i, i + 25 );
+			let results = [];
+			try {
+				results = ( await api( '/body-images/remove', 'POST', { post_ids: batch, scope, ignore } ) ).results || [];
+			} catch ( err ) {
+				results = batch.map( ( id ) => ( { id, ok: false, removed: 0, message: errMsg( err, __( 'Request failed.', 'smart-image-matcher' ) ) } ) );
+			}
+			results.forEach( ( r ) => {
+				const it = removal.items.find( ( x ) => parseInt( x.id, 10 ) === parseInt( r.id, 10 ) );
+				if ( ! it ) return;
+				const n = parseInt( r.removed || 0, 10 );
+				removed += n;
+				it.done = !! r.ok;
+				it.resultHtml = r.ok
+					? `<span class="sim-pill is-ran">${ esc( sprintf( _n( 'Removed %d', 'Removed %d', n, 'smart-image-matcher' ), n ) ) }</span>${ ignore ? ` <span class="sim-bp-help">${ esc( __( 'ignored', 'smart-image-matcher' ) ) }</span>` : '' }`
+					: `<span class="sim-pill is-skip">${ esc( __( 'Not changed', 'smart-image-matcher' ) ) }</span> <span class="sim-bp-help">${ esc( r.message || '' ) }</span>`;
+			} );
+			renderRemoveRows();
+			q( '#sim-remove-status' ).textContent = sprintf( __( 'Removed %1$d images so far (%2$d of %3$d articles)…', 'smart-image-matcher' ), removed, Math.min( i + 25, ids.length ), ids.length );
+		}
+		q( '#sim-remove-status' ).textContent = sprintf( _n( 'Removed %d image.', 'Removed %d images.', removed, 'smart-image-matcher' ), removed );
+		toast( q( '#sim-remove-status' ).textContent );
+		syncRemoveButton();
+	}
+
+	function bindRemoval() {
+		q( '#sim-remove-preview' ).addEventListener( 'click', previewRemoval );
+		q( '#sim-remove-run' ).addEventListener( 'click', runRemoval );
+		qAll( 'input[name="sim-remove-scope"]' ).forEach( ( el ) => el.addEventListener( 'change', renderRemoveRows ) );
+		q( '#sim-remove-body' ).addEventListener( 'change', syncRemoveButton );
+		q( '#sim-remove-all' ).addEventListener( 'change', ( e ) => {
+			qAll( '.sim-remove-pick' ).forEach( ( el ) => {
+				if ( ! el.disabled ) el.checked = e.target.checked;
+			} );
+			syncRemoveButton();
+		} );
+		// Arrived from the Posts list bulk action: fill in, count, and bring the card into view.
+		if ( app.dataset.simRemoveIds ) {
+			q( '#sim-remove-ids' ).value = app.dataset.simRemoveIds.replace( /,/g, ', ' );
+			app.dataset.simRemoveIds = '';
+			previewRemoval();
+			q( '#sim-remove-images' ).scrollIntoView( { block: 'start' } );
+		}
+	}
+
 	function bindTools() {
+		bindRemoval();
 		bindMisplaced();
 		const select = q( '#sim-audit-post-type' );
 		select.innerHTML = Object.entries( postTypes ).map( ( [ slug, label ] ) => `<option value="${ esc( slug ) }">${ esc( label ) }</option>` ).join( '' );

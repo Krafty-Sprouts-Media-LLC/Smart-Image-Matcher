@@ -87,6 +87,50 @@ class RemoveImageTest extends TestCase {
 	}
 
 	/** @test */
+	public function removing_every_image_reports_what_it_removed(): void {
+		$content = "<h2>One</h2>\n<p><img class=\"wp-image-3\" src=\"a.jpg\" /></p>\n<p>Keep me.</p>\n<img src=\"https://example.com/x.jpg\" />";
+
+		$result = ( new InsertionService( new BlockBuilder() ) )->withoutImages( $content, null );
+
+		$this->assertStringNotContainsString( '<img', $result['content'] );
+		$this->assertStringContainsString( '<p>Keep me.</p>', $result['content'] );
+		$this->assertSame( array( 3, 0 ), $result['removed'] );
+	}
+
+	/** @test */
+	public function standalone_count_skips_gallery_images(): void {
+		$GLOBALS['sim_test_parse_blocks'] = static fn() => array(
+			array( 'blockName' => 'core/image', 'attrs' => array( 'id' => 4 ), 'innerBlocks' => array() ),
+			array(
+				'blockName'   => 'core/gallery',
+				'attrs'       => array(),
+				'innerBlocks' => array( array( 'blockName' => 'core/image', 'attrs' => array( 'id' => 9 ), 'innerBlocks' => array() ) ),
+			),
+		);
+
+		$ids = ( new InsertionService( new BlockBuilder() ) )->standaloneImageIds( '<!-- wp:image -->' );
+
+		$this->assertSame( array( 4 ), $ids );
+	}
+
+	/** @test */
+	public function an_image_already_in_the_post_is_never_inserted_twice(): void {
+		$post               = new \WP_Post();
+		$post->ID           = 31;
+		$post->post_content = '<h2>Goldfinch</h2><p><img class="wp-image-5" src="g.jpg" /></p>';
+		$GLOBALS['sim_test_get_post'] = static fn() => $post;
+
+		$result = ( new InsertionService( new BlockBuilder() ) )->bulkInsert(
+			31,
+			array( array( 'heading_hash' => 'any-hash', 'image_id' => 5 ) )
+		);
+
+		unset( $GLOBALS['sim_test_get_post'] );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'smart_image_matcher_already_inserted', $result->get_error_code() );
+	}
+
+	/** @test */
 	public function content_without_the_image_is_unchanged(): void {
 		$content = '<p><img class="wp-image-7" src="c.jpg" /></p>';
 		$this->assertSame( $content, ( new InsertionService( new BlockBuilder() ) )->withoutImage( $content, 8 ) );

@@ -33,7 +33,7 @@ class Migrator {
 	 *
 	 * Bump this constant whenever a new migration is added.
 	 */
-	const SCHEMA_VERSION = 7;
+	const SCHEMA_VERSION = 8;
 
 	/**
 	 * Action Scheduler hook names used by prior versions of this plugin
@@ -94,6 +94,10 @@ class Migrator {
 			MissingImagesIndex::armScan();
 		}
 
+		if ( $installed < 8 ) {
+			self::armReconcileApproved();
+		}
+
 		// Always ensure the inverted index table exists, even on sites that
 		// were activated before Migration 3 was introduced.
 		$this->ensureInvertedIndexExists();
@@ -104,6 +108,7 @@ class Migrator {
 		( new Queue() )->maybeResumeIndexBackfill();
 		( new Queue() )->maybeResumePendingRecheck();
 		( new Queue() )->maybeResumeMissingScan();
+		( new Queue() )->maybeResumeReconcileApproved();
 
 		update_option( 'smart_image_matcher_db_version', self::SCHEMA_VERSION, false );
 	}
@@ -122,12 +127,31 @@ class Migrator {
 		$this->migration5ReindexStemmedTerms();
 		$this->migration6RecheckPendingRows();
 		MissingImagesIndex::armScan(); // Migration 7: build the Missing Images index.
+		self::armReconcileApproved(); // Migration 8: approved → inserted.
 		update_option( 'smart_image_matcher_db_version', self::SCHEMA_VERSION, false );
 	}
 
 	// -------------------------------------------------------------------------
 	// Individual migrations
 	// -------------------------------------------------------------------------
+
+	/**
+	 * Migration 8: start the one-time approved → inserted reconcile (runs in the background).
+	 *
+	 * @since 3.7.4
+	 * @return void
+	 */
+	public static function armReconcileApproved(): void {
+		update_option(
+			\SmartImageMatcher\Queue\JobRunner::RECONCILE_OPTION,
+			array(
+				'after_id' => 0,
+				'done'     => false,
+				'fixed'    => 0,
+			),
+			false
+		);
+	}
 
 	/**
 	 * Migration 1 — Create wp_smart_image_matcher_matches and wp_smart_image_matcher_queue tables.

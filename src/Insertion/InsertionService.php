@@ -161,6 +161,22 @@ class InsertionService {
 			);
 		}
 
+		// Never insert twice: skip images already in the post and headings that already have one.
+		$present    = $this->attachmentIdsInContent( $postId );
+		$insertions = array_values(
+			array_filter(
+				$insertions,
+				fn( array $row ): bool => ! isset( $present[ (int) $row['image_id'] ] )
+					&& ! $this->headingHasFollowingImage( $postId, (string) $row['heading_hash'] )
+			)
+		);
+		if ( empty( $insertions ) ) {
+			return new \WP_Error(
+				'smart_image_matcher_already_inserted',
+				__( 'Those images are already in the article.', 'smart-image-matcher' )
+			);
+		}
+
 		// Validate every image before touching the content.
 		foreach ( $insertions as $item ) {
 			if ( ! wp_attachment_is_image( (int) $item['image_id'] ) ) {
@@ -335,32 +351,48 @@ class InsertionService {
 	 * @return true|\WP_Error
 	 */
 	public function removeImage( int $post_id, int $image_id ) {
+		if ( $image_id <= 0 ) {
+			return new \WP_Error( 'smart_image_matcher_invalid_post', __( 'Post not found.', 'smart-image-matcher' ) );
+		}
+		$result = $this->removeImages( $post_id, array( $image_id ) );
+		return is_wp_error( $result ) ? $result : true;
+	}
+
+	/**
+	 * Remove standalone images from a post's body in one save.
+	 *
+	 * @since 3.7.4
+	 * @param int        $post_id   Post ID.
+	 * @param int[]|null $image_ids Attachment IDs, or null for every standalone image.
+	 * @return array<int, int>|\WP_Error IDs removed (0 for an image with no attachment ID).
+	 */
+	public function removeImages( int $post_id, ?array $image_ids ) {
 		$post = get_post( $post_id );
-		if ( ! $post instanceof \WP_Post || $image_id <= 0 ) {
+		if ( ! $post instanceof \WP_Post ) {
 			return new \WP_Error( 'smart_image_matcher_invalid_post', __( 'Post not found.', 'smart-image-matcher' ) );
 		}
 
 		$content = (string) $post->post_content;
-		$updated = $this->withoutImage( $content, $image_id );
-		if ( $updated === $content ) {
-			return new \WP_Error( 'smart_image_matcher_image_not_in_body', __( 'That image was not found in the article body.', 'smart-image-matcher' ) );
+		$result  = $this->withoutImages( $content, $image_ids );
+		if ( empty( $result['removed'] ) || $result['content'] === $content ) {
+			return new \WP_Error( 'smart_image_matcher_image_not_in_body', __( 'No matching image was found in the article body.', 'smart-image-matcher' ) );
 		}
 
-		$result = wp_update_post(
+		$saved = wp_update_post(
 			wp_slash(
 				array(
 					'ID'           => $post_id,
-					'post_content' => $updated,
+					'post_content' => $result['content'],
 				)
 			),
 			true
 		);
-		if ( is_wp_error( $result ) ) {
-			return $result;
+		if ( is_wp_error( $saved ) ) {
+			return $saved;
 		}
 
 		Cache::clearPost( $post_id );
-		return true;
+		return $result['removed'];
 	}
 
 	/**
@@ -372,65 +404,159 @@ class InsertionService {
 	 * @return string Unchanged when the image is not there.
 	 */
 	public function withoutImage( string $content, int $image_id ): string {
-		if ( '' === $content || $image_id <= 0 ) {
+		if ( $image_id <= 0 ) {
 			return $content;
 		}
-
-		if ( has_blocks( $content ) ) {
-			$removed = 0;
-			$blocks  = $this->dropImageBlocks( parse_blocks( $content ), $image_id, '', $removed );
-			return $removed > 0 ? serialize_blocks( $this->normalizeBlocksForSerialize( $blocks ) ) : $content;
-		}
-
-		// Classic: caption shortcode, figure, a paragraph holding only the image, then a bare image.
-		$id       = (string) $image_id;
-		$patterns = array(
-			'#\[caption[^\]]*\](?:(?!\[/caption\]).)*?wp-image-' . $id . '(?!\d)(?:(?!\[/caption\]).)*\[/caption\]\s*#s',
-			'#<figure\b[^>]*>(?:(?!</figure>).)*?wp-image-' . $id . '(?!\d)(?:(?!</figure>).)*</figure>\s*#s',
-			'#<p>\s*(?:<a\b[^>]*>\s*)?<img\b[^>]*wp-image-' . $id . '(?!\d)[^>]*>\s*(?:</a>\s*)?</p>\s*#s',
-			'#(?:<a\b[^>]*>\s*)?<img\b[^>]*wp-image-' . $id . '(?!\d)[^>]*>(?:\s*</a>)?#s',
-		);
-		foreach ( $patterns as $pattern ) {
-			$next = preg_replace( $pattern, '', $content );
-			if ( is_string( $next ) ) {
-				$content = $next;
-			}
-		}
-		return $content;
+		return $this->withoutImages( $content, array( $image_id ) )['content'];
 	}
 
 	/**
-	 * Drop core/image blocks for one attachment, keeping innerContent placeholders in step.
+	 * Content with standalone images removed (never images inside a gallery).
 	 *
-	 * @param array<int, mixed> $blocks   Blocks.
-	 * @param int               $image_id Attachment ID.
-	 * @param string            $parent   Parent block name ('' at the top level).
-	 * @param int               $removed  Blocks removed (by ref).
-	 * @return array<int, array<string, mixed>>
+	 * @since 3.7.4
+	 * @param string     $content   Post content.
+	 * @param int[]|null $image_ids Attachment IDs, or null for every standalone image.
+	 * @return array{content:string, removed:array<int, int>}
 	 */
-	private function dropImageBlocks( array $blocks, int $image_id, string $parent, int &$removed ): array {
-		$out = array();
+	public function withoutImages( string $content, ?array $image_ids ): array {
+		$ids     = null === $image_ids ? null : array_values( array_filter( array_map( 'absint', $image_ids ) ) );
+		$removed = array();
+		if ( '' === $content || ( null !== $ids && empty( $ids ) ) ) {
+			return array(
+				'content' => $content,
+				'removed' => $removed,
+			);
+		}
+
+		if ( has_blocks( $content ) ) {
+			$blocks = $this->dropImageBlocks( parse_blocks( $content ), $ids, '', $removed );
+			return array(
+				'content' => $removed ? serialize_blocks( $this->normalizeBlocksForSerialize( $blocks ) ) : $content,
+				'removed' => $removed,
+			);
+		}
+
+		// Classic: caption shortcode, figure, a paragraph holding only the image, then a bare image.
+		$targets = null === $ids ? array( '' ) : array_map( 'strval', $ids );
+		foreach ( $targets as $id ) {
+			$img      = '' === $id ? '<img\b[^>]*>' : '<img\b[^>]*wp-image-' . $id . '(?!\d)[^>]*>';
+			$patterns = array(
+				'#\[caption[^\]]*\](?:(?!\[/caption\]).)*?' . $img . '(?:(?!\[/caption\]).)*\[/caption\]\s*#s',
+				'#<figure\b[^>]*>(?:(?!</figure>).)*?' . $img . '(?:(?!</figure>).)*</figure>\s*#s',
+				'#<p>\s*(?:<a\b[^>]*>\s*)?' . $img . '\s*(?:</a>\s*)?</p>\s*#s',
+				'#(?:<a\b[^>]*>\s*)?' . $img . '(?:\s*</a>)?#s',
+			);
+			foreach ( $patterns as $pattern ) {
+				$content = (string) preg_replace_callback(
+					$pattern,
+					static function ( array $m ) use ( &$removed ): string {
+						$removed[] = preg_match( '/wp-image-(\d+)/', $m[0], $idm ) ? (int) $idm[1] : 0;
+						return '';
+					},
+					$content
+				);
+			}
+		}
+		return array(
+			'content' => $content,
+			'removed' => $removed,
+		);
+	}
+
+	/**
+	 * Standalone images in the body (attachment ID, or 0 when it has none). Gallery images are not counted.
+	 *
+	 * @since 3.7.4
+	 * @param string $content Post content.
+	 * @return array<int, int>
+	 */
+	public function standaloneImageIds( string $content ): array {
+		$found = array();
+		if ( '' === $content ) {
+			return $found;
+		}
+		if ( has_blocks( $content ) ) {
+			$this->collectStandaloneImages( parse_blocks( $content ), '', $found );
+			return $found;
+		}
+		if ( preg_match_all( '/<img\b[^>]*>/i', $content, $tags ) ) {
+			foreach ( $tags[0] as $tag ) {
+				$found[] = preg_match( '/wp-image-(\d+)/', $tag, $m ) ? (int) $m[1] : 0;
+			}
+		}
+		return $found;
+	}
+
+	/**
+	 * Collect core/image blocks outside galleries.
+	 *
+	 * @param array<int, mixed> $blocks Blocks.
+	 * @param string            $parent Parent block name.
+	 * @param array<int, int>   $found  Found IDs (by ref).
+	 * @return void
+	 */
+	private function collectStandaloneImages( array $blocks, string $parent, array &$found ): void {
 		foreach ( $blocks as $block ) {
 			if ( ! is_array( $block ) ) {
 				continue;
 			}
 			$name = (string) ( $block['blockName'] ?? '' );
-			if ( 'core/image' === $name && 'core/gallery' !== $parent && (int) ( $block['attrs']['id'] ?? 0 ) === $image_id ) {
-				++$removed;
+			if ( 'core/image' === $name && 'core/gallery' !== $parent ) {
+				$found[] = (int) ( $block['attrs']['id'] ?? 0 );
+			}
+			if ( ! empty( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) ) {
+				$this->collectStandaloneImages( $block['innerBlocks'], $name, $found );
+			}
+		}
+	}
+
+	/**
+	 * Whether a block is a standalone image this removal targets.
+	 *
+	 * @param mixed      $block  Block.
+	 * @param int[]|null $ids    Target IDs, or null for every image.
+	 * @param string     $parent Parent block name.
+	 * @return bool
+	 */
+	private static function isTargetImage( $block, ?array $ids, string $parent ): bool {
+		if ( ! is_array( $block ) || 'core/image' !== ( $block['blockName'] ?? '' ) || 'core/gallery' === $parent ) {
+			return false;
+		}
+		return null === $ids || in_array( (int) ( $block['attrs']['id'] ?? 0 ), $ids, true );
+	}
+
+	/**
+	 * Drop target core/image blocks, keeping innerContent placeholders in step.
+	 *
+	 * @param array<int, mixed> $blocks  Blocks.
+	 * @param int[]|null        $ids     Target IDs, or null for every image.
+	 * @param string            $parent  Parent block name ('' at the top level).
+	 * @param array<int, int>   $removed IDs removed (by ref).
+	 * @return array<int, array<string, mixed>>
+	 */
+	private function dropImageBlocks( array $blocks, ?array $ids, string $parent, array &$removed ): array {
+		$out = array();
+		foreach ( $blocks as $block ) {
+			if ( ! is_array( $block ) ) {
+				continue;
+			}
+			if ( self::isTargetImage( $block, $ids, $parent ) ) {
+				$removed[] = (int) ( $block['attrs']['id'] ?? 0 );
 				continue;
 			}
 
+			$name     = (string) ( $block['blockName'] ?? '' );
 			$children = isset( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) ? $block['innerBlocks'] : array();
 			if ( $children ) {
-				$before = $removed;
+				$before = count( $removed );
 				$keep   = array();
 				foreach ( $children as $i => $child ) {
-					$keep[ $i ] = ! ( is_array( $child ) && 'core/image' === ( $child['blockName'] ?? '' ) && 'core/gallery' !== $name && (int) ( $child['attrs']['id'] ?? 0 ) === $image_id );
+					$keep[ $i ] = ! self::isTargetImage( $child, $ids, $name );
 				}
-				$block['innerBlocks'] = $this->dropImageBlocks( $children, $image_id, $name, $removed );
+				$block['innerBlocks'] = $this->dropImageBlocks( $children, $ids, $name, $removed );
 
 				// Remove the null placeholder of each dropped direct child.
-				if ( $removed > $before && isset( $block['innerContent'] ) && is_array( $block['innerContent'] ) ) {
+				if ( count( $removed ) > $before && isset( $block['innerContent'] ) && is_array( $block['innerContent'] ) ) {
 					$content = array();
 					$slot    = 0;
 					foreach ( $block['innerContent'] as $chunk ) {
