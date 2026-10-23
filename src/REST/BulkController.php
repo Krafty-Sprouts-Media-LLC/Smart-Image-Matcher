@@ -1552,17 +1552,7 @@ class BulkController extends Controller {
 
 			$featuredFilter = (string) ( $filters['featured_filter'] ?? 'any' );
 			if ( 'missing' === $featuredFilter ) {
-				$args['meta_query'] = array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
-					'relation' => 'OR',
-					array(
-						'key'     => '_thumbnail_id',
-						'compare' => 'NOT EXISTS',
-					),
-					array(
-						'key'   => '_thumbnail_id',
-						'value' => '',
-					),
-				);
+				$args['meta_query'] = FeaturedImageService::missingFeaturedMetaQuery(); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 			} elseif ( 'has' === $featuredFilter ) {
 				$args['meta_query'] = array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 					array(

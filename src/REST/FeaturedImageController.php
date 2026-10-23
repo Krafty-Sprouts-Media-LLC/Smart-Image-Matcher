@@ -15,6 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 use SmartImageMatcher\Domain\PostStatuses;
+use SmartImageMatcher\FeaturedImages\FeaturedImageService;
 use SmartImageMatcher\Queue\Queue;
 use SmartImageMatcher\Settings\Sanitizer;
 use SmartImageMatcher\Settings\Settings;
@@ -673,19 +674,7 @@ class FeaturedImageController extends Controller {
 	 */
 	private function getFeaturedImageMetaQuery( string $filter ): array {
 		if ( 'missing' === $filter ) {
-			return array(
-				'relation' => 'OR',
-				array(
-					'key'     => '_thumbnail_id',
-					'compare' => 'NOT EXISTS',
-				),
-				array(
-					'key'     => '_thumbnail_id',
-					'value'   => 0,
-					'compare' => '<=',
-					'type'    => 'NUMERIC',
-				),
-			);
+			return FeaturedImageService::missingFeaturedMetaQuery();
 		}
 
 		if ( 'has' === $filter ) {

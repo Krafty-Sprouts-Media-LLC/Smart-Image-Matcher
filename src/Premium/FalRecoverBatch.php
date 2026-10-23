@@ -1114,12 +1114,7 @@ class FalRecoverBatch {
 		$page          = 1;
 
 		$meta_query = $missing_thumbnail_only
-			? array(
-				array(
-					'key'     => '_thumbnail_id',
-					'compare' => 'NOT EXISTS',
-				),
-			)
+			? \SmartImageMatcher\FeaturedImages\FeaturedImageService::missingFeaturedMetaQuery()
 			: array(
 				array(
 					'key'     => '_thumbnail_id',

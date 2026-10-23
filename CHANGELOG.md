@@ -7,6 +7,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.7.6] - 23/10/2026
+
+### Fixed
+
+- **Posts holding a placeholder featured image were skipped by "Missing featured image" runs.** The candidate query only selected posts with no `_thumbnail_id` (or 0), so a post whose stored featured image was the KSM Extensions fallback (saved by its "Save the fallback image into posts" option) never reached the per-post placeholder check in `hasActionableFeaturedImage()`, and its matching image was never set. New `FeaturedImageService::missingFeaturedMetaQuery()` also matches the known placeholder IDs (`sim_known_placeholder_featured_attachment_ids`). It replaces the five separate "missing" meta queries in `FeaturedImageService`, `FeaturedImageController`, `BulkController`, `FiaaCron` and `FalRecoverBatch`.
+
 ## [3.7.5] - 17/10/2026
 
 ### Fixed

@@ -624,6 +624,46 @@ class FeaturedImageService {
 	}
 
 	/**
+	 * Meta query for posts without a real featured image.
+	 *
+	 * Posts whose stored `_thumbnail_id` is a site-wide placeholder (KSM Extensions
+	 * fallback, etc.) count as missing, so runs replace the placeholder.
+	 *
+	 * @since 3.7.6
+	 * @return array<int|string, mixed>
+	 */
+	public static function missingFeaturedMetaQuery(): array {
+		$query = array(
+			'relation' => 'OR',
+			array(
+				'key'     => '_thumbnail_id',
+				'compare' => 'NOT EXISTS',
+			),
+			array(
+				'key'     => '_thumbnail_id',
+				'value'   => 0,
+				'compare' => '<=',
+				'type'    => 'NUMERIC',
+			),
+		);
+
+		/** This filter is documented in isKnownPlaceholderFeaturedAttachment(). */
+		$placeholders = apply_filters( 'sim_known_placeholder_featured_attachment_ids', self::knownPlaceholderFeaturedAttachmentIds( 0 ), 0 );
+		$placeholders = is_array( $placeholders ) ? array_values( array_filter( array_map( 'intval', $placeholders ) ) ) : array();
+
+		if ( ! empty( $placeholders ) ) {
+			$query[] = array(
+				'key'     => '_thumbnail_id',
+				'value'   => $placeholders,
+				'compare' => 'IN',
+				'type'    => 'NUMERIC',
+			);
+		}
+
+		return $query;
+	}
+
+	/**
 	 * Detect site-wide placeholder featured attachments (KSM Extensions fallback, etc.).
 	 *
 	 * @since 3.2.7
@@ -1009,19 +1049,7 @@ class FeaturedImageService {
 	 */
 	private function getFeaturedImageMetaQuery( string $filter ): array {
 		if ( 'missing' === $filter ) {
-			return array(
-				'relation' => 'OR',
-				array(
-					'key'     => '_thumbnail_id',
-					'compare' => 'NOT EXISTS',
-				),
-				array(
-					'key'     => '_thumbnail_id',
-					'value'   => 0,
-					'compare' => '<=',
-					'type'    => 'NUMERIC',
-				),
-			);
+			return self::missingFeaturedMetaQuery();
 		}
 
 		if ( 'has' === $filter ) {

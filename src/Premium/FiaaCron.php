@@ -290,9 +290,7 @@ class FiaaCron {
 	/**
 	 * Build the featured-image meta query for a filter value.
 	 *
-	 * Mirrors FeaturedImageService::getFeaturedImageMetaQuery() /
-	 * FeaturedImageController::getFeaturedImageMetaQuery() — kept as a
-	 * local copy since this class only needs it for candidate collection.
+	 * "missing" uses FeaturedImageService::missingFeaturedMetaQuery().
 	 *
 	 * @since 3.1.0
 	 * @param string $filter 'any' | 'missing' | 'has'.
@@ -300,19 +298,7 @@ class FiaaCron {
 	 */
 	private function getFeaturedImageMetaQuery( string $filter ): array {
 		if ( 'missing' === $filter ) {
-			return array(
-				'relation' => 'OR',
-				array(
-					'key'     => '_thumbnail_id',
-					'compare' => 'NOT EXISTS',
-				),
-				array(
-					'key'     => '_thumbnail_id',
-					'value'   => 0,
-					'compare' => '<=',
-					'type'    => 'NUMERIC',
-				),
-			);
+			return \SmartImageMatcher\FeaturedImages\FeaturedImageService::missingFeaturedMetaQuery();
 		}
 
 		if ( 'has' === $filter ) {
