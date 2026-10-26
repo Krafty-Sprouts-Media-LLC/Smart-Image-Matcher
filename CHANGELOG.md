@@ -7,6 +7,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.7.7] - 26/10/2026
+
+### Fixed
+
+- **The featured image stayed in the article body too.** Body inserts already skip the post's current featured image (`InsertionService::withoutFeaturedImage()`), but nothing covered the opposite order: an image placed under a heading earlier and later picked as the featured image (exact slug match in an article run, a Review approval, upload-time / scheduled auto-assign, AI generation or fal recovery) was left in the body. New `FeaturedImageService::setFeaturedImage()` sets the thumbnail and removes standalone copies of that image from the body in one save (gallery images stay). `ArticleProcessor`, `FeaturedImageService::assignFeaturedImage()`, `JobRunner` (Review approvals, AI generation done) and `AiImageGenerator` now use it instead of `set_post_thumbnail()`. In an article run the emptied heading is matched again in the same pass, never with the featured image.
+
 ## [3.7.6] - 23/10/2026
 
 ### Fixed

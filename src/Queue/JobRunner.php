@@ -498,11 +498,8 @@ class JobRunner {
 			} elseif ( FeaturedImageService::hasActionableFeaturedImage( $postId ) ) {
 				// The post got another featured image meanwhile; this approval is moot.
 				$matchRepo->deleteByIds( array( (int) $row['id'] ) );
-			} elseif ( $image_id > 0 && wp_attachment_is_image( $image_id ) ) {
-				set_post_thumbnail( $postId, $image_id );
-				if ( FeaturedImageService::getStoredThumbnailId( $postId ) === $image_id ) {
-					$matchRepo->setStatusByIds( array( (int) $row['id'] ), MatchRepository::STATUS_INSERTED );
-				}
+			} elseif ( $image_id > 0 && wp_attachment_is_image( $image_id ) && FeaturedImageService::setFeaturedImage( $postId, $image_id ) ) {
+				$matchRepo->setStatusByIds( array( (int) $row['id'] ), MatchRepository::STATUS_INSERTED );
 			}
 		}
 
@@ -1494,7 +1491,7 @@ class JobRunner {
 		$prompt         = (string) get_post_meta( $attachment_id, '_sim_generated_prompt', true );
 
 		if ( 'featured' === $heading_hash && ! get_post_meta( $attachment_id, '_sim_generated_vision_failed', true ) ) {
-			set_post_thumbnail( $post_id, $attachment_id );
+			FeaturedImageService::setFeaturedImage( $post_id, $attachment_id );
 		}
 
 		\SmartImageMatcher\Premium\AiImageGenerator::setStatus(

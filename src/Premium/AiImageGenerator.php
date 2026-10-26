@@ -492,7 +492,7 @@ class AiImageGenerator {
 		}
 
 		if ( ! get_post_meta( $attachment_id, '_sim_generated_vision_failed', true ) ) {
-			set_post_thumbnail( $post_id, $attachment_id );
+			\SmartImageMatcher\FeaturedImages\FeaturedImageService::setFeaturedImage( $post_id, $attachment_id );
 		}
 
 		return $attachment_id;
@@ -807,7 +807,7 @@ class AiImageGenerator {
 				$attachment_id = (int) $existing[0];
 				// Saved, real featured image only: fallback plugins make has_post_thumbnail() always true.
 				if ( 'featured' === $heading_hash && ! \SmartImageMatcher\FeaturedImages\FeaturedImageService::hasActionableFeaturedImage( $post_id ) ) {
-					set_post_thumbnail( $post_id, $attachment_id );
+					\SmartImageMatcher\FeaturedImages\FeaturedImageService::setFeaturedImage( $post_id, $attachment_id );
 				}
 				self::clearFalPending( $post_id, $heading_hash );
 				self::setStatus(
@@ -882,7 +882,7 @@ class AiImageGenerator {
 			update_post_meta( $attachment_id, '_sim_fal_model_id', $model_id );
 		}
 		if ( 'featured' === $heading_hash && ! get_post_meta( $attachment_id, '_sim_generated_vision_failed', true ) ) {
-			set_post_thumbnail( $post_id, $attachment_id );
+			\SmartImageMatcher\FeaturedImages\FeaturedImageService::setFeaturedImage( $post_id, $attachment_id );
 		}
 
 		self::clearFalPending( $post_id, $heading_hash );

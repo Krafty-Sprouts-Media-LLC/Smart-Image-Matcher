@@ -474,7 +474,7 @@ class ArticleProcessor {
 		}
 
 		if ( MatchDecision::INSERT === $action && $is_featured && $image_id > 0 ) {
-			set_post_thumbnail( (int) $post->ID, $image_id );
+			FeaturedImageService::setFeaturedImage( (int) $post->ID, $image_id );
 			$this->matches->markInserted( (int) $post->ID, $image_id, $heading_hash );
 			++$counts['inserted'];
 			return;

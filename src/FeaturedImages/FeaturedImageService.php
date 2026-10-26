@@ -23,6 +23,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 use SmartImageMatcher\Settings\Sanitizer;
 use SmartImageMatcher\Settings\Settings;
 use SmartImageMatcher\Domain\PostStatuses;
+use SmartImageMatcher\Insertion\BlockBuilder;
+use SmartImageMatcher\Insertion\InsertionService;
+use SmartImageMatcher\Logging\Logger;
 
 /**
  * Class FeaturedImageService
@@ -244,7 +247,7 @@ class FeaturedImageService {
 			return;
 		}
 
-		set_post_thumbnail( $postId, $attachmentId );
+		self::setFeaturedImage( $postId, $attachmentId );
 
 		// Attach the media item to this post so it doesn't appear "(Unattached)".
 		$attachment = get_post( $attachmentId );
@@ -258,6 +261,42 @@ class FeaturedImageService {
 				'post_parent' => $postId,
 			) );
 		}
+	}
+
+	/**
+	 * Set the featured image and take that image out of the article body.
+	 *
+	 * The featured image already shows above the article, so a copy the plugin
+	 * placed under a heading earlier is removed. Images inside a gallery stay.
+	 *
+	 * @since 3.7.7
+	 * @param int $post_id       Post ID.
+	 * @param int $attachment_id Attachment ID.
+	 * @return bool Whether the featured image is now set.
+	 */
+	public static function setFeaturedImage( int $post_id, int $attachment_id ): bool {
+		if ( $post_id <= 0 || $attachment_id <= 0 ) {
+			return false;
+		}
+
+		set_post_thumbnail( $post_id, $attachment_id );
+		if ( self::getStoredThumbnailId( $post_id ) !== $attachment_id ) {
+			return false;
+		}
+
+		$removed = ( new InsertionService( new BlockBuilder() ) )->removeImage( $post_id, $attachment_id );
+		if ( is_wp_error( $removed ) && 'smart_image_matcher_image_not_in_body' !== $removed->get_error_code() ) {
+			Logger::warn(
+				'FeaturedImageService: featured image set but not removed from the body',
+				array(
+					'post_id'  => $post_id,
+					'image_id' => $attachment_id,
+					'reason'   => $removed->get_error_message(),
+				)
+			);
+		}
+
+		return true;
 	}
 
 	/**

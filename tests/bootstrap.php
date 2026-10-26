@@ -194,7 +194,10 @@ if ( file_exists( $tests_dir . '/includes/functions.php' ) ) {
 		function wp_parse_url( $url, $component = -1 ) {
 			return parse_url( $url, $component );
 		}
-		function wp_update_post() { return 1; }
+		function wp_update_post( $postarr = array() ) {
+			$GLOBALS['sim_test_updated_post'] = $postarr;
+			return 1;
+		}
 		function get_post( $post = null, $output = 'OBJECT', $filter = 'raw' ) {
 			unset( $output, $filter );
 			if ( isset( $GLOBALS['sim_test_get_post'] ) && is_callable( $GLOBALS['sim_test_get_post'] ) ) {
@@ -222,7 +225,10 @@ if ( file_exists( $tests_dir . '/includes/functions.php' ) ) {
 		}
 		function clean_post_cache() {}
 		function rest_ensure_response( $data ) { return $data; }
-		function set_post_thumbnail() {}
+		function set_post_thumbnail( $post = 0, $thumbnail_id = 0 ) {
+			$GLOBALS['sim_test_post_meta'][ (int) $post ]['_thumbnail_id'] = (int) $thumbnail_id;
+			return true;
+		}
 		function metadata_exists( $type = '', $id = 0, $key = '' ) {
 			return 'post' === $type && isset( $GLOBALS['sim_test_post_meta'][ (int) $id ][ $key ] );
 		}
