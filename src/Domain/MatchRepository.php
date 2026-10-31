@@ -439,7 +439,7 @@ class MatchRepository {
 
 		$rows = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$wpdb->prepare(
-				"SELECT id, post_id, heading_text, image_id FROM {$wpdb->prefix}smart_image_matcher_matches
+				"SELECT id, post_id, heading_hash, heading_text, image_id FROM {$wpdb->prefix}smart_image_matcher_matches
 				 WHERE status = %s AND id > %d
 				 ORDER BY id ASC
 				 LIMIT %d",

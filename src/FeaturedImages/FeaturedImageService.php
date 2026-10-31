@@ -703,6 +703,111 @@ class FeaturedImageService {
 	}
 
 	/**
+	 * Owners found this request, by "attachment:post".
+	 *
+	 * @var array<string, int[]>
+	 */
+	private static array $owner_cache = array();
+
+	/**
+	 * Other articles this image belongs to: it is their featured image, or its
+	 * filename is an exact or prefix match for their slug (the auto-assign rule).
+	 *
+	 * Such an image is never inserted into a different article automatically.
+	 *
+	 * @since 3.7.8
+	 * @param int $attachment_id Attachment ID.
+	 * @param int  $post_id       The article being filled (never counted as an owner).
+	 * @param bool $featured_only Only count articles that use it as their featured image.
+	 * @return int[] Up to 3 owner post IDs.
+	 */
+	public function ownerPostIds( int $attachment_id, int $post_id, bool $featured_only = false ): array {
+		$key = $attachment_id . ':' . $post_id . ':' . (int) $featured_only;
+		if ( isset( self::$owner_cache[ $key ] ) ) {
+			return self::$owner_cache[ $key ];
+		}
+		if ( $attachment_id <= 0 ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		$owners = array();
+
+		// 1) Another article's featured image (site-wide placeholders do not count).
+		if ( ! self::isKnownPlaceholderFeaturedAttachment( $attachment_id, $post_id ) ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+			$featured_of = $wpdb->get_col( $wpdb->prepare( "SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_thumbnail_id' AND meta_value = %s AND post_id <> %d LIMIT 3", (string) $attachment_id, $post_id ) );
+			foreach ( (array) $featured_of as $owner ) {
+				$owners[ (int) $owner ] = (int) $owner;
+			}
+		}
+
+		// 2) Filename made for another article (exact or prefix slug match).
+		if ( ! $featured_only && count( $owners ) < 3 ) {
+			foreach ( array_keys( $this->slugMap->get(), $attachment_id, false ) as $image_slug ) {
+				foreach ( $this->postsMatchingImageSlug( (string) $image_slug ) as $owner => $owner_slug ) {
+					if ( $owner !== $post_id && ! isset( $owners[ $owner ] ) && $this->isAutoAssignSafePair( $owner_slug, (string) $image_slug ) ) {
+						$owners[ $owner ] = $owner;
+					}
+				}
+				if ( count( $owners ) >= 3 ) {
+					break;
+				}
+			}
+		}
+
+		self::$owner_cache[ $key ] = array_slice( array_values( $owners ), 0, 3 );
+		return self::$owner_cache[ $key ];
+	}
+
+	/**
+	 * Posts whose slug equals the image slug, starts with it, or is a leading part of it.
+	 *
+	 * @param string $image_slug Attachment slug.
+	 * @return array<int, string> post ID => post slug.
+	 */
+	private function postsMatchingImageSlug( string $image_slug ): array {
+		global $wpdb;
+
+		$slug = $this->normalizeImageMatchSlug( $image_slug );
+		if ( '' === $slug ) {
+			return array();
+		}
+
+		// "a-b-c-d" also matches posts "a-b-c" (image name = post slug + extra words), min 3 words.
+		$parts   = explode( '-', $slug );
+		$leading = array();
+		for ( $n = count( $parts ) - 1; $n >= 3; $n-- ) {
+			$leading[] = implode( '-', array_slice( $parts, 0, $n ) );
+		}
+		$names = array_merge( array( $slug ), $leading );
+		$in    = implode( ',', array_fill( 0, count( $names ), '%s' ) );
+		$types = $this->getSupportedPostTypes();
+		$tin   = implode( ',', array_fill( 0, count( $types ), '%s' ) );
+
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- post_name is indexed; placeholders built above.
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT ID, post_name FROM {$wpdb->posts}
+				 WHERE post_type IN ({$tin})
+				   AND post_status IN ('publish','draft','pending','future','private')
+				   AND ( post_name IN ({$in}) OR post_name LIKE %s )
+				 LIMIT 20",
+				array_merge( $types, $names, array( $wpdb->esc_like( $slug ) . '-%' ) )
+			),
+			ARRAY_A
+		);
+		// phpcs:enable
+
+		$out = array();
+		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+			$out[ (int) $row['ID'] ] = (string) $row['post_name'];
+		}
+		return $out;
+	}
+
+	/**
 	 * Detect site-wide placeholder featured attachments (KSM Extensions fallback, etc.).
 	 *
 	 * @since 3.2.7

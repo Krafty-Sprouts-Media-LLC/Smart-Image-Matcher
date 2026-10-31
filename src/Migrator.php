@@ -33,7 +33,7 @@ class Migrator {
 	 *
 	 * Bump this constant whenever a new migration is added.
 	 */
-	const SCHEMA_VERSION = 8;
+	const SCHEMA_VERSION = 9;
 
 	/**
 	 * Action Scheduler hook names used by prior versions of this plugin
@@ -96,6 +96,11 @@ class Migrator {
 
 		if ( $installed < 8 ) {
 			self::armReconcileApproved();
+		}
+
+		// Migration 9: re-check Review once more, now also rejecting other articles' images.
+		if ( $installed < 9 && $installed >= 6 ) {
+			$this->migration6RecheckPendingRows();
 		}
 
 		// Always ensure the inverted index table exists, even on sites that

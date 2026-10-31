@@ -7,6 +7,13 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.7.8] - 31/10/2026
+
+### Fixed
+
+- **Another article's image was inserted under a heading** (e.g. `Dangerous-Dog-Breeds-Banned-in-New-Hampshire.jpg` under "Is my breed banned in New Hampshire?" in "Aggressive Dog Laws in New Hampshire"). Keyword matching only compared heading and filename words, so an image made for one article could fill another. New `FeaturedImageService::ownerPostIds()`: an image belongs to another article when it is that article's stored featured image (site-wide placeholders excluded) or its filename is an exact / prefix slug match for that article (`isAutoAssignSafePair()`, checked in both directions via `postsMatchingImageSlug()`). `ArticleProcessor::processHeadings()` sets such an image aside and takes the next best (up to five tries); it is never inserted and never sent to Review. `processFeatured()` never offers another article's featured image.
+- Migration 9 re-runs the pending re-check once; `PendingRecheck` now also rejects waiting suggestions that use another article's image (featured slot: only its actual featured image). `MatchRepository::pendingBatchAfter()` returns `heading_hash`.
+
 ## [3.7.7] - 26/10/2026
 
 ### Fixed

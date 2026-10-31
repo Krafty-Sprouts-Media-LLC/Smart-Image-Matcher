@@ -45,15 +45,23 @@ class PendingRecheck {
 	private ImageRepository $images;
 
 	/**
+	 * Optional: rejects suggestions of images that belong to another article (3.7.8).
+	 *
+	 * @var \SmartImageMatcher\FeaturedImages\FeaturedImageService|null
+	 */
+	private ?\SmartImageMatcher\FeaturedImages\FeaturedImageService $featured;
+
+	/**
 	 * Constructor.
 	 *
 	 * @since 3.4.9
 	 * @param MatchRepository $matches Match repository.
 	 * @param ImageRepository $images  Image repository.
 	 */
-	public function __construct( MatchRepository $matches, ImageRepository $images ) {
-		$this->matches = $matches;
-		$this->images  = $images;
+	public function __construct( MatchRepository $matches, ImageRepository $images, ?\SmartImageMatcher\FeaturedImages\FeaturedImageService $featured = null ) {
+		$this->matches  = $matches;
+		$this->images   = $images;
+		$this->featured = $featured;
 	}
 
 	/**
@@ -82,6 +90,11 @@ class PendingRecheck {
 			$reason = null === $image
 				? RelevanceGuard::NO_SHARED_TOPIC
 				: RelevanceGuard::rejectReason( (string) $row['heading_text'], $titles[ $post_id ], $image );
+
+			// Another article's image (featured slot: only its actual featured image).
+			if ( '' === $reason && null !== $this->featured && $this->featured->ownerPostIds( (int) $row['image_id'], $post_id, 'featured' === (string) ( $row['heading_hash'] ?? '' ) ) ) {
+				$reason = 'other_article';
+			}
 
 			if ( '' !== $reason ) {
 				$this->matches->markRejected( (int) $row['id'] );

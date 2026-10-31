@@ -251,6 +251,12 @@ class ArticleProcessor {
 			$image = 0;
 		}
 
+		// Another article's featured image is never offered as this one's.
+		if ( $image > 0 && $this->featured->ownerPostIds( $image, (int) $post->ID, true ) ) {
+			$score = 0;
+			$image = 0;
+		}
+
 		$this->featured_pick[ (int) $post->ID ] = array(
 			'score' => $score,
 			'image' => $image,
@@ -350,7 +356,23 @@ class ArticleProcessor {
 				$exclude[ $rejected_id ] = $rejected_id;
 			}
 
-			$best   = $this->bestHeadingMatch( $heading, $exclude );
+			// Never another article's image (its featured image, or a filename made for it):
+			// set it aside and take the next best.
+			$best = $this->bestHeadingMatch( $heading, $exclude );
+			for ( $tries = 0; $tries < 5 && (int) $best['image_id'] > 0; $tries++ ) {
+				$taken = (int) $best['image_id'];
+				if ( ! $this->featured->ownerPostIds( $taken, (int) $post->ID ) ) {
+					break;
+				}
+				$exclude[ $taken ] = $taken;
+				$best              = $this->bestHeadingMatch( $heading, $exclude );
+			}
+			if ( (int) $best['image_id'] > 0 && $this->featured->ownerPostIds( (int) $best['image_id'], (int) $post->ID ) ) {
+				$best = array(
+					'score'    => 0,
+					'image_id' => 0,
+				);
+			}
 			$score  = (int) $best['score'];
 			$image  = (int) $best['image_id'];
 			$action = MatchDecision::decide( $score, $auto, $review_min, $can_generate );

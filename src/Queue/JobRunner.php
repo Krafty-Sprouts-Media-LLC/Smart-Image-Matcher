@@ -171,7 +171,7 @@ class JobRunner {
 			return;
 		}
 
-		$result = ( new PendingRecheck( new MatchRepository(), new ImageRepository() ) )
+		$result = ( new PendingRecheck( new MatchRepository(), new ImageRepository(), new FeaturedImageService( new SlugMapBuilder() ) ) )
 			->runBatch( (int) ( $state['after_id'] ?? 0 ), 200 );
 
 		update_option(
