@@ -644,6 +644,102 @@ class FeaturedImageService {
 	 * @return array{score:int,attachment_id:int}
 	 */
 	public function scoreBestForPost( int $post_id ): array {
+		return $this->scoreBestForPostImpl( $post_id );
+	}
+
+	/**
+	 * Why an article does or does not get a featured image: the closest image
+	 * names and which check stops each one. Read-only.
+	 *
+	 * @since 3.7.11
+	 * @param int        $post_id  Post ID.
+	 * @param array<int> $rejected Images rejected for this article's featured slot.
+	 * @return array<string, mixed>
+	 */
+	public function explainForPost( int $post_id, array $rejected = array() ): array {
+		$post = get_post( $post_id );
+		if ( ! $post instanceof \WP_Post ) {
+			return array( 'found' => false );
+		}
+
+		$slug   = (string) $post->post_name;
+		$scored = array();
+		foreach ( $this->slugMap->get() as $image_slug => $attachment_id ) {
+			$result = $this->scoreSlugMatch( $slug, (string) $image_slug );
+			if ( (int) $result['score'] <= 0 ) {
+				continue;
+			}
+			$id = (int) $attachment_id;
+			if ( ! isset( $scored[ $id ] ) || (int) $result['score'] > $scored[ $id ]['score'] ) {
+				$scored[ $id ] = array(
+					'id'     => $id,
+					'name'   => (string) $image_slug,
+					'score'  => (int) $result['score'],
+					'method' => (string) $result['method'],
+				);
+			}
+		}
+		usort( $scored, static fn( array $a, array $b ): int => $b['score'] <=> $a['score'] );
+		$scored = array_slice( $scored, 0, 6 );
+
+		foreach ( $scored as $i => $row ) {
+			$owners = array();
+			foreach ( $this->ownerPostIds( $row['id'], $post_id, true ) as $owner ) {
+				$owners[] = array(
+					'id'    => $owner,
+					'title' => html_entity_decode( (string) get_the_title( $owner ), ENT_QUOTES, 'UTF-8' ),
+					'slug'  => (string) get_post_field( 'post_name', $owner ),
+				);
+			}
+			$file  = get_attached_file( $row['id'] );
+			$stops = array();
+			if ( $this->isExcludedImageSlug( $row['name'] ) ) {
+				$stops[] = 'blocked';
+			}
+			if ( in_array( $row['id'], array_map( 'intval', $rejected ), true ) ) {
+				$stops[] = 'rejected';
+			}
+			if ( $owners ) {
+				$stops[] = 'other_article';
+			}
+			if ( ! $this->isAutoAssignSafePair( $slug, $row['name'] ) ) {
+				$stops[] = 'not_exact';
+			}
+			$scored[ $i ] = array_merge(
+				$row,
+				array(
+					'file'   => $file ? wp_basename( (string) $file ) : '',
+					'thumb'  => (string) wp_get_attachment_image_url( $row['id'], 'thumbnail' ),
+					'owners' => $owners,
+					'stops'  => $stops,
+				)
+			);
+		}
+
+		$stored = self::getStoredThumbnailId( $post_id );
+
+		return array(
+			'found'       => true,
+			'id'          => $post_id,
+			'title'       => html_entity_decode( (string) get_the_title( $post ), ENT_QUOTES, 'UTF-8' ),
+			'slug'        => $slug,
+			'status'      => (string) $post->post_status,
+			'featured_id' => $stored,
+			'actionable'  => self::hasActionableFeaturedImage( $post_id ),
+			'placeholder' => $stored > 0 && self::isKnownPlaceholderFeaturedAttachment( $stored, $post_id ),
+			'ignored'     => \SmartImageMatcher\Domain\IgnoredArticles::isIgnored( $post_id ),
+			'map_size'    => count( $this->slugMap->get() ),
+			'candidates'  => $scored,
+		);
+	}
+
+	/**
+	 * Best slug-match score for a post (implementation).
+	 *
+	 * @param int $post_id Post ID.
+	 * @return array{score:int,attachment_id:int}
+	 */
+	private function scoreBestForPostImpl( int $post_id ): array {
 		$empty = array(
 			'score'         => 0,
 			'attachment_id' => 0,

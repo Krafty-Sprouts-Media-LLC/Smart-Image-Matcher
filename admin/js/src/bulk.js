@@ -2212,7 +2212,61 @@
 		}
 	}
 
+	// Why didn't an article get its featured image? (read-only)
+	const STOP_LABELS = {
+		blocked: __( 'Blocked image (Tools → Blocked images)', 'smart-image-matcher' ),
+		rejected: __( 'You rejected it for this article', 'smart-image-matcher' ),
+		other_article: __( 'Featured image of another article', 'smart-image-matcher' ),
+		not_exact: __( 'Not an exact or prefix filename match', 'smart-image-matcher' ),
+	};
+
+	async function explainFeatured() {
+		const value = val( '#sim-explain-post' ).trim();
+		const out = q( '#sim-explain-out' );
+		if ( ! value ) return;
+		out.innerHTML = `<p class="sim-bp-help">${ esc( __( 'Checking…', 'smart-image-matcher' ) ) }</p>`;
+		let r;
+		try {
+			r = await api( '/featured-explain?post=' + encodeURIComponent( value ) );
+		} catch ( err ) {
+			out.innerHTML = `<div class="notice notice-error inline"><p>${ esc( errMsg( err, __( 'Could not check.', 'smart-image-matcher' ) ) ) }</p></div>`;
+			return;
+		}
+
+		let verdict;
+		const best = ( r.candidates || [] ).find( ( c ) => ! c.stops.length );
+		if ( r.ignored ) {
+			verdict = __( 'This article is ignored, so no run touches it.', 'smart-image-matcher' );
+		} else if ( r.actionable ) {
+			verdict = __( 'It already has a real featured image, so runs leave it alone (unless “Replace featured images” is on).', 'smart-image-matcher' );
+		} else if ( best ) {
+			verdict = sprintf( __( 'A run would set %s as its featured image.', 'smart-image-matcher' ), best.file || best.name );
+		} else if ( ( r.candidates || [] ).length ) {
+			verdict = __( 'Every close image is stopped by a rule below, so a run finds no good match.', 'smart-image-matcher' );
+		} else {
+			verdict = __( 'No image name in the library is close to this article’s slug.', 'smart-image-matcher' );
+		}
+
+		const rows = ( r.candidates || [] ).map( ( c ) => `<tr>
+			<td><span class="sim-misplaced-thumb">${ c.thumb ? `<img src="${ esc( c.thumb ) }" alt="" loading="lazy" />` : '' }<code>${ esc( c.file || c.name ) }</code></span></td>
+			<td class="sim-num">${ parseInt( c.score, 10 ) }% <span class="sim-bp-help">${ esc( c.method ) }</span></td>
+			<td>${ c.stops.length
+				? c.stops.map( ( s ) => `<div><span class="sim-pill is-skip">${ esc( STOP_LABELS[ s ] || s ) }</span>${ 'other_article' === s ? ' ' + c.owners.map( ( o ) => `<span class="sim-bp-help">${ esc( o.title ) } (<code>${ esc( o.slug ) }</code>)</span>` ).join( ', ' ) : '' }</div>` ).join( '' )
+				: `<span class="sim-pill is-ran">${ esc( __( 'Would be used', 'smart-image-matcher' ) ) }</span>` }</td>
+		</tr>` ).join( '' );
+
+		out.innerHTML = `
+			<p><strong>${ esc( r.title ) }</strong> <span class="sim-bp-help">#${ parseInt( r.id, 10 ) } · ${ esc( r.status ) } · ${ esc( __( 'slug', 'smart-image-matcher' ) ) } <code>${ esc( r.slug ) }</code></span></p>
+			<p class="sim-bp-notice">${ esc( verdict ) }</p>
+			<p class="sim-bp-help">${ esc( sprintf( __( 'Featured image now: %1$s · images in the library index: %2$d', 'smart-image-matcher' ), r.featured_id ? ( r.placeholder ? __( 'placeholder only', 'smart-image-matcher' ) : '#' + parseInt( r.featured_id, 10 ) ) : __( 'none', 'smart-image-matcher' ), parseInt( r.map_size, 10 ) ) ) }</p>
+			${ rows ? `<div class="sim-bp-table-wrap"><table class="widefat striped"><thead><tr><th>${ esc( __( 'Closest image names', 'smart-image-matcher' ) ) }</th><th>${ esc( __( 'Score', 'smart-image-matcher' ) ) }</th><th>${ esc( __( 'Result', 'smart-image-matcher' ) ) }</th></tr></thead><tbody>${ rows }</tbody></table></div>` : '' }`;
+	}
+
 	function bindTools() {
+		q( '#sim-explain-run' ).addEventListener( 'click', explainFeatured );
+		q( '#sim-explain-post' ).addEventListener( 'keydown', ( e ) => {
+			if ( e.key === 'Enter' ) explainFeatured();
+		} );
 		bindRemoval();
 		bindMisplaced();
 		const select = q( '#sim-audit-post-type' );

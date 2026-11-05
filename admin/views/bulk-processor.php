@@ -97,6 +97,17 @@ $smart_image_matcher_tabs = array(
 
 	<section class="sim-bulk-panel" data-panel="tools" <?php echo 'tools' === $smart_image_matcher_tab ? '' : 'hidden'; ?>>
 		<div class="sim-bp-tools">
+			<div class="sim-bp-card sim-bp-tool sim-bp-tool-wide" id="sim-explain">
+				<h2><?php esc_html_e( 'Why didn’t an article get its featured image?', 'smart-image-matcher' ); ?></h2>
+				<p class="description"><?php esc_html_e( 'Shows the article’s slug, the closest image names with their scores, and which rule stops each one. Changes nothing.', 'smart-image-matcher' ); ?></p>
+				<div class="sim-bp-inline">
+					<label class="screen-reader-text" for="sim-explain-post"><?php esc_html_e( 'Article', 'smart-image-matcher' ); ?></label>
+					<input type="text" id="sim-explain-post" class="regular-text" placeholder="<?php esc_attr_e( 'Post ID, link or slug', 'smart-image-matcher' ); ?>" />
+					<button type="button" id="sim-explain-run" class="button"><?php esc_html_e( 'Check', 'smart-image-matcher' ); ?></button>
+				</div>
+				<div id="sim-explain-out"></div>
+			</div>
+
 			<div class="sim-bp-card sim-bp-tool sim-bp-tool-wide" id="sim-remove-images">
 				<h2><?php esc_html_e( 'Remove images from articles', 'smart-image-matcher' ); ?></h2>
 				<p class="description"><?php esc_html_e( 'Takes images out of the article body. The featured image is never touched, and images inside a gallery are left alone. Each article is saved once, so WordPress keeps a revision you can restore. Images this plugin added will not be suggested for those headings again.', 'smart-image-matcher' ); ?></p>

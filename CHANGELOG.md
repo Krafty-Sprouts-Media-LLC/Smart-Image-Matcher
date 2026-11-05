@@ -7,6 +7,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.7.11] - 05/11/2026
+
+### Added
+
+- **"Why didn't an article get its featured image?"** (Bulk Processor → Tools). Enter a post ID, link or slug; `GET /featured-explain` (`ReviewToolsController::featuredExplain()`, `FeaturedImageService::explainForPost()`) returns the article's real slug, whether it has a real / placeholder / no featured image and whether it is ignored, the six closest image names with score and method, and for each the rule that stops it (blocked, rejected for this article, another article's featured image — with that article's title and slug — or not an exact / prefix match), plus a verdict. Read-only.
+
 ## [3.7.10] - 05/11/2026
 
 ### Fixed

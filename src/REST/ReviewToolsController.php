@@ -148,6 +148,15 @@ class ReviewToolsController extends Controller {
 			),
 		) );
 
+		register_rest_route( self::NAMESPACE, '/featured-explain', array(
+			'methods'             => \WP_REST_Server::READABLE,
+			'callback'            => array( $this, 'featuredExplain' ),
+			'permission_callback' => array( $this, 'canManage' ),
+			'args'                => array(
+				'post' => array( 'type' => 'string', 'required' => true, 'sanitize_callback' => 'sanitize_text_field' ),
+			),
+		) );
+
 		register_rest_route( self::NAMESPACE, '/schedule', array(
 			'methods'             => \WP_REST_Server::READABLE,
 			'callback'            => array( $this, 'schedule' ),
@@ -472,6 +481,51 @@ class ReviewToolsController extends Controller {
 			$out[] = array_merge( array( 'id' => $post_id ), $remover->remove( $post_id, $scope, $ignore ) );
 		}
 		return rest_ensure_response( array( 'results' => $out ) );
+	}
+
+	// -------------------------------------------------------------------------
+	// Featured image checker
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Why an article does or does not get its featured image (read-only).
+	 *
+	 * Accepts a post ID, a link to the post, or its slug.
+	 *
+	 * @since 3.7.11
+	 * @param \WP_REST_Request $request Request.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function featuredExplain( \WP_REST_Request $request ) {
+		$raw     = trim( (string) $request->get_param( 'post' ) );
+		$post_id = ctype_digit( $raw ) ? (int) $raw : 0;
+		if ( ! $post_id && false !== strpos( $raw, '/' ) ) {
+			$post_id = (int) url_to_postid( $raw );
+			if ( ! $post_id ) {
+				$raw = (string) basename( (string) wp_parse_url( $raw, PHP_URL_PATH ) );
+			}
+		}
+		if ( ! $post_id && '' !== $raw ) {
+			$types = get_post_types( array( 'public' => true ) );
+			unset( $types['attachment'] );
+			$found = get_posts(
+				array(
+					'name'           => sanitize_title( $raw ),
+					'post_type'      => array_values( $types ),
+					'post_status'    => array( 'publish', 'draft', 'pending', 'future', 'private' ),
+					'posts_per_page' => 1,
+					'fields'         => 'ids',
+				)
+			);
+			$post_id = (int) ( $found[0] ?? 0 );
+		}
+
+		if ( $post_id <= 0 || ! current_user_can( 'edit_post', $post_id ) ) {
+			return new \WP_Error( 'smart_image_matcher_post_not_found', __( 'No article found for that ID, link or slug.', 'smart-image-matcher' ), array( 'status' => 404 ) );
+		}
+
+		$service = new \SmartImageMatcher\FeaturedImages\FeaturedImageService( new \SmartImageMatcher\FeaturedImages\SlugMapBuilder() );
+		return rest_ensure_response( $service->explainForPost( $post_id, ( new MatchRepository() )->rejectedImageIds( $post_id, 'featured' ) ) );
 	}
 
 	// -------------------------------------------------------------------------
