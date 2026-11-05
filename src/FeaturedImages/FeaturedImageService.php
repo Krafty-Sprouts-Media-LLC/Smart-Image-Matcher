@@ -862,7 +862,18 @@ class FeaturedImageService {
 		// 1) Another article's featured image (site-wide placeholders do not count).
 		if ( ! self::isKnownPlaceholderFeaturedAttachment( $attachment_id, $post_id ) ) {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
-			$featured_of = $wpdb->get_col( $wpdb->prepare( "SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_thumbnail_id' AND meta_value = %s AND post_id <> %d LIMIT 3", (string) $attachment_id, $post_id ) );
+			// Only live articles own an image: a trashed one (slug "...__trashed") must not lock it.
+			$featured_of = $wpdb->get_col(
+				$wpdb->prepare(
+					"SELECT pm.post_id FROM {$wpdb->postmeta} pm
+					 INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+					   AND p.post_status IN ('publish','draft','pending','future','private')
+					 WHERE pm.meta_key = '_thumbnail_id' AND pm.meta_value = %s AND pm.post_id <> %d
+					 LIMIT 3",
+					(string) $attachment_id,
+					$post_id
+				)
+			);
 			foreach ( (array) $featured_of as $owner ) {
 				if ( ! $same_series( (string) get_post_field( 'post_name', (int) $owner ) ) ) {
 					$owners[ (int) $owner ] = (int) $owner;

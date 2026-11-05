@@ -7,6 +7,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.7.12] - 05/11/2026
+
+### Fixed
+
+- **Trashed articles kept images locked.** `FeaturedImageService::ownerPostIds()` counted any post whose `_thumbnail_id` was the image, including trashed ones (`…__trashed`), so `deer-hunting-season-in-minnesota.jpg` (exact match) was refused for the new "Deer Season in Minnesota 2026-27" because the deleted old article still used it — the cause of most "No good match" results in the deer series. Only live articles (publish, draft, pending, future, private) own an image now; the filename side already ignored trashed posts.
+
 ## [3.7.11] - 05/11/2026
 
 ### Added

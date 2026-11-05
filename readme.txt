@@ -4,7 +4,7 @@ Tags: images, media library, alt text, featured image, automation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 3.7.11
+Stable tag: 3.7.12
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -95,6 +95,9 @@ No AI data is sent automatically — only when you explicitly trigger AI matchin
 The plugin stores match results and job metadata in your own database only. Update checks may contact GitHub (see External services). No post content leaves your server unless you explicitly use AI features with a configured provider.
 
 == Changelog ==
+
+= 3.7.12 =
+* Fixed: an image used by an article in the Trash still counted as "another article's image", so new articles (e.g. this season's deer hunting series) could not get the image named after them. Trashed articles no longer hold images.
 
 = 3.7.11 =
 * New: Bulk Processor → Tools → "Why didn't an article get its featured image?". Enter an article and see its slug, the closest image names with their scores, and which rule stops each one. Changes nothing.
