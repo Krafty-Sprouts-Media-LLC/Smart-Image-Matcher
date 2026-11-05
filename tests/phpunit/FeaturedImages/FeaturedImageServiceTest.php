@@ -34,6 +34,26 @@ class FeaturedImageServiceTest extends TestCase {
 		$this->assertSame( 'exact', $result['method'] );
 	}
 
+	public function testYearsAndSeasonsNeverDecideAMatch(): void {
+		$this->assertSame( 'deer-hunting-season-in-kentucky', FeaturedImageService::withoutYears( 'deer-hunting-season-in-kentucky-2026-27' ) );
+		$this->assertSame( 'deer-hunting-season-in-kentucky', FeaturedImageService::withoutYears( 'deer-hunting-season-in-kentucky-2025-2026' ) );
+		$this->assertSame( 'best-dog-food', FeaturedImageService::withoutYears( 'best-dog-food-2026' ) );
+		$this->assertSame( 'hunting-guide', FeaturedImageService::withoutYears( 'hunting-2026-guide' ), 'A year in the middle goes too.' );
+		$this->assertSame( 'pets-allowed-12345', FeaturedImageService::withoutYears( 'pets-allowed-12345' ), 'Only years, not other numbers.' );
+		$this->assertSame( 'covid-2026', FeaturedImageService::withoutYears( 'covid-2026' ), 'Keeps the year when one word would be left.' );
+
+		$this_season = $this->service->scoreSlugMatch( 'deer-hunting-season-in-kentucky-2026-27', 'deer-hunting-season-in-kentucky-2025-26.jpg' );
+		$this->assertSame( 100, $this_season['score'] );
+		$this->assertSame( 'exact', $this_season['method'] );
+
+		$no_year = $this->service->scoreSlugMatch( 'deer-hunting-season-in-kentucky-2026-27', 'deer-hunting-season-in-kentucky.jpg' );
+		$this->assertSame( 100, $no_year['score'] );
+		$this->assertTrue( $this->service->isAutoAssignSafePair( 'deer-hunting-season-in-kentucky-2026-27', 'deer-hunting-season-in-kentucky.jpg' ) );
+
+		$other_state = $this->service->scoreSlugMatch( 'deer-hunting-season-in-kentucky-2026-27', 'deer-hunting-season-in-ohio-2026-27.jpg' );
+		$this->assertNotSame( 'exact', $other_state['method'], 'Removing years never makes two states match.' );
+	}
+
 	public function testImageSlugPrefixOfLongArticleSlugScoresHigh(): void {
 		$result = $this->service->scoreSlugMatch(
 			'avian-flu-regulations-in-wyoming-what-every-poultry-owner-must-know',

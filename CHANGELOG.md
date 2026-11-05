@@ -7,6 +7,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.7.9] - 05/11/2026
+
+### Fixed
+
+- **Yearly articles did not get their image** (e.g. `deer-hunting-season-in-kentucky.jpg` for "Deer Hunting Season in Kentucky 2026-27"). Since 3.7.8 an image used by last season's article counted as "another article's image" and was refused, and a filename carrying last season's years (`…-2025-26`) never matched this season's slug. New `FeaturedImageService::withoutYears()` drops year and season tokens (`2026`, `2026-27`, `2025-2026`; never other numbers, and only when at least two words remain). `scoreSlugMatch()` compares slugs without them, so `…-kentucky-2026-27` and `…-kentucky-2025-26` are an exact match; `ownerPostIds()` treats articles that differ only by year as one series, not another article.
+
 ## [3.7.8] - 31/10/2026
 
 ### Fixed

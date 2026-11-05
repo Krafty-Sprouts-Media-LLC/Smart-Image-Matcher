@@ -414,6 +414,21 @@ class FeaturedImageService {
 	}
 
 	/**
+	 * A slug with year and season tokens removed ("2026", "2026-27", "2025-2026").
+	 *
+	 * Returned unchanged when fewer than two words would be left.
+	 *
+	 * @since 3.7.9
+	 * @param string $slug Normalized slug.
+	 * @return string
+	 */
+	public static function withoutYears( string $slug ): string {
+		$stripped = (string) preg_replace( '/(?<=^|-)(?:19|20)\d{2}(?:-(?:(?:19|20)\d{2}|\d{2}))?(?=-|$)/', '', $slug );
+		$stripped = trim( (string) preg_replace( '/-{2,}/', '-', $stripped ), '-' );
+		return count( array_filter( explode( '-', $stripped ) ) ) >= 2 ? $stripped : $slug;
+	}
+
+	/**
 	 * Score an image slug against a post slug.
 	 *
 	 * @since 3.0.0
@@ -429,6 +444,14 @@ class FeaturedImageService {
 			return array( 'score' => 0, 'method' => 'empty', 'shared_terms' => 0 );
 		}
 
+		if ( $postSlug === $imageSlug ) {
+			return array( 'score' => 100, 'method' => 'exact', 'shared_terms' => count( $this->slugTerms( $imageSlug ) ) );
+		}
+
+		// Years and seasons never decide a match: "deer-hunting-season-in-kentucky-2026-27"
+		// is the same article as "...-2025-26" and as "deer-hunting-season-in-kentucky".
+		$postSlug  = self::withoutYears( $postSlug );
+		$imageSlug = self::withoutYears( $imageSlug );
 		if ( $postSlug === $imageSlug ) {
 			return array( 'score' => 100, 'method' => 'exact', 'shared_terms' => count( $this->slugTerms( $imageSlug ) ) );
 		}
@@ -734,12 +757,20 @@ class FeaturedImageService {
 
 		$owners = array();
 
+		// The same article in another year ("...-2025-26" for "...-2026-27") is one series, not another article.
+		$series      = self::withoutYears( $this->normalizeSlug( (string) get_post_field( 'post_name', $post_id ) ) );
+		$same_series = function ( string $slug ) use ( $series ): bool {
+			return '' !== $series && self::withoutYears( $this->normalizeSlug( $slug ) ) === $series;
+		};
+
 		// 1) Another article's featured image (site-wide placeholders do not count).
 		if ( ! self::isKnownPlaceholderFeaturedAttachment( $attachment_id, $post_id ) ) {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 			$featured_of = $wpdb->get_col( $wpdb->prepare( "SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_thumbnail_id' AND meta_value = %s AND post_id <> %d LIMIT 3", (string) $attachment_id, $post_id ) );
 			foreach ( (array) $featured_of as $owner ) {
-				$owners[ (int) $owner ] = (int) $owner;
+				if ( ! $same_series( (string) get_post_field( 'post_name', (int) $owner ) ) ) {
+					$owners[ (int) $owner ] = (int) $owner;
+				}
 			}
 		}
 
@@ -747,7 +778,7 @@ class FeaturedImageService {
 		if ( ! $featured_only && count( $owners ) < 3 ) {
 			foreach ( array_keys( $this->slugMap->get(), $attachment_id, false ) as $image_slug ) {
 				foreach ( $this->postsMatchingImageSlug( (string) $image_slug ) as $owner => $owner_slug ) {
-					if ( $owner !== $post_id && ! isset( $owners[ $owner ] ) && $this->isAutoAssignSafePair( $owner_slug, (string) $image_slug ) ) {
+					if ( $owner !== $post_id && ! isset( $owners[ $owner ] ) && ! $same_series( $owner_slug ) && $this->isAutoAssignSafePair( $owner_slug, (string) $image_slug ) ) {
 						$owners[ $owner ] = $owner;
 					}
 				}

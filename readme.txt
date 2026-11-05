@@ -4,7 +4,7 @@ Tags: images, media library, alt text, featured image, automation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 3.7.8
+Stable tag: 3.7.9
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -95,6 +95,9 @@ No AI data is sent automatically — only when you explicitly trigger AI matchin
 The plugin stores match results and job metadata in your own database only. Update checks may contact GitHub (see External services). No post content leaves your server unless you explicitly use AI features with a configured provider.
 
 == Changelog ==
+
+= 3.7.9 =
+* Fixed: yearly articles (e.g. "Deer Hunting Season in Kentucky 2026-27") did not get the image made for the series. Years and seasons such as 2026, 2026-27 or 2025-2026 are now ignored when matching filenames, and last season's article no longer counts as "another article", so its image can be reused.
 
 = 3.7.8 =
 * Fixed: an image made for one article (its featured image, or a filename matching its slug) could be inserted under a heading in a different article. Such images are now never used in another article — not inserted and not sent to Review — and the next best image is used instead. Suggestions already in Review that use another article's image are cleared once in the background after updating.
