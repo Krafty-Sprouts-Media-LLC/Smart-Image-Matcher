@@ -458,6 +458,38 @@ class ArticleProcessorTest extends TestCase {
 	}
 
 	/**
+	 * An exact filename match is assigned without asking the AI, even when AI
+	 * matching is on and the model would reject everything
+	 * (deer-hunting-season-in-kentucky.jpg for "Deer Hunting Season in Kentucky 2026-27").
+	 *
+	 * @return void
+	 */
+	public function test_exact_filename_match_wins_without_asking_the_ai(): void {
+		$matches = $this->createMock( MatchRepository::class );
+		$matches->method( 'rejectedImageIds' )->willReturn( array() );
+		$matches->expects( $this->once() )->method( 'markInserted' )->with( 10, 55, 'featured' );
+
+		$gate = $this->recordingFeaturedGate( true, 0, 0 );
+
+		$extractor = $this->createMock( HeadingExtractor::class );
+		$extractor->method( 'extract' )->willReturn( array() );
+		$insertion = $this->createMock( InsertionService::class );
+		$insertion->method( 'attachmentIdsInContent' )->willReturn( array() );
+
+		$featured = $this->createMock( FeaturedImageService::class );
+		$featured->method( 'needsFeaturedImage' )->willReturn( true );
+		$featured->method( 'scoreBestForPost' )->willReturn( array( 'score' => 100, 'attachment_id' => 55 ) );
+		$featured->method( 'isAutoAssignSafeAttachment' )->willReturn( true );
+		$featured->method( 'ownerPostIds' )->willReturn( array() );
+
+		$processor = new ArticleProcessor( $this->createMock( Matcher::class ), $this->createMock( ImageRepository::class ), $extractor, $insertion, $matches, $featured, null, null, $gate );
+		$result    = $processor->process( 10, array( 'fill' => 'featured' ) );
+
+		$this->assertSame( 1, $result['inserted'] );
+		$this->assertSame( 0, $gate->calls, 'The AI is not asked when the filename already matches exactly.' );
+	}
+
+	/**
 	 * Another article's image (e.g. Dangerous-Dog-Breeds-Banned-in-New-Hampshire.jpg in
 	 * "Aggressive Dog Laws in New Hampshire") is never used; the next best is.
 	 *
@@ -636,8 +668,8 @@ class ArticleProcessorTest extends TestCase {
 
 		$featured = $this->createMock( FeaturedImageService::class );
 		$featured->method( 'needsFeaturedImage' )->willReturn( $needs_featured );
-		$featured->expects( $needs_featured && null !== $featured_match && $featured_match->isAvailable() ? $this->never() : $this->any() )
-			->method( 'scoreBestForPost' )
+		// The filename check always runs first; this fake match is not exact/prefix, so the AI still decides.
+		$featured->method( 'scoreBestForPost' )
 			->willReturn( array( 'score' => 100, 'attachment_id' => 99 ) );
 
 		return new ArticleProcessor( $matcher, $images, $extractor, $insertion, $matches, $featured, $generation, $heading_match, $featured_match );
@@ -656,6 +688,7 @@ class ArticleProcessorTest extends TestCase {
 			private bool $available;
 			private int $score;
 			private int $image_id;
+			public int $calls = 0;
 
 			public function __construct( bool $available, int $score, int $image_id ) {
 				$this->available = $available;
@@ -669,6 +702,7 @@ class ArticleProcessorTest extends TestCase {
 
 			public function bestMatch( \WP_Post $post ): array {
 				unset( $post );
+				++$this->calls;
 				return array(
 					'score'    => $this->score,
 					'image_id' => $this->image_id,

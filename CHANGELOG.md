@@ -7,6 +7,13 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 =================================================================================
 
 
+## [3.7.10] - 05/11/2026
+
+### Fixed
+
+- **Exact filename matches were ignored when AI matching was on.** `ArticleProcessor::processFeatured()` let the AI featured gate replace the slug score entirely, so a failed or unsure AI call left an exact match such as `deer-hunting-season-in-kentucky.jpg` for "Deer Hunting Season in Kentucky 2026-27" unassigned ("No good match" on 113 of 114 articles in a featured-only run). The slug check now always runs first; an exact or prefix match at or above the auto-insert threshold decides on its own, and the AI is asked only when there is none (fewer AI calls too).
+- **The Run progress froze after one failed status check** ("About 12 min left" for 30+ minutes while the run carried on). `bulk.js` keeps polling through errors (up to 40 in a row), says "Cannot reach the server — still trying" after three, and shows "No progress for N min" when the done count has not moved for five minutes instead of an old estimate.
+
 ## [3.7.9] - 05/11/2026
 
 ### Fixed

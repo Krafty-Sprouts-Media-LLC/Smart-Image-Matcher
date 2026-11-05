@@ -50,6 +50,9 @@
 		job: null,
 		pollTimer: null,
 		pace: null, // { t, done } first sample of the current poll session.
+		moved: null, // { t, done } when the done count last changed.
+		pollFails: 0,
+		lastPoll: 0, // Time of the last successful status check.
 		review: {
 			search: '',
 			slot: 'all',
@@ -726,6 +729,8 @@
 			state.job = data;
 			store( KEY_JOB, data.job_id );
 			state.pace = null;
+			state.moved = null;
+			state.pollFails = 0;
 			renderProgress( data );
 			startPolling( data.job_id );
 		} catch ( err ) {
@@ -746,6 +751,9 @@
 			state.job = data;
 			const done = num( data, 'done' );
 			if ( ! state.pace ) state.pace = { t: Date.now(), done };
+			if ( ! state.moved || state.moved.done !== done ) state.moved = { t: Date.now(), done };
+			state.pollFails = 0;
+			state.lastPoll = Date.now();
 			renderProgress( data );
 			if ( [ 'completed', 'failed', 'cancelled' ].includes( data.status ) ) {
 				window.clearInterval( state.pollTimer );
@@ -754,14 +762,29 @@
 				refreshReviewCount();
 			}
 		} catch ( err ) {
-			window.clearInterval( state.pollTimer );
-			state.pollTimer = null;
+			// One failed check must not freeze the page: keep asking, and say so.
+			state.pollFails++;
+			if ( state.job ) renderProgress( state.job );
+			if ( state.pollFails >= 40 ) {
+				window.clearInterval( state.pollTimer );
+				state.pollTimer = null;
+			}
 		}
 	}
 
 	function etaText( job ) {
 		const total = num( job, 'total' );
 		const done = num( job, 'done' );
+		if ( state.pollFails >= 3 ) {
+			return state.pollTimer
+				? sprintf( __( 'Cannot reach the server (last update %s ago) — still trying.', 'smart-image-matcher' ), minutesLabel( Math.floor( ( Date.now() - state.lastPoll ) / 60000 ) ) )
+				: __( 'Lost contact with the server. Reload the page to see the latest progress.', 'smart-image-matcher' );
+		}
+		// No progress for a while: say so instead of showing an old estimate.
+		const idle = state.moved ? Math.floor( ( Date.now() - state.moved.t ) / 60000 ) : 0;
+		if ( idle >= 5 ) {
+			return sprintf( __( 'No progress for %s. Check the Schedule tab and the Dashboard queue.', 'smart-image-matcher' ), minutesLabel( idle ) );
+		}
 		if ( ! state.pace || done <= state.pace.done ) return __( 'Working…', 'smart-image-matcher' );
 		const perMs = ( Date.now() - state.pace.t ) / ( done - state.pace.done );
 		const mins = Math.round( ( ( total - done ) * perMs ) / 60000 );

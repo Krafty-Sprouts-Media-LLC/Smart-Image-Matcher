@@ -235,15 +235,18 @@ class ArticleProcessor {
 			return;
 		}
 
-		$use_ai = null !== $this->featured_match && $this->featured_match->isAvailable();
+		// An exact or prefix filename match is the strongest evidence there is: it decides on
+		// its own. The AI is asked only when there is none (it used to override such matches,
+		// and a failed or unsure AI call left "deer-hunting-season-in-kentucky.jpg" unassigned).
+		$best       = $this->featured->scoreBestForPost( (int) $post->ID );
+		$score      = (int) ( $best['score'] ?? 0 );
+		$image      = (int) ( $best['attachment_id'] ?? 0 );
+		$slug_wins  = $image > 0 && $score >= $auto && $this->featured->isAutoAssignSafeAttachment( (int) $post->ID, $image );
+		$use_ai     = ! $slug_wins && null !== $this->featured_match && $this->featured_match->isAvailable();
 		if ( $use_ai ) {
 			$best  = $this->featured_match->bestMatch( $post );
 			$score = (int) ( $best['score'] ?? 0 );
 			$image = (int) ( $best['image_id'] ?? 0 );
-		} else {
-			$best  = $this->featured->scoreBestForPost( (int) $post->ID );
-			$score = (int) ( $best['score'] ?? 0 );
-			$image = (int) ( $best['attachment_id'] ?? 0 );
 		}
 		// Remembered Reject: an image the user rejected for this featured slot is never offered again.
 		if ( $image > 0 && in_array( $image, $this->matches->rejectedImageIds( (int) $post->ID, 'featured' ), true ) ) {

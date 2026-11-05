@@ -4,7 +4,7 @@ Tags: images, media library, alt text, featured image, automation
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 3.7.9
+Stable tag: 3.7.10
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -95,6 +95,10 @@ No AI data is sent automatically — only when you explicitly trigger AI matchin
 The plugin stores match results and job metadata in your own database only. Update checks may contact GitHub (see External services). No post content leaves your server unless you explicitly use AI features with a configured provider.
 
 == Changelog ==
+
+= 3.7.10 =
+* Fixed: with AI matching on, an image named exactly after the article (e.g. deer-hunting-season-in-kentucky.jpg) was not set as the featured image when the AI call failed or picked nothing. An exact or prefix filename match now decides on its own; the AI is only asked when there is none.
+* Fixed: the Run progress could freeze (e.g. "About 12 min left" for half an hour) after one failed status check. It now keeps updating, and says when the server cannot be reached or a run has made no progress.
 
 = 3.7.9 =
 * Fixed: yearly articles (e.g. "Deer Hunting Season in Kentucky 2026-27") did not get the image made for the series. Years and seasons such as 2026, 2026-27 or 2025-2026 are now ignored when matching filenames, and last season's article no longer counts as "another article", so its image can be reused.
